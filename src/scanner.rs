@@ -1,6 +1,6 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::token::{Token, TokenType, Span, LineColumn};
+use crate::token::{LineColumn, Span, Token, TokenType};
 
 pub struct Scanner<'a> {
     source: Vec<&'a str>,
@@ -60,27 +60,33 @@ impl<'a, 'b> Scanner<'a> {
     }
 
     fn make_token(&mut self, token_type: TokenType) -> Token {
-        let mut end = self.current;
-        
-        if self.current > self.source.len() {
-            end = self.source.len();
-        }
-        
-        let value = self.source[self.previous..end].join("");
-        let span = Span::new(
-            LineColumn::new(self.line, self.previous), 
-            LineColumn::new(self.line, end - 1)
-        );
+        let token = match self.current {
+            _ if self.current > self.source.len() => {
+                let span = Span::new(
+                    LineColumn::new(self.line, self.previous),
+                    LineColumn::new(self.line, self.current - 1),
+                );
+                Token::new(token_type, "".to_string(), span)
+            }
+            _ => {
+                let value = self.source[self.previous..self.current].join("");
+                let span = Span::new(
+                    LineColumn::new(self.line, self.previous),
+                    LineColumn::new(self.line, self.current - 1),
+                );
+                self.previous = self.current;
 
-        self.previous = self.current;
+                Token::new(token_type, value, span)
+            }
+        };
 
-        Token::new(token_type, value, span)
+        token
     }
 
     fn make_error_token(&mut self, msg: String) -> Token {
         let span = Span::new(
-            LineColumn::new(self.line, self.previous), 
-            LineColumn::new(self.line, self.current)
+            LineColumn::new(self.line, self.previous),
+            LineColumn::new(self.line, self.current),
         );
         Token::new(TokenType::Error, msg, span)
     }
@@ -225,5 +231,13 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.span.start, LineColumn::new(1, 8));
         assert_eq!(token.span.end, LineColumn::new(1, 9));
+    }
+
+    #[test]
+    fn test_empty_file() {
+        let src = String::from("");
+        let mut scanner = Scanner::new(&src);
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Eof);
     }
 }
