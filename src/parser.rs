@@ -1,6 +1,17 @@
+use std::num::ParseFloatError;
+
 use crate::ast::*;
 use crate::scanner::Scanner;
 use crate::token::{Token, TokenType};
+
+#[derive(Debug)]
+pub struct ParserError(String);
+
+impl From<ParseFloatError> for ParserError {
+    fn from(_: ParseFloatError) -> Self {
+        ParserError("Cannot parse number".to_string())
+    }
+}
 
 pub struct Parser<'a> {
     scanner: Scanner<'a>,
@@ -16,7 +27,7 @@ impl<'a> Parser<'a> {
             current: None,
         }
     }
-    pub fn parse(&mut self) -> Result<AST, String> {
+    pub fn parse(&mut self) -> Result<AST, ParserError> {
         self.advance();
 
         self.expression()
@@ -56,11 +67,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expression(&mut self) -> Result<AST, String> {
+    fn expression(&mut self) -> Result<AST, ParserError> {
         self.parse_sum()
     }
 
-    fn parse_sum(&mut self) -> Result<AST, String> {
+    fn parse_sum(&mut self) -> Result<AST, ParserError> {
         let mut node = self.parse_term()?;
         loop {
             match self.current.as_ref().unwrap().token_type {
@@ -87,7 +98,7 @@ impl<'a> Parser<'a> {
         return Ok(node);
     }
 
-    fn parse_term(&mut self) -> Result<AST, String> {
+    fn parse_term(&mut self) -> Result<AST, ParserError> {
         let mut node = self.parse_factor()?;
         loop {
             match self.current.as_ref().unwrap().token_type {
@@ -114,7 +125,7 @@ impl<'a> Parser<'a> {
         Ok(node)
     }
 
-    fn parse_factor(&mut self) -> Result<AST, String> {
+    fn parse_factor(&mut self) -> Result<AST, ParserError> {
         match self.current.as_ref().unwrap().token_type {
             TokenType::Number => {
                 let value = self
@@ -122,13 +133,12 @@ impl<'a> Parser<'a> {
                     .as_ref()
                     .unwrap()
                     .value
-                    .parse::<f64>()
-                    .expect("Error couldn't parse value");
+                    .parse::<f64>()?;
                 let node = AST::Literal(Literal::Number(value));
                 self.consume(TokenType::Number, "Expect number literal");
                 return Ok(node);
             }
-            _ => return Err(String::from("Error unexpected token")),
+            _ => return Err(ParserError(String::from("Error, unexpected token"))),
         }
     }
 }
