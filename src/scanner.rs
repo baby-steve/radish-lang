@@ -135,6 +135,7 @@ fn is_whitespace(string: &str) -> bool {
     )
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
 
