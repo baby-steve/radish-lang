@@ -67,7 +67,10 @@ impl<'a, 'b> Scanner<'a> {
         }
         
         let value = self.source[self.previous..end].join("");
-        let span = Span::new(LineColumn::new(self.line, self.previous), LineColumn::new(self.line, end));
+        let span = Span::new(
+            LineColumn::new(self.line, self.previous), 
+            LineColumn::new(self.line, end - 1)
+        );
 
         self.previous = self.current;
 
@@ -75,7 +78,10 @@ impl<'a, 'b> Scanner<'a> {
     }
 
     fn make_error_token(&mut self, msg: String) -> Token {
-        let span = Span::new(LineColumn::new(self.line, self.previous), LineColumn::new(self.line, self.current - 1));
+        let span = Span::new(
+            LineColumn::new(self.line, self.previous), 
+            LineColumn::new(self.line, self.current)
+        );
         Token::new(TokenType::Error, msg, span)
     }
 
@@ -177,5 +183,21 @@ mod tests {
         assert_eq!(scanner.scan_token().token_type, TokenType::Plus);
         assert_eq!(scanner.scan_token().token_type, TokenType::Number);
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_token_span() {
+        let src = String::from("123 456 猫");
+        let mut scanner = Scanner::new(&src);
+        assert_eq!(scanner.source.len(), 9);
+        let token = scanner.scan_token();
+        assert_eq!(token.span.start, LineColumn::new(1, 0));
+        assert_eq!(token.span.end, LineColumn::new(1, 2));
+        let token = scanner.scan_token();
+        assert_eq!(token.span.start, LineColumn::new(1, 4));
+        assert_eq!(token.span.end, LineColumn::new(1, 6));
+        let token = scanner.scan_token();
+        assert_eq!(token.span.start, LineColumn::new(1, 8));
+        assert_eq!(token.span.end, LineColumn::new(1, 9));
     }
 }
