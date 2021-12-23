@@ -94,7 +94,7 @@ impl<'a, 'b> Scanner<'a> {
     }
 
     fn skip_whitespace(&mut self) -> &mut Self {
-        while self.peek() != None && self.peek() == Some(" ") {
+        while self.peek() != None && is_whitespace(self.peek().unwrap()) {
             self.advance();
         }
         self.previous = self.current;
@@ -104,6 +104,29 @@ impl<'a, 'b> Scanner<'a> {
 
 fn is_digit(string: &str) -> bool {
     string.as_bytes()[0].is_ascii_digit()
+}
+
+fn is_whitespace(string: &str) -> bool {
+    matches!(
+        string,
+        // Usual ASCII suspects
+        "\u{0009}"   // \t
+        | "\u{000B}" // vertical tab
+        | "\u{000C}" // form feed
+        | "\u{000D}" // \r
+        | "\u{0020}" // space
+
+        // NEXT LINE from latin1
+        | "\u{0085}"
+
+        // Bidi markers
+        | "\u{200E}" // LEFT-TO-RIGHT MARK
+        | "\u{200F}" // RIGHT-TO-LEFT MARK
+
+        // Dedicated whitespace characters from Unicode
+        | "\u{2028}" // LINE SEPARATOR
+        | "\u{2029}" // PARAGRAPH SEPARATOR
+    )
 }
 
 mod tests {
@@ -152,6 +175,9 @@ mod tests {
     #[test]
     fn test_skip_whitespace() {
         let src = String::from("    ");
+        let mut scanner = Scanner::new(&src);
+        assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
+        let src = String::from("\r\r\t");
         let mut scanner = Scanner::new(&src);
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
         let src = String::from("  123    + 45  ");
