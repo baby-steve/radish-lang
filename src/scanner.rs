@@ -1,11 +1,12 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::token::{Token, TokenType};
+use crate::token::{Token, TokenType, Span, LineColumn};
 
 pub struct Scanner<'a> {
     source: Vec<&'a str>,
     current: usize,
     previous: usize,
+    line: usize,
 }
 
 impl<'a, 'b> Scanner<'a> {
@@ -14,6 +15,7 @@ impl<'a, 'b> Scanner<'a> {
             source: src.graphemes(true).collect::<Vec<&str>>(),
             current: 0,
             previous: 0,
+            line: 1,
         }
     }
 
@@ -30,7 +32,8 @@ impl<'a, 'b> Scanner<'a> {
                 if is_digit(c.unwrap()) {
                     return self.number();
                 } else {
-                    return self.make_token(TokenType::Error);
+                    let msg = format!("Unexpected character: '{}'", c.unwrap());
+                    return self.make_error_token(msg);
                 }
             }
         }
@@ -56,16 +59,24 @@ impl<'a, 'b> Scanner<'a> {
         }
     }
 
-    fn make_token<'c>(&mut self, token_type: TokenType) -> Token {
+    fn make_token(&mut self, token_type: TokenType) -> Token {
         let mut end = self.current;
+        
         if self.current > self.source.len() {
             end = self.source.len();
         }
+        
         let value = self.source[self.previous..end].join("");
+        let span = Span::new(LineColumn::new(self.line, self.previous), LineColumn::new(self.line, end));
 
         self.previous = self.current;
 
-        Token::new(token_type, value)
+        Token::new(token_type, value, span)
+    }
+
+    fn make_error_token(&mut self, msg: String) -> Token {
+        let span = Span::new(LineColumn::new(self.line, self.previous), LineColumn::new(self.line, self.current - 1));
+        Token::new(TokenType::Error, msg, span)
     }
 
     fn number(&mut self) -> Token {
@@ -151,7 +162,7 @@ mod tests {
         let mut scanner = Scanner::new(&src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Error);
-        assert_eq!(token.value, "猫");
+        assert_eq!(token.value, "Unexpected character: '猫'");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
         assert_eq!(token.value, "");
