@@ -1,2 +1,2 @@
-# The Radish Language
+# The Radish Programming Language
 A toy scripting language.
