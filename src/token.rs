@@ -52,8 +52,8 @@ impl fmt::Display for Token {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct LineColumn {
-    line: usize,
-    column: usize,
+    pub line: usize,
+    pub column: usize,
 }
 
 impl LineColumn {
@@ -70,8 +70,8 @@ impl fmt::Display for LineColumn {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Span {
-    start: LineColumn,
-    end: LineColumn,
+    pub start: LineColumn,
+    pub end: LineColumn,
 }
 
 impl Span {
