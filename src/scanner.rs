@@ -1,11 +1,12 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::token::{Token, TokenType};
+use crate::token::{Token, TokenType, Span, LineColumn};
 
 pub struct Scanner<'a> {
     source: Vec<&'a str>,
     current: usize,
     previous: usize,
+    line: usize,
 }
 
 impl<'a, 'b> Scanner<'a> {
@@ -14,6 +15,7 @@ impl<'a, 'b> Scanner<'a> {
             source: src.graphemes(true).collect::<Vec<&str>>(),
             current: 0,
             previous: 0,
+            line: 1,
         }
     }
 
@@ -30,7 +32,8 @@ impl<'a, 'b> Scanner<'a> {
                 if is_digit(c.unwrap()) {
                     return self.number();
                 } else {
-                    return self.make_token(TokenType::Error);
+                    let msg = format!("Unexpected character: '{}'", c.unwrap());
+                    return self.make_error_token(msg);
                 }
             }
         }
@@ -56,16 +59,30 @@ impl<'a, 'b> Scanner<'a> {
         }
     }
 
-    fn make_token<'c>(&mut self, token_type: TokenType) -> Token {
+    fn make_token(&mut self, token_type: TokenType) -> Token {
         let mut end = self.current;
+        
         if self.current > self.source.len() {
             end = self.source.len();
         }
+        
         let value = self.source[self.previous..end].join("");
+        let span = Span::new(
+            LineColumn::new(self.line, self.previous), 
+            LineColumn::new(self.line, end - 1)
+        );
 
         self.previous = self.current;
 
-        Token::new(token_type, value)
+        Token::new(token_type, value, span)
+    }
+
+    fn make_error_token(&mut self, msg: String) -> Token {
+        let span = Span::new(
+            LineColumn::new(self.line, self.previous), 
+            LineColumn::new(self.line, self.current)
+        );
+        Token::new(TokenType::Error, msg, span)
     }
 
     fn number(&mut self) -> Token {
@@ -151,7 +168,7 @@ mod tests {
         let mut scanner = Scanner::new(&src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Error);
-        assert_eq!(token.value, "猫");
+        assert_eq!(token.value, "Unexpected character: '猫'");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
         assert_eq!(token.value, "");
@@ -166,5 +183,21 @@ mod tests {
         assert_eq!(scanner.scan_token().token_type, TokenType::Plus);
         assert_eq!(scanner.scan_token().token_type, TokenType::Number);
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_token_span() {
+        let src = String::from("123 456 猫");
+        let mut scanner = Scanner::new(&src);
+        assert_eq!(scanner.source.len(), 9);
+        let token = scanner.scan_token();
+        assert_eq!(token.span.start, LineColumn::new(1, 0));
+        assert_eq!(token.span.end, LineColumn::new(1, 2));
+        let token = scanner.scan_token();
+        assert_eq!(token.span.start, LineColumn::new(1, 4));
+        assert_eq!(token.span.end, LineColumn::new(1, 6));
+        let token = scanner.scan_token();
+        assert_eq!(token.span.start, LineColumn::new(1, 8));
+        assert_eq!(token.span.end, LineColumn::new(1, 9));
     }
 }
