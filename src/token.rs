@@ -1,5 +1,23 @@
 use std::fmt;
 
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct Span {
+    pub start: usize,
+    pub end: usize,
+}
+
+impl Span {
+    pub fn new(start: usize, end: usize) -> Span {
+        Span { start, end, }
+    }
+}
+
+impl fmt::Display for Span {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "start: {}, end: {}", self.start, self.end)
+    }
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
     Plus,
@@ -47,41 +65,5 @@ impl Token {
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Token {{type: {}, value: {}, span: {}}}", self.token_type, self.value, self.span)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct LineColumn {
-    pub line: usize,
-    pub column: usize,
-}
-
-impl LineColumn {
-    pub fn new(line: usize, column: usize) -> LineColumn {
-        LineColumn { line, column }
-    }
-}
-
-impl fmt::Display for LineColumn {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[{}:{}]", self.line, self.column)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Span {
-    pub start: LineColumn,
-    pub end: LineColumn,
-}
-
-impl Span {
-    pub fn new(start: LineColumn, end: LineColumn) -> Span {
-        Span { start, end }
-    }
-}
-
-impl fmt::Display for Span {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "start: {}, end: {}", self.start, self.end)
     }
 }

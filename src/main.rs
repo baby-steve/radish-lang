@@ -1,13 +1,16 @@
+mod ast;
+mod opcode;
+mod parser;
 mod scanner;
 mod token;
-mod ast;
-mod parser;
+mod value;
+mod vm;
 
 use parser::Parser;
 
 fn main() {
     println!("Hello, Radish!");
 
-    let result = Parser::new("12 + 3 - 45 * 678 / 9").parse();
-    println!("{:?}", result);
+    let result = Parser::new("1 + 23 - 4 * 56 / 7").parse();
+    println!("{:#?}", result);
 }
