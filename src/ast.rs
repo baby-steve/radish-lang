@@ -1,18 +1,10 @@
 use std::fmt;
+use crate::token::Span;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Number(f64),
 }
-
-impl From<Literal> for String {
-    fn from(ast: Literal) -> String {
-        match ast {
-            Literal::Number(val) => val.to_string(),
-        }
-    }
-}
-
 
 #[derive(Debug, PartialEq)]
 pub enum Op {
@@ -24,9 +16,9 @@ pub enum Op {
 
 #[derive(Debug, PartialEq)]
 pub struct BinaryExpr {
-    pub left: AST,
+    pub left: ASTNode,
     pub op: Op,
-    pub right: AST,
+    pub right: ASTNode,
 }
 
 impl fmt::Display for BinaryExpr {
@@ -36,12 +28,21 @@ impl fmt::Display for BinaryExpr {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum AST {
-    BinaryExpr(Box<BinaryExpr>),
-    Literal(Literal),
+pub enum ASTNode {
+    BinaryExpr(Box<BinaryExpr>, Span),
+    Literal(Literal, Span),
+}
+
+impl ASTNode {
+    pub fn position(&self) -> Span {
+        match self {
+            Self::BinaryExpr(_, pos)
+            | Self::Literal(_, pos) => *pos, 
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
-pub struct File {
-    pub items: Vec<AST>,
+pub struct AST {
+    pub items: Vec<ASTNode>,
 }

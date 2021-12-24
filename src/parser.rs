@@ -2,7 +2,7 @@ use std::num::ParseFloatError;
 
 use crate::ast::*;
 use crate::scanner::Scanner;
-use crate::token::{Token, TokenType};
+use crate::token::{Span, Token, TokenType};
 
 #[derive(Debug)]
 pub struct ParserError(String);
@@ -27,7 +27,7 @@ impl<'a> Parser<'a> {
             current: None,
         }
     }
-    pub fn parse(&mut self) -> Result<AST, ParserError> {
+    pub fn parse(&mut self) -> Result<ASTNode, ParserError> {
         self.advance();
 
         self.expression()
@@ -67,78 +67,99 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn expression(&mut self) -> Result<AST, ParserError> {
+    fn expression(&mut self) -> Result<ASTNode, ParserError> {
         self.parse_sum()
     }
 
-    fn parse_sum(&mut self) -> Result<AST, ParserError> {
+    fn parse_sum(&mut self) -> Result<ASTNode, ParserError> {
         let mut node = self.parse_term()?;
         loop {
             match self.current.as_ref().unwrap().token_type {
                 TokenType::Plus => {
                     self.consume(TokenType::Plus, "Expect '+'");
-                    node = AST::BinaryExpr(Box::new(BinaryExpr {
-                        left: node,
-                        op: Op::Add,
-                        right: self.parse_term()?,
-                    }));
+                    let right = self.parse_term()?;
+                    let span = Span::new(node.position().start, right.position().end);
+                    node = ASTNode::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: node,
+                            op: Op::Add,
+                            right,
+                        }),
+                        span,
+                    );
                 }
                 TokenType::Minus => {
                     self.consume(TokenType::Minus, "Expect '-'");
-                    node = AST::BinaryExpr(Box::new(BinaryExpr {
-                        left: node,
-                        op: Op::Subtract,
-                        right: self.parse_term()?,
-                    }))
+                    let right = self.parse_term()?;
+                    let span = Span::new(node.position().start, right.position().end);
+                    node = ASTNode::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: node,
+                            op: Op::Subtract,
+                            right,
+                        }),
+                        span,
+                    );
                 }
                 _ => break,
             }
-        };
+        }
 
         return Ok(node);
     }
 
-    fn parse_term(&mut self) -> Result<AST, ParserError> {
+    fn parse_term(&mut self) -> Result<ASTNode, ParserError> {
         let mut node = self.parse_factor()?;
         loop {
             match self.current.as_ref().unwrap().token_type {
                 TokenType::Star => {
                     self.consume(TokenType::Star, "Expect '*'");
-                    node = AST::BinaryExpr(Box::new(BinaryExpr {
-                        left: node,
-                        op: Op::Multiply,
-                        right: self.parse_factor()?,
-                    }));
+                    let right = self.parse_factor()?;
+                    let span = Span::new(node.position().start, right.position().end);
+                    node = ASTNode::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: node,
+                            op: Op::Multiply,
+                            right,
+                        }),
+                        span,
+                    );
                 }
                 TokenType::Slash => {
-                    self.consume(TokenType::Slash, "Expect '*'");
-                    node = AST::BinaryExpr(Box::new(BinaryExpr {
-                        left: node,
-                        op: Op::Divide,
-                        right: self.parse_factor()?,
-                    }));
+                    self.consume(TokenType::Slash, "Expect '/'");
+                    let right = self.parse_factor()?;
+                    let span = Span::new(node.position().start, right.position().end);
+                    node = ASTNode::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: node,
+                            op: Op::Divide,
+                            right,
+                        }),
+                        span,
+                    );
                 }
                 _ => break,
             };
-        };
+        }
 
         Ok(node)
     }
 
-    fn parse_factor(&mut self) -> Result<AST, ParserError> {
+    fn parse_factor(&mut self) -> Result<ASTNode, ParserError> {
         match self.current.as_ref().unwrap().token_type {
             TokenType::Number => {
-                let value = self
-                    .current
-                    .as_ref()
-                    .unwrap()
-                    .value
-                    .parse::<f64>()?;
-                let node = AST::Literal(Literal::Number(value));
+                let current_token = self.current.as_ref().unwrap();
+                let value = current_token.value.parse::<f64>()?;
+                let node = ASTNode::Literal(Literal::Number(value), current_token.span);
                 self.consume(TokenType::Number, "Expect number literal");
                 return Ok(node);
             }
-            _ => return Err(ParserError(String::from("Error, unexpected token"))),
+            _ => {
+                return Err(ParserError(String::from(format!(
+                    "Error, unexpected token: '{}'.",
+                    self.current.as_ref().unwrap().token_type
+                ))))
+            }
         }
     }
 }
