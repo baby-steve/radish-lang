@@ -51,37 +51,19 @@ impl fmt::Display for Token {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct LineColumn {
-    pub line: usize,
-    pub column: usize,
-}
-
-impl LineColumn {
-    pub fn new(line: usize, column: usize) -> LineColumn {
-        LineColumn { line, column }
-    }
-}
-
-impl fmt::Display for LineColumn {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "[{}:{}]", self.line, self.column)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub struct Span {
-    pub start: LineColumn,
-    pub end: LineColumn,
+    pub line: usize,
+    pub offset: usize,
 }
 
 impl Span {
-    pub fn new(start: LineColumn, end: LineColumn) -> Span {
-        Span { start, end }
+    pub fn new(line: usize, offset: usize) -> Span {
+        Span { line, offset, }
     }
 }
 
 impl fmt::Display for Span {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "start: {}, end: {}", self.start, self.end)
+        write!(f, "line: {}, offset: {}", self.line, self.offset)
     }
 }

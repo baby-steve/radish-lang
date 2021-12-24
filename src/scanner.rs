@@ -1,6 +1,6 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::token::{LineColumn, Span, Token, TokenType};
+use crate::token::{Span, Token, TokenType};
 
 pub struct Scanner<'a> {
     source: Vec<&'a str>,
@@ -62,18 +62,12 @@ impl<'a, 'b> Scanner<'a> {
     fn make_token(&mut self, token_type: TokenType) -> Token {
         let token = match self.current {
             _ if self.current > self.source.len() => {
-                let span = Span::new(
-                    LineColumn::new(self.line, self.previous),
-                    LineColumn::new(self.line, self.current - 1),
-                );
+                let span = Span::new(self.line, self.previous);
                 Token::new(token_type, "".to_string(), span)
             }
             _ => {
                 let value = self.source[self.previous..self.current].join("");
-                let span = Span::new(
-                    LineColumn::new(self.line, self.previous),
-                    LineColumn::new(self.line, self.current - 1),
-                );
+                let span = Span::new(self.line, self.previous);
                 self.previous = self.current;
 
                 Token::new(token_type, value, span)
@@ -84,10 +78,7 @@ impl<'a, 'b> Scanner<'a> {
     }
 
     fn make_error_token(&mut self, msg: String) -> Token {
-        let span = Span::new(
-            LineColumn::new(self.line, self.previous),
-            LineColumn::new(self.line, self.current),
-        );
+        let span = Span::new(self.line, self.previous);
         Token::new(TokenType::Error, msg, span)
     }
 
@@ -223,15 +214,18 @@ mod tests {
         let src = String::from("123 456 猫");
         let mut scanner = Scanner::new(&src);
         assert_eq!(scanner.source.len(), 9);
-        let token = scanner.scan_token();
-        assert_eq!(token.span.start, LineColumn::new(1, 0));
-        assert_eq!(token.span.end, LineColumn::new(1, 2));
-        let token = scanner.scan_token();
-        assert_eq!(token.span.start, LineColumn::new(1, 4));
-        assert_eq!(token.span.end, LineColumn::new(1, 6));
-        let token = scanner.scan_token();
-        assert_eq!(token.span.start, LineColumn::new(1, 8));
-        assert_eq!(token.span.end, LineColumn::new(1, 9));
+        let token = scanner.scan_token(); //123
+        assert_eq!(token.span.line, 1);
+        assert_eq!(token.span.offset, 0);
+        let token = scanner.scan_token(); //456
+        assert_eq!(token.span.line, 1);
+        assert_eq!(token.span.offset, 4);
+        let token = scanner.scan_token(); //猫
+        assert_eq!(token.span.line, 1);
+        assert_eq!(token.span.offset, 8);
+        let token = scanner.scan_token(); //Eof
+        assert_eq!(token.span.line, 1);
+        assert_eq!(token.span.offset, 9);
     }
 
     #[test]
