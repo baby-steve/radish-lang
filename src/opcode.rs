@@ -8,7 +8,7 @@ pub enum Opcode {
     Multiply,
     Divide,
 
-    Return,
+    Halt,
 }
 
 impl From<u8> for Opcode {
