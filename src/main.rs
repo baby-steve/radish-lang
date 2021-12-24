@@ -1,8 +1,12 @@
+mod ast;
+mod opcode;
+mod parser;
 mod scanner;
 mod token;
-mod ast;
-mod parser;
+mod value;
+mod vm;
 
+use opcode::Opcode;
 use parser::Parser;
 
 fn main() {
