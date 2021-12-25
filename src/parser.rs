@@ -27,10 +27,10 @@ impl<'a> Parser<'a> {
             current: None,
         }
     }
-    pub fn parse(&mut self) -> Result<ASTNode, ParserError> {
+    pub fn parse(&mut self) -> Result<AST, ParserError> {
         self.advance();
 
-        self.expression()
+        Ok(AST::new(vec!(self.expression()?)))
     }
 
     fn advance(&mut self) {
@@ -172,7 +172,7 @@ mod tests {
 
     #[test]
     fn test_binary_add_expr() {
-        let result = Parser::new("1 + 23").parse().unwrap();
+        let result = &Parser::new("1 + 23").parse().unwrap().items[0];
 
         let expr = match result {
             ASTNode::BinaryExpr(val, _) => val,
@@ -192,7 +192,7 @@ mod tests {
 
     #[test]
     fn test_binary_sub_expr() {
-        let result = Parser::new("1 - 23").parse().unwrap();
+        let result = &Parser::new("1 - 23").parse().unwrap().items[0];
 
         let expr = match result {
             ASTNode::BinaryExpr(val, _) => val,
@@ -212,7 +212,7 @@ mod tests {
 
     #[test]
     fn test_binary_mul_expr() {
-        let result = Parser::new("1 * 23").parse().unwrap();
+        let result = &Parser::new("1 * 23").parse().unwrap().items[0];
 
         let expr = match result {
             ASTNode::BinaryExpr(val, _) => val,
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn test_binary_div_expr() {
-        let result = Parser::new("1 / 23").parse().unwrap();
+        let result = &Parser::new("1 / 23").parse().unwrap().items[0];
 
         let expr = match result {
             ASTNode::BinaryExpr(val, _) => val,
