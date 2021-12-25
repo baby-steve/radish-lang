@@ -1,9 +1,18 @@
 use crate::opcode::Opcode;
 use crate::value::Value;
 
+#[derive(Debug)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
+}
+
+impl Chunk {
+    pub fn add_constant(&mut self, value: Value) -> usize {
+        let index = self.constants.len();
+        self.constants.push(value);
+        index
+    }
 }
 
 #[derive(Debug)]
