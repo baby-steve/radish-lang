@@ -154,6 +154,15 @@ impl<'a> Parser<'a> {
                 self.consume(TokenType::Number, "Expect number literal");
                 return Ok(node);
             }
+            TokenType::LeftParen => {
+                self.consume(TokenType::LeftParen, "Expect '('.");
+                let start = self.current.as_ref().unwrap().span.start;
+                let expr = Box::new(ParenExpr { expr: self.parse_sum()?});
+                self.consume(TokenType::RightParen, "Expect ')' after grouping expression.");
+                let span = Span::new(start, self.current.as_ref().unwrap().span.end);
+                let node = ASTNode::ParenExpr(expr, span);
+                return Ok(node);
+            }
             _ => {
                 return Err(ParserError(String::from(format!(
                     "Error, unexpected token: '{}'.",
