@@ -1,5 +1,5 @@
-use std::fmt;
 use crate::token::Span;
+use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
@@ -23,7 +23,11 @@ pub struct BinaryExpr {
 
 impl fmt::Display for BinaryExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{{ left: {:?}, op: {:?}, right: {:?}, }}", self.left, self.op, self.right)
+        write!(
+            f,
+            "{{ left: {:?}, op: {:?}, right: {:?}, }}",
+            self.left, self.op, self.right
+        )
     }
 }
 
@@ -36,8 +40,7 @@ pub enum ASTNode {
 impl ASTNode {
     pub fn position(&self) -> Span {
         match self {
-            Self::BinaryExpr(_, pos)
-            | Self::Literal(_, pos) => *pos, 
+            Self::BinaryExpr(_, pos) | Self::Literal(_, pos) => *pos,
         }
     }
 }
@@ -45,4 +48,10 @@ impl ASTNode {
 #[derive(Debug, PartialEq)]
 pub struct AST {
     pub items: Vec<ASTNode>,
+}
+
+impl AST {
+    pub fn new(items: Vec<ASTNode>) -> AST {
+        AST { items }
+    }
 }

@@ -27,10 +27,10 @@ impl<'a> Parser<'a> {
             current: None,
         }
     }
-    pub fn parse(&mut self) -> Result<ASTNode, ParserError> {
+    pub fn parse(&mut self) -> Result<AST, ParserError> {
         self.advance();
 
-        self.expression()
+        Ok(AST::new(vec!(self.expression()?)))
     }
 
     fn advance(&mut self) {
@@ -161,5 +161,92 @@ impl<'a> Parser<'a> {
                 ))))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // TODO: implement more through tests. 
+
+    #[test]
+    fn test_binary_add_expr() {
+        let result = &Parser::new("1 + 23").parse().unwrap().items[0];
+
+        let expr = match result {
+            ASTNode::BinaryExpr(val, _) => val,
+            _ => unreachable!(),
+        };
+
+        assert_eq!(
+            expr.left,
+            ASTNode::Literal(Literal::Number(1.0), Span::new(0, 1))
+        );
+        assert_eq!(expr.op, Op::Add);
+        assert_eq!(
+            expr.right,
+            ASTNode::Literal(Literal::Number(23.0), Span::new(4, 6))
+        );
+    }
+
+    #[test]
+    fn test_binary_sub_expr() {
+        let result = &Parser::new("1 - 23").parse().unwrap().items[0];
+
+        let expr = match result {
+            ASTNode::BinaryExpr(val, _) => val,
+            _ => unreachable!(),
+        };
+
+        assert_eq!(
+            expr.left,
+            ASTNode::Literal(Literal::Number(1.0), Span::new(0, 1))
+        );
+        assert_eq!(expr.op, Op::Subtract);
+        assert_eq!(
+            expr.right,
+            ASTNode::Literal(Literal::Number(23.0), Span::new(4, 6))
+        );
+    }
+
+    #[test]
+    fn test_binary_mul_expr() {
+        let result = &Parser::new("1 * 23").parse().unwrap().items[0];
+
+        let expr = match result {
+            ASTNode::BinaryExpr(val, _) => val,
+            _ => unreachable!(),
+        };
+
+        assert_eq!(
+            expr.left,
+            ASTNode::Literal(Literal::Number(1.0), Span::new(0, 1))
+        );
+        assert_eq!(expr.op, Op::Multiply);
+        assert_eq!(
+            expr.right,
+            ASTNode::Literal(Literal::Number(23.0), Span::new(4, 6))
+        );
+    }
+
+    #[test]
+    fn test_binary_div_expr() {
+        let result = &Parser::new("1 / 23").parse().unwrap().items[0];
+
+        let expr = match result {
+            ASTNode::BinaryExpr(val, _) => val,
+            _ => unreachable!(),
+        };
+
+        assert_eq!(
+            expr.left,
+            ASTNode::Literal(Literal::Number(1.0), Span::new(0, 1))
+        );
+        assert_eq!(expr.op, Op::Divide);
+        assert_eq!(
+            expr.right,
+            ASTNode::Literal(Literal::Number(23.0), Span::new(4, 6))
+        );
     }
 }
