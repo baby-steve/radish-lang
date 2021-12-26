@@ -105,6 +105,13 @@ mod tests {
                 Opcode::Halt as u8
             )
         );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(
+                Value::Number(1.0),
+                Value::Number(23.0),
+            )
+        );
     }
 
     #[test]
@@ -119,6 +126,13 @@ mod tests {
                 Opcode::Constant as u8, 1,
                 Opcode::Subtract as u8,
                 Opcode::Halt as u8
+            )
+        );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(
+                Value::Number(1.0),
+                Value::Number(23.0),
             )
         );
     }
@@ -137,6 +151,13 @@ mod tests {
                 Opcode::Halt as u8
             )
         );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(
+                Value::Number(1.0),
+                Value::Number(23.0),
+            )
+        );
     }
 
     #[test]
@@ -151,6 +172,13 @@ mod tests {
                 Opcode::Constant as u8, 1,
                 Opcode::Divide as u8,
                 Opcode::Halt as u8
+            )
+        );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(
+                Value::Number(1.0),
+                Value::Number(23.0),
             )
         );
     }
@@ -171,5 +199,13 @@ mod tests {
                 Opcode::Halt as u8
             )
         );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(
+                Value::Number(1.0),
+                Value::Number(23.0),
+                Value::Number(5.0),
+            )
+        )
     }
 }
