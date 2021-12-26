@@ -6,7 +6,7 @@ pub struct Scanner<'a> {
     source: Vec<&'a str>,
     current: usize,
     previous: usize,
-    line: usize,
+    //line: usize,
 }
 
 impl<'a, 'b> Scanner<'a> {
@@ -15,7 +15,7 @@ impl<'a, 'b> Scanner<'a> {
             source: src.graphemes(true).collect::<Vec<&str>>(),
             current: 0,
             previous: 0,
-            line: 1,
+            //line: 1,
         }
     }
 
@@ -27,6 +27,8 @@ impl<'a, 'b> Scanner<'a> {
             Some("-") => self.make_token(TokenType::Minus),
             Some("/") => self.make_token(TokenType::Slash),
             Some("*") => self.make_token(TokenType::Star),
+            Some("(") => self.make_token(TokenType::LeftParen),
+            Some(")") => self.make_token(TokenType::RightParen),
             None => self.make_token(TokenType::Eof),
             _ => {
                 if is_digit(c.unwrap()) {
@@ -207,6 +209,22 @@ mod tests {
         assert_eq!(scanner.scan_token().token_type, TokenType::Plus);
         assert_eq!(scanner.scan_token().token_type, TokenType::Number);
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_parentheses() {
+        let mut scanner = Scanner::new("123 (456 789)");
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::LeftParen);
+        assert_eq!(token.value, "(");
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::RightParen);
+        assert_eq!(token.value, ")");
+        assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
+        
     }
 
     #[test]
