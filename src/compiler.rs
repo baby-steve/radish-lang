@@ -1,4 +1,4 @@
-use crate::ast::{ASTNode, BinaryExpr, Literal, Op, AST};
+use crate::ast::{ASTNode, BinaryExpr, Literal, Op, AST, ParenExpr};
 use crate::opcode::Opcode;
 use crate::value::Value;
 use crate::vm::Chunk;
@@ -33,6 +33,7 @@ impl Compiler {
     fn visit(&mut self, node: &ASTNode) {
         match node {
             ASTNode::BinaryExpr(expr, _) => self.expression(expr),
+            ASTNode::ParenExpr(expr, _) => self.grouping(expr),
             ASTNode::Literal(lit, _) => self.literal(lit),
         }
     }
@@ -59,6 +60,10 @@ impl Compiler {
 
     fn make_constant(&mut self, value: Value) -> u8 {
         self.chunk.add_constant(value) as u8
+    }
+
+    fn grouping(&mut self, expr: &ParenExpr) {
+        self.visit(&expr.expr);
     }
 
     fn expression(&mut self, expr: &BinaryExpr) {
