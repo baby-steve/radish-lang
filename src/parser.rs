@@ -30,7 +30,7 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<AST, ParserError> {
         self.advance();
 
-        Ok(AST::new(vec!(self.expression()?)))
+        Ok(AST::new(vec![self.expression()?]))
     }
 
     fn advance(&mut self) {
@@ -155,12 +155,24 @@ impl<'a> Parser<'a> {
                 return Ok(node);
             }
             TokenType::LeftParen => {
-                self.consume(TokenType::LeftParen, "Expect '('.");
                 let start = self.current.as_ref().unwrap().span.start;
-                let expr = Box::new(ParenExpr { expr: self.parse_sum()?});
-                self.consume(TokenType::RightParen, "Expect ')' after grouping expression.");
-                let span = Span::new(start, self.current.as_ref().unwrap().span.end);
-                let node = ASTNode::ParenExpr(expr, span);
+                self.consume(TokenType::LeftParen, "Expect '('.");
+                let expr = self.parse_sum()?;
+                self.consume(
+                    TokenType::RightParen,
+                    "Expect ')' after grouping expression.",
+                );
+                let span = Span::new(start, expr.position().end + 1);
+                let node = ASTNode::ParenExpr(Box::new(ParenExpr { expr }), span);
+                return Ok(node);
+            }
+            TokenType::Minus => {
+                let start = self.current.as_ref().unwrap().span.start;
+                self.consume(TokenType::Minus, "Expect '-'.");
+                let op = Op::Subtract;
+                let arg = self.parse_factor()?;
+                let span = Span::new(start, arg.position().end);
+                let node = ASTNode::UnaryExpr(Box::new(UnaryExpr { op, arg }), span);
                 return Ok(node);
             }
             _ => {
@@ -177,7 +189,7 @@ impl<'a> Parser<'a> {
 mod tests {
     use super::*;
 
-    // TODO: implement more through tests. 
+    // TODO: implement more through tests.
 
     #[test]
     fn test_binary_add_expr() {
