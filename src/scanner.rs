@@ -30,13 +30,11 @@ impl<'a, 'b> Scanner<'a> {
             Some("(") => self.make_token(TokenType::LeftParen),
             Some(")") => self.make_token(TokenType::RightParen),
             None => self.make_token(TokenType::Eof),
+            _ if is_alpha(c.unwrap()) => self.identifier(),
+            _ if is_digit(c.unwrap()) => self.number(),
             _ => {
-                if is_digit(c.unwrap()) {
-                    return self.number();
-                } else {
-                    let msg = format!("Unexpected character: '{}'", c.unwrap());
-                    return self.make_error_token(msg);
-                }
+                let msg = format!("Unexpected character: '{}'", c.unwrap());
+                return self.make_error_token(msg);
             }
         }
     }
@@ -92,6 +90,24 @@ impl<'a, 'b> Scanner<'a> {
         self.make_token(TokenType::Number)
     }
 
+    fn identifier(&mut self) -> Token {
+        while self.peek() != None && is_alpha(self.peek().unwrap()) {
+            self.advance();
+        }
+
+        let token_type = self.identifier_type();
+        self.make_token(token_type)
+    }
+
+    fn identifier_type(&mut self) -> TokenType {
+        let value = &self.source[self.previous..self.current].join("");
+        match &value[..] {
+            "true" => TokenType::True,
+            "false" => TokenType::False,
+            _ => TokenType::Ident, 
+        }
+    }
+
     fn skip_whitespace(&mut self) -> &mut Self {
         while self.peek() != None && is_whitespace(self.peek().unwrap()) {
             self.advance();
@@ -126,6 +142,12 @@ fn is_whitespace(string: &str) -> bool {
         | "\u{2028}" // LINE SEPARATOR
         | "\u{2029}" // PARAGRAPH SEPARATOR
     )
+}
+
+fn is_alpha(string: &str) -> bool {
+    string
+        .bytes()
+        .all(|b| matches!(b, b'a'..=b'z' | b'A'..=b'Z' | b'_'))
 }
 
 #[cfg(test)]
@@ -170,6 +192,33 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
         assert_eq!(token.value, "");
+    }
+
+    #[test]
+    fn test_true_token() {
+        let mut scanner = Scanner::new("true");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::True);
+        assert_eq!(token.value, "true");
+    }
+
+    #[test]
+    fn test_false_token() {
+        let mut scanner = Scanner::new("false");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::False);
+        assert_eq!(token.value, "false");
+    }
+
+    #[test]
+    fn test_identifier_token() {
+        let mut scanner = Scanner::new("radishes cats");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Ident);
+        assert_eq!(token.value, "radishes");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Ident);
+        assert_eq!(token.value, "cats");
     }
 
     #[test]
@@ -224,7 +273,6 @@ mod tests {
         assert_eq!(token.token_type, TokenType::RightParen);
         assert_eq!(token.value, ")");
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
-        
     }
 
     #[test]
@@ -253,5 +301,15 @@ mod tests {
         let mut scanner = Scanner::new(&src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_is_alpha() {
+        assert_eq!(is_alpha("l"), true);
+        assert_eq!(is_alpha("L"), true);
+        assert_eq!(is_alpha("_"), true);
+        assert_eq!(is_alpha("1"), false);
+        assert_eq!(is_alpha("?"), false);
+        assert_eq!(is_alpha("猫"), false);
     }
 }
