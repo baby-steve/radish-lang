@@ -46,12 +46,12 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn check(&self, token_type: TokenType) -> bool {
+    fn _check(&self, token_type: TokenType) -> bool {
         self.current.as_ref().unwrap().token_type == token_type
     }
 
-    fn match_token(&mut self, token_type: TokenType) -> bool {
-        if !self.check(token_type) {
+    fn _match_token(&mut self, token_type: TokenType) -> bool {
+        if !self._check(token_type) {
             false
         } else {
             self.advance();
@@ -175,6 +175,16 @@ impl<'a> Parser<'a> {
                 let node = ASTNode::UnaryExpr(Box::new(UnaryExpr { op, arg }), span);
                 return Ok(node);
             }
+            TokenType::True => {
+                let node =
+                    ASTNode::Literal(Literal::Bool(true), self.current.as_ref().unwrap().span);
+                return Ok(node);
+            }
+            TokenType::False => {
+                let node =
+                    ASTNode::Literal(Literal::Bool(false), self.current.as_ref().unwrap().span);
+                return Ok(node);
+            }
             _ => {
                 return Err(ParserError(String::from(format!(
                     "Error, unexpected token: '{}'.",
@@ -269,5 +279,14 @@ mod tests {
             expr.right,
             ASTNode::Literal(Literal::Number(23.0), Span::new(4, 6))
         );
+    }
+
+    #[test]
+    fn test_boolean_literal() {
+        let result = &Parser::new("true").parse().unwrap().items[0];
+        assert_eq!(*result, ASTNode::Literal(Literal::Bool(true), Span::new(0, 4)));
+
+        let result = &Parser::new("false").parse().unwrap().items[0];
+        assert_eq!(*result, ASTNode::Literal(Literal::Bool(false), Span::new(0, 5)));
     }
 }

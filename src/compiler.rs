@@ -5,9 +5,6 @@ use crate::vm::Chunk;
 
 pub struct Compiler {
     pub chunk: Chunk,
-    has_error: bool,
-    panic_mode: bool,
-    error_count: usize, // Make smaller?
 }
 
 impl Compiler {
@@ -17,9 +14,6 @@ impl Compiler {
                 code: vec![],
                 constants: vec![],
             },
-            has_error: false,
-            panic_mode: false,
-            error_count: 0,
         }
     }
     pub fn run(&mut self, ast: &AST) {
@@ -91,6 +85,7 @@ impl Compiler {
     fn literal(&mut self, node: &Literal) {
         match node {
             Literal::Number(val) => self.number(val),
+            Literal::Bool(val) => self.boolean(val),
         }
     }
 
@@ -98,7 +93,12 @@ impl Compiler {
         self.emit_constant(Value::Number(*val));
     }
 
-    fn synchronize() {}
+    fn boolean(&mut self, val: &bool) {
+        match val {
+            true => self.emit_byte(Opcode::True as u8),
+            false => self.emit_byte(Opcode::False as u8),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -222,5 +222,18 @@ mod tests {
             )
         );
         assert_eq!(compiler.chunk.constants, vec!(Value::Number(23.0)))
+    }
+
+    #[test]
+    fn compile_boolean_literal() {
+        let result = Parser::new("true").parse().unwrap();
+        let mut compiler = Compiler::new();
+        compiler.run(&result);
+        assert_eq!(compiler.chunk.code, vec!(Opcode::True as u8, Opcode::Halt as u8));
+
+        let result = Parser::new("true").parse().unwrap();
+        let mut compiler = Compiler::new();
+        compiler.run(&result);
+        assert_eq!(compiler.chunk.code, vec!(Opcode::True as u8, Opcode::Halt as u8));
     }
 }

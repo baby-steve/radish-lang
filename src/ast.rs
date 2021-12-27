@@ -4,6 +4,7 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Number(f64),
+    Bool(bool),
 }
 
 #[derive(Debug, PartialEq)]
