@@ -1,6 +1,7 @@
 use unicode_segmentation::UnicodeSegmentation;
 
-use crate::token::{Span, Token, TokenType};
+use crate::token::{Token, TokenType};
+use crate::span::Span;
 
 pub struct Scanner<'a> {
     source: Vec<&'a str>,

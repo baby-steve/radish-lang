@@ -1,4 +1,4 @@
-use crate::token::Span;
+use crate::span::Span;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]

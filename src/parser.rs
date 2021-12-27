@@ -2,7 +2,8 @@ use std::num::ParseFloatError;
 
 use crate::ast::*;
 use crate::scanner::Scanner;
-use crate::token::{Span, Token, TokenType};
+use crate::token::{Token, TokenType};
+use crate::span::Span;
 
 #[derive(Debug)]
 pub struct ParserError(String);
@@ -178,12 +179,14 @@ impl<'a> Parser<'a> {
             TokenType::True => {
                 let node =
                     ASTNode::Literal(Literal::Bool(true), self.current.as_ref().unwrap().span);
-                return Ok(node);
+                    self.consume(TokenType::True, "Expect boolean literal 'true'.");
+                    return Ok(node);
             }
             TokenType::False => {
                 let node =
                     ASTNode::Literal(Literal::Bool(false), self.current.as_ref().unwrap().span);
-                return Ok(node);
+                    self.consume(TokenType::False, "Expect boolean literal 'false'.");
+                    return Ok(node);
             }
             _ => {
                 return Err(ParserError(String::from(format!(
