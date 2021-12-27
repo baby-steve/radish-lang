@@ -8,6 +8,8 @@ pub enum Opcode {
     Multiply,
     Divide,
 
+    Negate,
+
     Halt,
 }
 

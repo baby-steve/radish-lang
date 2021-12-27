@@ -21,19 +21,19 @@ pub struct Stack {
 }
 
 impl Stack {
-    fn new() -> Stack {
+    pub fn new() -> Stack {
         Stack { stack: vec![] }
     }
 
-    fn push(&mut self, val: Value) {
+    pub fn push(&mut self, val: Value) {
         self.stack.push(val);
     }
 
-    fn pop(&mut self) -> Option<Value> {
+    pub fn pop(&mut self) -> Option<Value> {
         self.stack.pop()
     }
 
-    fn peek(&mut self) -> Option<Value> {
+    pub fn peek(&mut self) -> Option<Value> {
         if self.stack.len() <= 0 {
             None
         } else {
@@ -63,12 +63,15 @@ impl VM {
 
     fn run(&mut self) {
         loop {
-            println!("{:?}", self.stack);
             match self.decode_opcode() {
                 Opcode::Constant => {
                     self.ip += 1;
                     self.stack
                         .push(self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone());
+                }
+                Opcode::Negate => {
+                    let value = self.stack.pop().unwrap();
+                    self.stack.push(-value);
                 }
                 Opcode::Add => {
                     let b = self.stack.pop().unwrap();
@@ -209,5 +212,18 @@ mod tests {
         let mut vm = VM::new(Chunk { code, constants });
         vm.run();
         assert_eq!(vm.stack.peek(), Some(Value::Number(9.0)));
+    }
+
+    #[test]
+    fn test_negate_opcode() {
+        let code = vec![
+            Opcode::Constant as u8, 0,
+            Opcode::Negate as u8,
+            Opcode::Halt as u8
+        ];
+        let constants = vec![Value::Number(2.0)];
+        let mut vm = VM::new(Chunk { code, constants });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Number(-2.0)));
     }
 }
