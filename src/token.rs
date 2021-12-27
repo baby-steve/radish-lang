@@ -25,6 +25,8 @@ pub enum TokenType {
     Star,
     Minus,
 
+    LeftParen, RightParen,
+
     Number,
 
     Error,
@@ -38,6 +40,8 @@ impl fmt::Display for TokenType {
             TokenType::Slash => write!(f, "Slash"),
             TokenType::Star => write!(f, "Star"),
             TokenType::Minus => write!(f, "Minus"),
+            TokenType::LeftParen => write!(f, "LeftParen"),
+            TokenType::RightParen => write!(f, "RightParen"),
             TokenType::Number => write!(f, "Number"),
             TokenType::Error => write!(f, "Error"),
             TokenType::Eof => write!(f, "Eof"),

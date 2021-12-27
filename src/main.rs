@@ -1,20 +1,11 @@
-mod ast;
-mod compiler;
-mod opcode;
-mod parser;
-mod scanner;
-mod token;
-mod value;
-mod vm;
-
-use parser::Parser;
-use compiler::Compiler;
-use vm::VM;
+use radish_lang::compiler::Compiler;
+use radish_lang::parser::Parser;
+use radish_lang::vm::VM;
 
 fn main() {
     println!("Hello, Radish!");
 
-    let result = Parser::new("12 + 7 - 8 / 4 * 5").parse().unwrap();
+    let result = Parser::new("-1 + 2 - 3 * (1 + 2) / 2").parse().unwrap();
     println!("{:#?}", result);
 
     let mut compiler = Compiler::new();

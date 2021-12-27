@@ -1,4 +1,4 @@
-use crate::ast::{ASTNode, BinaryExpr, Literal, Op, AST};
+use crate::ast::*;
 use crate::opcode::Opcode;
 use crate::value::Value;
 use crate::vm::Chunk;
@@ -33,6 +33,8 @@ impl Compiler {
     fn visit(&mut self, node: &ASTNode) {
         match node {
             ASTNode::BinaryExpr(expr, _) => self.expression(expr),
+            ASTNode::ParenExpr(expr, _) => self.grouping(expr),
+            ASTNode::UnaryExpr(arg, _) => self.unary(arg),
             ASTNode::Literal(lit, _) => self.literal(lit),
         }
     }
@@ -61,6 +63,10 @@ impl Compiler {
         self.chunk.add_constant(value) as u8
     }
 
+    fn grouping(&mut self, expr: &ParenExpr) {
+        self.visit(&expr.expr);
+    }
+
     fn expression(&mut self, expr: &BinaryExpr) {
         self.visit(&expr.left);
         self.visit(&expr.right);
@@ -70,6 +76,15 @@ impl Compiler {
             Op::Subtract => self.emit_byte(Opcode::Subtract as u8),
             Op::Multiply => self.emit_byte(Opcode::Multiply as u8),
             Op::Divide => self.emit_byte(Opcode::Divide as u8),
+        }
+    }
+
+    fn unary(&mut self, node: &UnaryExpr) {
+        self.visit(&node.arg);
+
+        match &node.op {
+            Op::Subtract => self.emit_byte(Opcode::Negate as u8),
+            _ => unreachable!(), // Add error message?
         }
     }
 
@@ -105,6 +120,10 @@ mod tests {
                 Opcode::Halt as u8
             )
         );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(Value::Number(1.0), Value::Number(23.0),)
+        );
     }
 
     #[test]
@@ -120,6 +139,10 @@ mod tests {
                 Opcode::Subtract as u8,
                 Opcode::Halt as u8
             )
+        );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(Value::Number(1.0), Value::Number(23.0),)
         );
     }
 
@@ -137,6 +160,10 @@ mod tests {
                 Opcode::Halt as u8
             )
         );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(Value::Number(1.0), Value::Number(23.0),)
+        );
     }
 
     #[test]
@@ -152,6 +179,10 @@ mod tests {
                 Opcode::Divide as u8,
                 Opcode::Halt as u8
             )
+        );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(Value::Number(1.0), Value::Number(23.0),)
         );
     }
 
@@ -171,5 +202,25 @@ mod tests {
                 Opcode::Halt as u8
             )
         );
+        assert_eq!(
+            compiler.chunk.constants,
+            vec!(Value::Number(1.0), Value::Number(23.0), Value::Number(5.0),)
+        )
+    }
+
+    #[test]
+    fn compile_unary_expr() {
+        let result = Parser::new("-23").parse().unwrap();
+        let mut compiler = Compiler::new();
+        compiler.run(&result);
+        assert_eq!(
+            compiler.chunk.code,
+            vec!(
+                Opcode::Constant as u8, 0,
+                Opcode::Negate as u8,
+                Opcode::Halt as u8
+            )
+        );
+        assert_eq!(compiler.chunk.constants, vec!(Value::Number(23.0)))
     }
 }

@@ -21,6 +21,17 @@ pub struct BinaryExpr {
     pub right: ASTNode,
 }
 
+#[derive(Debug, PartialEq)]
+pub struct ParenExpr {
+    pub expr: ASTNode,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct UnaryExpr {
+    pub op: Op,
+    pub arg: ASTNode,
+}
+
 impl fmt::Display for BinaryExpr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -34,13 +45,18 @@ impl fmt::Display for BinaryExpr {
 #[derive(Debug, PartialEq)]
 pub enum ASTNode {
     BinaryExpr(Box<BinaryExpr>, Span),
+    ParenExpr(Box<ParenExpr>, Span),
+    UnaryExpr(Box<UnaryExpr>, Span),
     Literal(Literal, Span),
 }
 
 impl ASTNode {
     pub fn position(&self) -> Span {
         match self {
-            Self::BinaryExpr(_, pos) | Self::Literal(_, pos) => *pos,
+            Self::BinaryExpr(_, pos) 
+            | Self::ParenExpr(_, pos)
+            | Self::UnaryExpr(_, pos)
+            | Self::Literal(_, pos) => *pos,
         }
     }
 }
