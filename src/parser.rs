@@ -88,14 +88,14 @@ impl Parser {
                         node.position().start,
                         right.position().end,
                     );
-                    node = ASTNode::BinaryExpr(
+                    node = ASTNode::Expr(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
+                            right,
                             left: node,
                             op: Op::Add,
-                            right,
                         }),
                         span,
-                    );
+                    ))
                 }
                 TokenType::Minus => {
                     self.consume(TokenType::Minus, "Expect '-'");
@@ -105,14 +105,14 @@ impl Parser {
                         node.position().start,
                         right.position().end,
                     );
-                    node = ASTNode::BinaryExpr(
+                    node = ASTNode::Expr(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
+                            right,
                             left: node,
                             op: Op::Subtract,
-                            right,
                         }),
                         span,
-                    );
+                    ))
                 }
                 _ => break,
             }
@@ -133,14 +133,14 @@ impl Parser {
                         node.position().start,
                         right.position().end,
                     );
-                    node = ASTNode::BinaryExpr(
+                    node = ASTNode::Expr(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
+                            right,
                             left: node,
                             op: Op::Multiply,
-                            right,
                         }),
                         span,
-                    );
+                    ))
                 }
                 TokenType::Slash => {
                     self.consume(TokenType::Slash, "Expect '/'");
@@ -150,14 +150,14 @@ impl Parser {
                         node.position().start,
                         right.position().end,
                     );
-                    node = ASTNode::BinaryExpr(
+                    node = ASTNode::Expr(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
+                            right,
                             left: node,
                             op: Op::Divide,
-                            right,
                         }),
                         span,
-                    );
+                    ))
                 }
                 _ => break,
             };
@@ -176,7 +176,7 @@ impl Parser {
                     current_token.span.end,
                 );
                 let value = current_token.value.parse::<f64>()?;
-                let node = ASTNode::Literal(Literal::Number(value), span);
+                let node = ASTNode::Expr(Expr::Literal(Literal::Number(value), span));
                 self.consume(TokenType::Number, "Expect number literal");
                 return Ok(node);
             }
@@ -189,7 +189,7 @@ impl Parser {
                     "Expect ')' after grouping expression.",
                 );
                 let span = Span::new(Rc::clone(&self.source), start, expr.position().end + 1);
-                let node = ASTNode::ParenExpr(Box::new(ParenExpr { expr }), span);
+                let node = ASTNode::Expr(Expr::ParenExpr(Box::new(ParenExpr { expr }), span));
                 return Ok(node);
             }
             TokenType::Minus => {
@@ -198,7 +198,7 @@ impl Parser {
                 let op = Op::Subtract;
                 let arg = self.parse_factor()?;
                 let span = Span::new(Rc::clone(&self.source), start, arg.position().end);
-                let node = ASTNode::UnaryExpr(Box::new(UnaryExpr { op, arg }), span);
+                let node = ASTNode::Expr(Expr::UnaryExpr(Box::new(UnaryExpr {arg, op}), span));
                 return Ok(node);
             }
             TokenType::True => {
@@ -208,7 +208,7 @@ impl Parser {
                     current_token.span.start,
                     current_token.span.end,
                 );
-                let node = ASTNode::Literal(Literal::Bool(true), span);
+                let node = ASTNode::Expr(Expr::Literal(Literal::Bool(true), span));
                 self.consume(TokenType::True, "Expect boolean literal 'true'.");
                 return Ok(node);
             }
@@ -219,7 +219,7 @@ impl Parser {
                     current_token.span.start,
                     current_token.span.end,
                 );
-                let node = ASTNode::Literal(Literal::Bool(false), span);
+                let node = ASTNode::Expr(Expr::Literal(Literal::Bool(false), span));
                 self.consume(TokenType::False, "Expect boolean literal 'false'.");
                 return Ok(node);
             }
@@ -245,20 +245,20 @@ mod tests {
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
         assert_eq!(
             *result,
-            ASTNode::BinaryExpr(
+            ASTNode::Expr(Expr::BinaryExpr(
                 Box::new(BinaryExpr {
-                    left: ASTNode::Literal(
+                    left: ASTNode::Expr(Expr::Literal(
                         Literal::Number(1.0),
                         Span::new(Rc::clone(&source), 0, 1),
-                    ),
+                    )),
                     op: Op::Add,
-                    right: ASTNode::Literal(
+                    right: ASTNode::Expr(Expr::Literal(
                         Literal::Number(23.0),
                         Span::new(Rc::clone(&source), 4, 6),
-                    ),
+                    )),
                 },),
                 Span::new(Rc::clone(&source), 0, 6),
-            )
+            ))
         )
     }
 
@@ -268,20 +268,20 @@ mod tests {
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
         assert_eq!(
             *result,
-            ASTNode::BinaryExpr(
+            ASTNode::Expr(Expr::BinaryExpr(
                 Box::new(BinaryExpr {
-                    left: ASTNode::Literal(
+                    left: ASTNode::Expr(Expr::Literal(
                         Literal::Number(1.0),
                         Span::new(Rc::clone(&source), 0, 1),
-                    ),
+                    )),
                     op: Op::Subtract,
-                    right: ASTNode::Literal(
+                    right: ASTNode::Expr(Expr::Literal(
                         Literal::Number(23.0),
                         Span::new(Rc::clone(&source), 4, 6),
-                    ),
+                    )),
                 },),
                 Span::new(Rc::clone(&source), 0, 6),
-            )
+            ))
         )
     }
 
@@ -291,20 +291,20 @@ mod tests {
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
         assert_eq!(
             *result,
-            ASTNode::BinaryExpr(
+            ASTNode::Expr(Expr::BinaryExpr(
                 Box::new(BinaryExpr {
-                    left: ASTNode::Literal(
+                    left: ASTNode::Expr(Expr::Literal(
                         Literal::Number(1.0),
                         Span::new(Rc::clone(&source), 0, 1),
-                    ),
+                    )),
                     op: Op::Multiply,
-                    right: ASTNode::Literal(
+                    right: ASTNode::Expr(Expr::Literal(
                         Literal::Number(23.0),
                         Span::new(Rc::clone(&source), 4, 6),
-                    ),
+                    )),
                 },),
                 Span::new(Rc::clone(&source), 0, 6),
-            )
+            ))
         )
     }
 
@@ -314,20 +314,20 @@ mod tests {
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
         assert_eq!(
             *result,
-            ASTNode::BinaryExpr(
+            ASTNode::Expr(Expr::BinaryExpr(
                 Box::new(BinaryExpr {
-                    left: ASTNode::Literal(
+                    left: ASTNode::Expr(Expr::Literal(
                         Literal::Number(1.0),
                         Span::new(Rc::clone(&source), 0, 1),
-                    ),
+                    )),
                     op: Op::Divide,
-                    right: ASTNode::Literal(
+                    right: ASTNode::Expr(Expr::Literal(
                         Literal::Number(23.0),
                         Span::new(Rc::clone(&source), 4, 6),
-                    ),
+                    )),
                 },),
                 Span::new(Rc::clone(&source), 0, 6),
-            )
+            ))
         )
     }
 
@@ -337,14 +337,14 @@ mod tests {
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
         assert_eq!(
             *result,
-            ASTNode::Literal(Literal::Bool(true), Span::new(Rc::clone(&source), 0, 4))
+            ASTNode::Expr(Expr::Literal(Literal::Bool(true), Span::new(Rc::clone(&source), 0, 4)))
         );
 
         let source = Source::source("false");
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
         assert_eq!(
             *result,
-            ASTNode::Literal(Literal::Bool(false), Span::new(Rc::clone(&source), 0, 5))
+            ASTNode::Expr(Expr::Literal(Literal::Bool(false), Span::new(Rc::clone(&source), 0, 5)))
         );
     }
 }
