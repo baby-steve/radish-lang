@@ -1,14 +1,17 @@
+use crate::source::Source;
 use std::fmt;
+use std::rc::Rc;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Span {
+    pub source: Rc<Source>,
     pub start: usize,
     pub end: usize,
 }
 
 impl Span {
-    pub fn new(start: usize, end: usize) -> Span {
-        Span { start, end, }
+    pub fn new(source: Rc<Source>, start: usize, end: usize) -> Span {
+        Span { source, start, end }
     }
 }
 

@@ -1,27 +1,27 @@
-use unicode_segmentation::UnicodeSegmentation;
+use std::rc::Rc;
 
-use crate::token::{Token, TokenType};
+use crate::source::Source;
 use crate::span::Span;
+use crate::token::{Token, TokenType};
 
-pub struct Scanner<'a> {
-    source: Vec<&'a str>,
-    current: usize,
-    previous: usize,
-    //line: usize,
+pub struct Scanner {
+    pub source: Rc<Source>,
+    pub current: usize,
+    pub previous: usize,
 }
 
-impl<'a, 'b> Scanner<'a> {
-    pub fn new(src: &'a str) -> Scanner<'a> {
+impl Scanner {
+    pub fn new(source: Rc<Source>) -> Scanner {
         Scanner {
-            source: src.graphemes(true).collect::<Vec<&str>>(),
+            source: Rc::clone(&source),
             current: 0,
             previous: 0,
-            //line: 1,
         }
     }
 
     pub fn scan_token(&mut self) -> Token {
-        let c = self.skip_whitespace().advance();
+        self.skip_whitespace();
+        let c = self.advance();
 
         match c {
             Some("+") => self.make_token(TokenType::Plus),
@@ -40,47 +40,54 @@ impl<'a, 'b> Scanner<'a> {
         }
     }
 
-    fn advance(&mut self) -> Option<&str> {
-        self.current = self.current + 1;
-
-        if self.current > self.source.len() {
-            None
-        } else {
-            Some(self.source[self.current - 1])
-        }
-    }
-
-    fn peek(&mut self) -> Option<&str> {
-        let index = self.current + 1;
-
-        if index > self.source.len() {
-            None
-        } else {
-            Some(self.source[index - 1])
-        }
-    }
-
     fn make_token(&mut self, token_type: TokenType) -> Token {
-        let token = match self.current {
-            _ if self.current > self.source.len() => {
-                let span = Span::new(self.previous, self.current);
-                Token::new(token_type, "".to_string(), span)
-            }
-            _ => {
-                let value = self.source[self.previous..self.current].join("");
-                let span = Span::new(self.previous, self.current);
-                self.previous = self.current;
-
-                Token::new(token_type, value, span)
-            }
-        };
-
+        let value = &self.source.contents[self.previous..self.current];
+        let token = Token::new(
+            token_type,
+            value.to_string(),
+            Span::new(Rc::clone(&self.source), self.previous, self.current),
+        );
+        self.previous = self.current;
         token
     }
 
     fn make_error_token(&mut self, msg: String) -> Token {
-        let span = Span::new(self.previous, self.current);
+        let span = Span::new(self.source.clone(), self.previous, self.current);
         Token::new(TokenType::Error, msg, span)
+    }
+
+    fn remaining(&mut self) -> &str {
+        &self.source.contents[self.current..]
+    }
+
+    fn advance(&mut self) -> Option<&str> {
+        if self.remaining().is_empty() {
+            None
+        } else {
+            let source = &self.source.contents[self.current..];
+            let mut end = 1;
+            while !source.is_char_boundary(end) {
+                end += 1;
+            }
+
+            self.current += end;
+
+            Some(&source[0..end])
+        }
+    }
+
+    fn peek(&mut self) -> Option<&str> {
+        if self.remaining().is_empty() {
+            None
+        } else {
+            let source = &self.source.contents[self.current..];
+            let mut end = 1;
+            while !source.is_char_boundary(end) {
+                end += 1;
+            }
+
+            Some(&source[0..end])
+        }
     }
 
     fn number(&mut self) -> Token {
@@ -101,11 +108,11 @@ impl<'a, 'b> Scanner<'a> {
     }
 
     fn identifier_type(&mut self) -> TokenType {
-        let value = &self.source[self.previous..self.current].join("");
+        let value = &self.source.contents[self.previous..self.current];
         match &value[..] {
             "true" => TokenType::True,
             "false" => TokenType::False,
-            _ => TokenType::Ident, 
+            _ => TokenType::Ident,
         }
     }
 
@@ -116,10 +123,6 @@ impl<'a, 'b> Scanner<'a> {
         self.previous = self.current;
         self
     }
-}
-
-fn is_digit(string: &str) -> bool {
-    string.as_bytes()[0].is_ascii_digit()
 }
 
 fn is_whitespace(string: &str) -> bool {
@@ -151,21 +154,23 @@ fn is_alpha(string: &str) -> bool {
         .all(|b| matches!(b, b'a'..=b'z' | b'A'..=b'Z' | b'_'))
 }
 
+fn is_digit(string: &str) -> bool {
+    string.as_bytes()[0].is_ascii_digit()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_init_scanner() {
-        let source = String::from("123猫");
-        let scanner = Scanner::new(&source);
-        assert_eq!(scanner.source, ["1", "2", "3", "猫"]);
+    fn new_test_scanner(test_string: &str) -> Scanner {
+        let source = Source::source(test_string);
+        Scanner::new(source)
     }
 
     #[test]
     fn test_op_token_type() {
         let src = String::from("+-*/");
-        let mut scanner = Scanner::new(&src);
+        let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Plus);
         assert_eq!(token.value, "+");
@@ -186,7 +191,7 @@ mod tests {
     #[test]
     fn test_number_token_type() {
         let src = String::from("123");
-        let mut scanner = Scanner::new(&src);
+        let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Number);
         assert_eq!(token.value, "123");
@@ -197,7 +202,7 @@ mod tests {
 
     #[test]
     fn test_true_token() {
-        let mut scanner = Scanner::new("true");
+        let mut scanner = new_test_scanner("true");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::True);
         assert_eq!(token.value, "true");
@@ -205,7 +210,7 @@ mod tests {
 
     #[test]
     fn test_false_token() {
-        let mut scanner = Scanner::new("false");
+        let mut scanner = new_test_scanner("false");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::False);
         assert_eq!(token.value, "false");
@@ -213,7 +218,7 @@ mod tests {
 
     #[test]
     fn test_identifier_token() {
-        let mut scanner = Scanner::new("radishes cats");
+        let mut scanner = new_test_scanner("radishes cats");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Ident);
         assert_eq!(token.value, "radishes");
@@ -225,13 +230,13 @@ mod tests {
     #[test]
     fn test_skip_whitespace() {
         let src = String::from("    ");
-        let mut scanner = Scanner::new(&src);
+        let mut scanner = new_test_scanner(&src);
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
         let src = String::from("\r\r\t");
-        let mut scanner = Scanner::new(&src);
+        let mut scanner = new_test_scanner(&src);
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
         let src = String::from("  123    + 45  ");
-        let mut scanner = Scanner::new(&src);
+        let mut scanner = new_test_scanner(&src);
         assert_eq!(scanner.scan_token().token_type, TokenType::Number);
         assert_eq!(scanner.scan_token().token_type, TokenType::Plus);
         assert_eq!(scanner.scan_token().token_type, TokenType::Number);
@@ -241,7 +246,7 @@ mod tests {
     #[test]
     fn test_unexpected_token_type() {
         let src = String::from("猫");
-        let mut scanner = Scanner::new(&src);
+        let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Error);
         assert_eq!(token.value, "Unexpected character: '猫'");
@@ -252,7 +257,7 @@ mod tests {
     #[test]
     fn test_multiple_tokens() {
         let src = String::from("1 + 23 + 456");
-        let mut scanner = Scanner::new(&src);
+        let mut scanner = new_test_scanner(&src);
         assert_eq!(scanner.scan_token().token_type, TokenType::Number);
         assert_eq!(scanner.scan_token().token_type, TokenType::Plus);
         assert_eq!(scanner.scan_token().token_type, TokenType::Number);
@@ -263,7 +268,7 @@ mod tests {
 
     #[test]
     fn test_parentheses() {
-        let mut scanner = Scanner::new("123 (456 789)");
+        let mut scanner = new_test_scanner("123 (456 789)");
         assert_eq!(scanner.scan_token().token_type, TokenType::Number);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::LeftParen);
@@ -280,9 +285,9 @@ mod tests {
     fn test_token_span() {
         let src = String::from("789 102 猫");
         //                      0123456789
-        let mut scanner = Scanner::new(&src);
-        assert_eq!(scanner.source.len(), 9);
+        let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token(); //123
+        println!("{}", token);
         assert_eq!(token.span.start, 0);
         assert_eq!(token.span.end, 3);
         let token = scanner.scan_token(); //456
@@ -290,16 +295,16 @@ mod tests {
         assert_eq!(token.span.end, 7);
         let token = scanner.scan_token(); //猫
         assert_eq!(token.span.start, 8);
-        assert_eq!(token.span.end, 9);
+        assert_eq!(token.span.end, 11);
         let token = scanner.scan_token(); //Eof
-        assert_eq!(token.span.start, 9);
-        assert_eq!(token.span.end, 10);
+        assert_eq!(token.span.start, 11);
+        assert_eq!(token.span.end, 11);
     }
 
     #[test]
     fn test_empty_file() {
         let src = String::from("");
-        let mut scanner = Scanner::new(&src);
+        let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
     }

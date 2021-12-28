@@ -57,7 +57,7 @@ impl ASTNode {
             Self::BinaryExpr(_, pos) 
             | Self::ParenExpr(_, pos)
             | Self::UnaryExpr(_, pos)
-            | Self::Literal(_, pos) => *pos,
+            | Self::Literal(_, pos) => pos.clone(),
         }
     }
 }
