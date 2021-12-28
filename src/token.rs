@@ -1,22 +1,6 @@
 use std::fmt;
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub struct Span {
-    pub start: usize,
-    pub end: usize,
-}
-
-impl Span {
-    pub fn new(start: usize, end: usize) -> Span {
-        Span { start, end, }
-    }
-}
-
-impl fmt::Display for Span {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "start: {}, end: {}", self.start, self.end)
-    }
-}
+use crate::span::Span;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum TokenType {
@@ -28,6 +12,8 @@ pub enum TokenType {
     LeftParen, RightParen,
 
     Number,
+    True, False,
+    Ident,
 
     Error,
     Eof,
@@ -43,6 +29,9 @@ impl fmt::Display for TokenType {
             TokenType::LeftParen => write!(f, "LeftParen"),
             TokenType::RightParen => write!(f, "RightParen"),
             TokenType::Number => write!(f, "Number"),
+            TokenType::True => write!(f, "True"),
+            TokenType::False => write!(f, "False"),
+            TokenType::Ident => write!(f, "Ident"),
             TokenType::Error => write!(f, "Error"),
             TokenType::Eof => write!(f, "Eof"),
         }

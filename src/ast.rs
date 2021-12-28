@@ -1,9 +1,10 @@
-use crate::token::Span;
+use crate::span::Span;
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Number(f64),
+    Bool(bool),
 }
 
 #[derive(Debug, PartialEq)]
@@ -56,7 +57,7 @@ impl ASTNode {
             Self::BinaryExpr(_, pos) 
             | Self::ParenExpr(_, pos)
             | Self::UnaryExpr(_, pos)
-            | Self::Literal(_, pos) => *pos,
+            | Self::Literal(_, pos) => pos.clone(),
         }
     }
 }

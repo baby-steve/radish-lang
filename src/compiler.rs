@@ -5,9 +5,6 @@ use crate::vm::Chunk;
 
 pub struct Compiler {
     pub chunk: Chunk,
-    has_error: bool,
-    panic_mode: bool,
-    error_count: usize, // Make smaller?
 }
 
 impl Compiler {
@@ -17,9 +14,6 @@ impl Compiler {
                 code: vec![],
                 constants: vec![],
             },
-            has_error: false,
-            panic_mode: false,
-            error_count: 0,
         }
     }
     pub fn run(&mut self, ast: &AST) {
@@ -91,6 +85,7 @@ impl Compiler {
     fn literal(&mut self, node: &Literal) {
         match node {
             Literal::Number(val) => self.number(val),
+            Literal::Bool(val) => self.boolean(val),
         }
     }
 
@@ -98,21 +93,36 @@ impl Compiler {
         self.emit_constant(Value::Number(*val));
     }
 
-    fn synchronize() {}
+    fn boolean(&mut self, val: &bool) {
+        match val {
+            true => self.emit_byte(Opcode::True as u8),
+            false => self.emit_byte(Opcode::False as u8),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    use std::rc::Rc;
+
     use crate::parser::Parser;
+    use crate::source::Source;
+
+    fn run_test_compiler(test_string: &str) -> Compiler {
+        let source = Source::source(test_string);
+        let result = Parser::new(Rc::clone(&source)).parse().unwrap();
+        let mut compiler = Compiler::new();
+        compiler.run(&result);
+        compiler
+    }
 
     #[test]
     fn compile_binary_add_expr() {
-        let result = Parser::new("1 + 23").parse().unwrap();
-        let mut compiler = Compiler::new();
-        compiler.run(&result);
+        let result = run_test_compiler("1 + 23");
         assert_eq!(
-            compiler.chunk.code,
+            result.chunk.code,
             vec!(
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
@@ -121,18 +131,16 @@ mod tests {
             )
         );
         assert_eq!(
-            compiler.chunk.constants,
+            result.chunk.constants,
             vec!(Value::Number(1.0), Value::Number(23.0),)
         );
     }
 
     #[test]
     fn compile_binary_sub_expr() {
-        let result = Parser::new("1 - 23").parse().unwrap();
-        let mut compiler = Compiler::new();
-        compiler.run(&result);
+        let result = run_test_compiler("12 - 6");
         assert_eq!(
-            compiler.chunk.code,
+         result.chunk.code,
             vec!(
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
@@ -141,18 +149,16 @@ mod tests {
             )
         );
         assert_eq!(
-            compiler.chunk.constants,
-            vec!(Value::Number(1.0), Value::Number(23.0),)
+         result.chunk.constants,
+            vec!(Value::Number(12.0), Value::Number(6.0),)
         );
     }
 
     #[test]
     fn compile_binary_mul_expr() {
-        let result = Parser::new("1 * 23").parse().unwrap();
-        let mut compiler = Compiler::new();
-        compiler.run(&result);
+        let result = run_test_compiler("5 * 2");
         assert_eq!(
-            compiler.chunk.code,
+         result.chunk.code,
             vec!(
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
@@ -161,18 +167,16 @@ mod tests {
             )
         );
         assert_eq!(
-            compiler.chunk.constants,
-            vec!(Value::Number(1.0), Value::Number(23.0),)
+         result.chunk.constants,
+            vec!(Value::Number(5.0), Value::Number(2.0),)
         );
     }
 
     #[test]
     fn compile_binary_div_expr() {
-        let result = Parser::new("1 / 23").parse().unwrap();
-        let mut compiler = Compiler::new();
-        compiler.run(&result);
+        let result = run_test_compiler("12 / 4");
         assert_eq!(
-            compiler.chunk.code,
+         result.chunk.code,
             vec!(
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
@@ -181,18 +185,16 @@ mod tests {
             )
         );
         assert_eq!(
-            compiler.chunk.constants,
-            vec!(Value::Number(1.0), Value::Number(23.0),)
+         result.chunk.constants,
+            vec!(Value::Number(12.0), Value::Number(4.0),)
         );
     }
 
     #[test]
     fn compile_multiple_binary_expr() {
-        let result = Parser::new("1 + 23 * 5").parse().unwrap();
-        let mut compiler = Compiler::new();
-        compiler.run(&result);
+        let result = run_test_compiler("1 + 23 * 5");
         assert_eq!(
-            compiler.chunk.code,
+         result.chunk.code,
             vec!(
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
@@ -203,24 +205,31 @@ mod tests {
             )
         );
         assert_eq!(
-            compiler.chunk.constants,
+         result.chunk.constants,
             vec!(Value::Number(1.0), Value::Number(23.0), Value::Number(5.0),)
         )
     }
 
     #[test]
     fn compile_unary_expr() {
-        let result = Parser::new("-23").parse().unwrap();
-        let mut compiler = Compiler::new();
-        compiler.run(&result);
+        let result = run_test_compiler("-23");
         assert_eq!(
-            compiler.chunk.code,
+         result.chunk.code,
             vec!(
                 Opcode::Constant as u8, 0,
                 Opcode::Negate as u8,
                 Opcode::Halt as u8
             )
         );
-        assert_eq!(compiler.chunk.constants, vec!(Value::Number(23.0)))
+        assert_eq!(result.chunk.constants, vec!(Value::Number(23.0)))
+    }
+
+    #[test]
+    fn compile_boolean_literal() {
+        let result = run_test_compiler("true");
+        assert_eq!(result.chunk.code, vec!(Opcode::True as u8, Opcode::Halt as u8));
+
+        let result = run_test_compiler("false");
+        assert_eq!(result.chunk.code, vec!(Opcode::False as u8, Opcode::Halt as u8));
     }
 }

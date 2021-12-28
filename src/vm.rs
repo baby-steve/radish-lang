@@ -69,6 +69,12 @@ impl VM {
                     self.stack
                         .push(self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone());
                 }
+                Opcode::True => {
+                    self.stack.push(Value::Boolean(true));
+                }
+                Opcode::False => {
+                    self.stack.push(Value::Boolean(false));
+                }
                 Opcode::Negate => {
                     let value = self.stack.pop().unwrap();
                     self.stack.push(-value);
@@ -225,5 +231,21 @@ mod tests {
         let mut vm = VM::new(Chunk { code, constants });
         vm.run();
         assert_eq!(vm.stack.peek(), Some(Value::Number(-2.0)));
+    }
+
+    #[test]
+    fn test_true_opcode() {
+        let code = vec!(Opcode::True as u8, Opcode::Halt as u8);
+        let mut vm = VM::new(Chunk { code, constants: vec!() });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
+    }
+
+    #[test]
+    fn test_false_opcode() {
+        let code = vec!(Opcode::False as u8, Opcode::Halt as u8);
+        let mut vm = VM::new(Chunk { code, constants: vec!() });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Boolean(false)));
     }
 }
