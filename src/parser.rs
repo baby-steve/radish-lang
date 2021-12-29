@@ -1,20 +1,11 @@
-use std::num::ParseFloatError;
 use std::rc::Rc;
 
 use crate::ast::*;
+use crate::error::{ErrorType, InternalError::*, ParserError, SyntaxError::*};
 use crate::scanner::Scanner;
 use crate::source::Source;
 use crate::span::Span;
 use crate::token::{Token, TokenType};
-
-#[derive(Debug)]
-pub struct ParserError(String);
-
-impl From<ParseFloatError> for ParserError {
-    fn from(_: ParseFloatError) -> Self {
-        ParserError("Cannot parse number".to_string())
-    }
-}
 
 pub struct Parser {
     source: Rc<Source>,
@@ -35,7 +26,12 @@ impl Parser {
     pub fn parse(&mut self) -> Result<AST, ParserError> {
         self.advance();
 
-        Ok(AST::new(vec![self.expression()?]))
+        let parse_result = self.expression();
+
+        match parse_result {
+            Ok(expr) => Ok(AST::new(vec!(expr))),
+            Err(err) => Err(err),
+        }
     }
 
     fn advance(&mut self) {
@@ -83,11 +79,7 @@ impl Parser {
                 TokenType::Plus => {
                     self.consume(TokenType::Plus, "Expect '+'");
                     let right = self.parse_term()?;
-                    let span = Span::new(
-                        Rc::clone(&self.source),
-                        node.position().start,
-                        right.position().end,
-                    );
+                    let span = Span::combine(&node.position(), &right.position());
                     node = ASTNode::Expr(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
@@ -100,11 +92,7 @@ impl Parser {
                 TokenType::Minus => {
                     self.consume(TokenType::Minus, "Expect '-'");
                     let right = self.parse_term()?;
-                    let span = Span::new(
-                        Rc::clone(&self.source),
-                        node.position().start,
-                        right.position().end,
-                    );
+                    let span = Span::combine(&node.position(), &right.position());
                     node = ASTNode::Expr(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
@@ -118,7 +106,7 @@ impl Parser {
             }
         }
 
-        return Ok(node);
+        Ok(node)
     }
 
     fn parse_term(&mut self) -> Result<ASTNode, ParserError> {
@@ -128,11 +116,7 @@ impl Parser {
                 TokenType::Star => {
                     self.consume(TokenType::Star, "Expect '*'");
                     let right = self.parse_factor()?;
-                    let span = Span::new(
-                        Rc::clone(&self.source),
-                        node.position().start,
-                        right.position().end,
-                    );
+                    let span = Span::combine(&node.position(), &right.position());
                     node = ASTNode::Expr(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
@@ -145,11 +129,7 @@ impl Parser {
                 TokenType::Slash => {
                     self.consume(TokenType::Slash, "Expect '/'");
                     let right = self.parse_factor()?;
-                    let span = Span::new(
-                        Rc::clone(&self.source),
-                        node.position().start,
-                        right.position().end,
-                    );
+                    let span = Span::combine(&node.position(), &right.position());
                     node = ASTNode::Expr(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
@@ -170,14 +150,19 @@ impl Parser {
         match self.current.as_ref().unwrap().token_type {
             TokenType::Number => {
                 let current_token = self.current.as_ref().unwrap();
-                let span = Span::new(
-                    Rc::clone(&self.source),
-                    current_token.span.start,
-                    current_token.span.end,
-                );
-                let value = current_token.value.parse::<f64>()?;
-                let node = ASTNode::Expr(Expr::Literal(Literal::Number(value), span));
+
+                let span = Span::from(&current_token.span);
+                let value = current_token.value.parse::<f64>();
+
+                if value.is_err() {
+                    return Err(ParserError::new(
+                        ErrorType::InternalError(ParseFloatError),
+                        span,
+                    ));
+                }
+                let node = ASTNode::Expr(Expr::Literal(Literal::Number(value.unwrap()), span));
                 self.consume(TokenType::Number, "Expect number literal");
+
                 return Ok(node);
             }
             TokenType::LeftParen => {
@@ -193,41 +178,38 @@ impl Parser {
                 return Ok(node);
             }
             TokenType::Minus => {
-                let start = self.current.as_ref().unwrap().span.start;
                 self.consume(TokenType::Minus, "Expect '-'.");
                 let op = Op::Subtract;
                 let arg = self.parse_factor()?;
-                let span = Span::new(Rc::clone(&self.source), start, arg.position().end);
-                let node = ASTNode::Expr(Expr::UnaryExpr(Box::new(UnaryExpr {arg, op}), span));
+                let span = Span::combine(&self.current.as_ref().unwrap().span, &arg.position());
+
+                let node = ASTNode::Expr(Expr::UnaryExpr(Box::new(UnaryExpr { arg, op }), span));
                 return Ok(node);
             }
             TokenType::True => {
-                let current_token = self.current.as_ref().unwrap();
-                let span = Span::new(
-                    Rc::clone(&self.source),
-                    current_token.span.start,
-                    current_token.span.end,
-                );
+                let span = Span::from(&self.current.as_ref().unwrap().span);
                 let node = ASTNode::Expr(Expr::Literal(Literal::Bool(true), span));
                 self.consume(TokenType::True, "Expect boolean literal 'true'.");
                 return Ok(node);
             }
             TokenType::False => {
-                let current_token = self.current.as_ref().unwrap();
-                let span = Span::new(
-                    Rc::clone(&self.source),
-                    current_token.span.start,
-                    current_token.span.end,
-                );
+                let span = Span::from(&self.current.as_ref().unwrap().span);
                 let node = ASTNode::Expr(Expr::Literal(Literal::Bool(false), span));
                 self.consume(TokenType::False, "Expect boolean literal 'false'.");
                 return Ok(node);
             }
+            TokenType::Eof => {
+                let span = &self.current.as_ref().unwrap().span;
+                return Err(ParserError::new(
+                    ErrorType::SyntaxError(UnexpectedEOF),
+                    Span::new(Rc::clone(&self.source), span.start, span.end + 1),
+                ));
+            }
             _ => {
-                return Err(ParserError(String::from(format!(
-                    "Error, unexpected token: '{}'.",
-                    self.current.as_ref().unwrap().token_type
-                ))))
+                return Err(ParserError::new(
+                    ErrorType::SyntaxError(UnexpectedToken),
+                    Span::from(&self.current.as_ref().unwrap().span),
+                ));
             }
         }
     }
@@ -337,14 +319,33 @@ mod tests {
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
         assert_eq!(
             *result,
-            ASTNode::Expr(Expr::Literal(Literal::Bool(true), Span::new(Rc::clone(&source), 0, 4)))
+            ASTNode::Expr(Expr::Literal(
+                Literal::Bool(true),
+                Span::new(Rc::clone(&source), 0, 4)
+            ))
         );
 
         let source = Source::source("false");
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
         assert_eq!(
             *result,
-            ASTNode::Expr(Expr::Literal(Literal::Bool(false), Span::new(Rc::clone(&source), 0, 5)))
+            ASTNode::Expr(Expr::Literal(
+                Literal::Bool(false),
+                Span::new(Rc::clone(&source), 0, 5)
+            ))
         );
+    }
+
+    #[test]
+    fn test_invaild_expr() {
+        let source = Source::source("12 +");
+        let result = &Parser::new(Rc::clone(&source)).parse();
+        /*assert_eq!(
+            *result,
+            ParserError::new(
+                ErrorType::SyntaxError(UnexpectedToken),
+                Span::new(Rc::clone(&source), 0, 4)
+            ),
+        )*/
     }
 }
