@@ -2,7 +2,7 @@ use std::fmt;
 
 use crate::span::Span;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum InternalError {
     ParseFloatError,
 }
@@ -17,7 +17,7 @@ impl fmt::Display for InternalError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum SyntaxError {
     UnexpectedToken,
     UnexpectedEOF,
@@ -34,7 +34,7 @@ impl fmt::Display for SyntaxError {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum ErrorType {
     InternalError(InternalError),
     SyntaxError(SyntaxError),
@@ -61,7 +61,7 @@ impl fmt::Display for ErrorType {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct ParserError {
     pub error: ErrorType,
     pub span: Span,

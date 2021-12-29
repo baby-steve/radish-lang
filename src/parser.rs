@@ -338,14 +338,35 @@ mod tests {
 
     #[test]
     fn test_invaild_expr() {
-        let source = Source::source("12 +");
+        let source = Source::source("12 + error");
         let result = &Parser::new(Rc::clone(&source)).parse();
-        /*assert_eq!(
-            *result,
+        let err = match result {
+            Err(err) => err,
+            Ok(_) => unreachable!(),
+        };
+        assert_eq!(
+            *err,
             ParserError::new(
                 ErrorType::SyntaxError(UnexpectedToken),
-                Span::new(Rc::clone(&source), 0, 4)
+                Span::new(Rc::clone(&source), 5, 10)
             ),
-        )*/
+        );
+    }
+
+    #[test]
+    fn test_unexpected_eof() {
+        let source = Source::source("12 +");
+        let result = &Parser::new(Rc::clone(&source)).parse();
+        let err = match result {
+            Err(err) => err,
+            Ok(_) => unreachable!(),
+        };
+        assert_eq!(
+            *err,
+            ParserError::new(
+                ErrorType::SyntaxError(UnexpectedEOF),
+                Span::new(Rc::clone(&source), 4, 5)
+            ),
+        );
     }
 }
