@@ -26,10 +26,7 @@ impl Compiler {
 
     fn visit(&mut self, node: &ASTNode) {
         match node {
-            ASTNode::BinaryExpr(expr, _) => self.expression(expr),
-            ASTNode::ParenExpr(expr, _) => self.grouping(expr),
-            ASTNode::UnaryExpr(arg, _) => self.unary(arg),
-            ASTNode::Literal(lit, _) => self.literal(lit),
+            ASTNode::Expr(expr) => self.expression(expr),
         }
     }
 
@@ -61,7 +58,16 @@ impl Compiler {
         self.visit(&expr.expr);
     }
 
-    fn expression(&mut self, expr: &BinaryExpr) {
+    fn expression(&mut self, expr: &Expr) {
+        match expr {
+            Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
+            Expr::ParenExpr(expr, _) => self.grouping(expr),
+            Expr::UnaryExpr(arg, _) => self.unary(arg),
+            Expr::Literal(lit, _) => self.literal(lit),
+        }
+    }
+
+    fn binary_expression(&mut self, expr: &BinaryExpr) {
         self.visit(&expr.left);
         self.visit(&expr.right);
 

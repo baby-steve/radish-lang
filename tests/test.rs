@@ -1,10 +1,14 @@
+use std::rc::Rc;
+
 use radish_lang::value::Value;
 use radish_lang::vm::VM;
 use radish_lang::compiler::Compiler;
 use radish_lang::parser::Parser;
+use radish_lang::source::Source;
 
 fn run_test_vm(src: &str) -> VM {
-    let result = Parser::new(src).parse().unwrap();
+    let source = Source::source(src);
+    let result = Parser::new(Rc::clone(&source)).parse().unwrap();
     let mut compiler = Compiler::new();
     compiler.run(&result);
     let mut vm = VM::new(compiler.chunk);
@@ -77,4 +81,15 @@ fn test_unary_negate() {
     let test_string = "-----2"; // works, but not recommended.
     let mut vm = run_test_vm(test_string);
     assert_eq!(vm.stack.peek().unwrap(), Value::Number(-2.0));
+}
+
+#[test]
+fn test_boolean_literals() {
+    let test_string = "true";
+    let mut vm = run_test_vm(test_string);
+    assert_eq!(vm.stack.peek().unwrap(), Value::Boolean(true));
+
+    let test_string = "false";
+    let mut vm = run_test_vm(test_string);
+    assert_eq!(vm.stack.peek().unwrap(), Value::Boolean(false));
 }

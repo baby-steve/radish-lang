@@ -18,7 +18,7 @@ impl Source {
     pub fn source(source: &str) -> Rc<Source> {
         Rc::new(Source {
             contents: source.to_string(),
-            path: PathBuf::default(), // should a source without a file have some default name?
+            path: PathBuf::from("./main"), // should a source without a file have some default name?
         })
     }
 }

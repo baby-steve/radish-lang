@@ -1,5 +1,6 @@
 pub mod ast;
 pub mod compiler;
+pub mod error;
 pub mod opcode;
 pub mod parser;
 pub mod scanner;
