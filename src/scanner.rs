@@ -28,6 +28,7 @@ impl Scanner {
             Some("-") => self.make_token(TokenType::Minus),
             Some("/") => self.make_token(TokenType::Slash),
             Some("*") => self.make_token(TokenType::Star),
+            Some("\n") => self.make_token(TokenType::Newline),
             Some("(") => self.make_token(TokenType::LeftParen),
             Some(")") => self.make_token(TokenType::RightParen),
             None => self.make_token(TokenType::Eof),
@@ -225,6 +226,18 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Ident(String::from("cats").into_boxed_str()));
         assert_eq!(token.syntax(), "cats");
+    }
+
+    #[test]
+    fn test_newline_token() {
+        let mut scanner = new_test_scanner("123\n456");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Number(123.0));
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Newline);
+        assert_eq!(token.syntax(), "\n");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Number(456.0));
     }
 
     #[test]

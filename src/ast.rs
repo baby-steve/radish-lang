@@ -14,14 +14,34 @@ impl AST {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ASTNode {
     Expr(Expr),
+    Stmt(Stmt),
 }
 
 impl ASTNode {
     pub fn position(&self) -> Span {
         match self {
             Self::Expr(expr) => expr.position(), 
+            Self::Stmt(stmt) => stmt.position(), 
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Stmt {
+    ExpressionStmt(Box<ExpressionStmt>, Span),
+}
+
+impl Stmt {
+    pub fn position(&self) -> Span {
+        match self {
+            Self::ExpressionStmt(_, pos) => pos.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExpressionStmt {
+    pub expr: ASTNode,
 }
 
 #[derive(Debug, Clone, PartialEq)]

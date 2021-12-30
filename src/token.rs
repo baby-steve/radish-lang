@@ -9,13 +9,14 @@ pub enum TokenType {
     Slash,
     Star,
     Minus,
-
+    Newline,
     LeftParen,
     RightParen,
 
-    Number(f64),
     True,
     False,
+
+    Number(f64),
     Ident(Box<str>),
 
     Error(Box<str>),
@@ -24,19 +25,22 @@ pub enum TokenType {
 
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use TokenType::*;
+
         match *self {
-            TokenType::Plus => write!(f, "Plus"),
-            TokenType::Slash => write!(f, "Slash"),
-            TokenType::Star => write!(f, "Star"),
-            TokenType::Minus => write!(f, "Minus"),
-            TokenType::LeftParen => write!(f, "LeftParen"),
-            TokenType::RightParen => write!(f, "RightParen"),
-            TokenType::Number(_) => write!(f, "Number"),
-            TokenType::True => write!(f, "True"),
-            TokenType::False => write!(f, "False"),
-            TokenType::Ident(_) => write!(f, "Ident"),
-            TokenType::Error(_) => write!(f, "Error"),
-            TokenType::Eof => write!(f, "Eof"),
+            Plus => write!(f, "Plus"),
+            Slash => write!(f, "Slash"),
+            Star => write!(f, "Star"),
+            Minus => write!(f, "Minus"),
+            Newline => write!(f, "Newline"),
+            LeftParen => write!(f, "LeftParen"),
+            RightParen => write!(f, "RightParen"),
+            True => write!(f, "True"),
+            False => write!(f, "False"),
+            Number(_) => write!(f, "Number"),
+            Ident(_) => write!(f, "Ident"),
+            Error(_) => write!(f, "Error"),
+            Eof => write!(f, "Eof"),
         }
     }
 }
@@ -60,6 +64,7 @@ impl Token {
             Minus => "-",
             Star => "*",
             Slash => "/",
+            Newline => "\n",
             LeftParen => "(",
             RightParen => ")",
 

@@ -28,10 +28,8 @@ impl Parser {
     pub fn parse(&mut self) -> Result<AST, ParserError> {
         self.advance();
 
-        let parse_result = self.expression();
-
-        match parse_result {
-            Ok(expr) => Ok(AST::new(vec![expr])),
+        match self.parse_body() {
+            Ok(items) => Ok(AST::new(items)),
             Err(err) => Err(err),
         }
     }
@@ -65,12 +63,38 @@ impl Parser {
     fn consume(&mut self, token_type: TokenType) {
         if !self.match_token(&token_type) {
             unreachable!(
-                "Unexpected token '{}', expected '{}' at {}.",
+                "Unexpected token '{}', expected '{}' at {:?}.",
                 self.current.as_ref().unwrap().syntax(),
                 token_type,
                 self.current.as_ref().unwrap().span,
             );
         }
+    }
+
+    fn parse_body(&mut self) -> Result<Vec<ASTNode>, ParserError> {
+        let mut items = vec![self.parse_statement()?];
+
+        while self.match_token(&TokenType::Newline) {
+            self.consume(TokenType::Newline);
+            items.push(self.parse_statement()?);
+        }
+
+        Ok(items)
+    }
+
+    fn parse_statement(&mut self) -> Result<ASTNode, ParserError> {
+        self.expression_statement()
+    }
+
+    fn expression_statement(&mut self) -> Result<ASTNode, ParserError> {
+        let expr = self.expression()?;
+
+        let span = Span::from(&expr.position());
+
+        Ok(ASTNode::Stmt(Stmt::ExpressionStmt(
+            Box::new(ExpressionStmt { expr }),
+            span,
+        )))
     }
 
     fn expression(&mut self) -> Result<ASTNode, ParserError> {
@@ -315,137 +339,174 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_binary_add_expr() {
-        let source = Source::source("1 + 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-        assert_eq!(
-            *result,
-            ASTNode::Expr(Expr::BinaryExpr(
-                Box::new(BinaryExpr {
-                    left: ASTNode::Expr(Expr::Literal(
-                        Literal::Number(1.0),
-                        Span::new(Rc::clone(&source), 0, 1),
-                    )),
-                    op: Op::Add,
-                    right: ASTNode::Expr(Expr::Literal(
-                        Literal::Number(23.0),
-                        Span::new(Rc::clone(&source), 4, 6),
-                    )),
-                },),
-                Span::new(Rc::clone(&source), 0, 6),
-            ))
-        )
-    }
-
-    #[test]
-    fn test_binary_sub_expr() {
-        let source = Source::source("1 - 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-        assert_eq!(
-            *result,
-            ASTNode::Expr(Expr::BinaryExpr(
-                Box::new(BinaryExpr {
-                    left: ASTNode::Expr(Expr::Literal(
-                        Literal::Number(1.0),
-                        Span::new(Rc::clone(&source), 0, 1),
-                    )),
-                    op: Op::Subtract,
-                    right: ASTNode::Expr(Expr::Literal(
-                        Literal::Number(23.0),
-                        Span::new(Rc::clone(&source), 4, 6),
-                    )),
-                },),
-                Span::new(Rc::clone(&source), 0, 6),
-            ))
-        )
-    }
-
-    #[test]
-    fn test_binary_mul_expr() {
-        let source = Source::source("1 * 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-        assert_eq!(
-            *result,
-            ASTNode::Expr(Expr::BinaryExpr(
-                Box::new(BinaryExpr {
-                    left: ASTNode::Expr(Expr::Literal(
-                        Literal::Number(1.0),
-                        Span::new(Rc::clone(&source), 0, 1),
-                    )),
-                    op: Op::Multiply,
-                    right: ASTNode::Expr(Expr::Literal(
-                        Literal::Number(23.0),
-                        Span::new(Rc::clone(&source), 4, 6),
-                    )),
-                },),
-                Span::new(Rc::clone(&source), 0, 6),
-            ))
-        )
-    }
-
-    #[test]
-    fn test_binary_div_expr() {
-        let source = Source::source("1 / 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-        assert_eq!(
-            *result,
-            ASTNode::Expr(Expr::BinaryExpr(
-                Box::new(BinaryExpr {
-                    left: ASTNode::Expr(Expr::Literal(
-                        Literal::Number(1.0),
-                        Span::new(Rc::clone(&source), 0, 1),
-                    )),
-                    op: Op::Divide,
-                    right: ASTNode::Expr(Expr::Literal(
-                        Literal::Number(23.0),
-                        Span::new(Rc::clone(&source), 4, 6),
-                    )),
-                },),
-                Span::new(Rc::clone(&source), 0, 6),
-            ))
-        )
-    }
-
-    #[test]
-    fn test_boolean_literal() {
+    fn parse_boolean_literal() {
         let source = Source::source("true");
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
         assert_eq!(
             *result,
-            ASTNode::Expr(Expr::Literal(
-                Literal::Bool(true),
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::Literal(
+                        Literal::Bool(true),
+                        Span::new(Rc::clone(&source), 0, 4)
+                    ),)
+                }),
                 Span::new(Rc::clone(&source), 0, 4)
             ))
         );
 
         let source = Source::source("false");
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
         assert_eq!(
             *result,
-            ASTNode::Expr(Expr::Literal(
-                Literal::Bool(false),
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::Literal(
+                        Literal::Bool(false),
+                        Span::new(Rc::clone(&source), 0, 5)
+                    ),)
+                }),
                 Span::new(Rc::clone(&source), 0, 5)
             ))
-        );
+        )
     }
 
     #[test]
     fn parse_unary_minus() {
         let source = Source::source("-23");
-        let mut parser = Parser::new(Rc::clone(&source));
-        let result = &parser.parse().unwrap().items[0];
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
 
         assert_eq!(
             *result,
-            ASTNode::Expr(Expr::UnaryExpr(
-                Box::new(UnaryExpr {
-                    op: Op::Subtract,
-                    arg: ASTNode::Expr(Expr::Literal(
-                        Literal::Number(23.0),
-                        Span::new(Rc::clone(&source), 1, 3)
-                    ))
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::UnaryExpr(
+                        Box::new(UnaryExpr {
+                            op: Op::Subtract,
+                            arg: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(23.0),
+                                Span::new(Rc::clone(&source), 1, 3)
+                            ))
+                        }),
+                        Span::new(Rc::clone(&source), 0, 3)
+                    ),)
                 }),
                 Span::new(Rc::clone(&source), 0, 3)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_binary_add_expr() {
+        let source = Source::source("1 + 23");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(1.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::Add,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(23.0),
+                                Span::new(Rc::clone(&source), 4, 6),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 6),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 6)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_binary_sub_expr() {
+        let source = Source::source("1 - 23");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(1.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::Subtract,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(23.0),
+                                Span::new(Rc::clone(&source), 4, 6),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 6),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 6)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_binary_mul_expr() {
+        let source = Source::source("1 * 23");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(1.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::Multiply,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(23.0),
+                                Span::new(Rc::clone(&source), 4, 6),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 6),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 6)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_binary_div_expr() {
+        let source = Source::source("1 / 23");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(1.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::Divide,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(23.0),
+                                Span::new(Rc::clone(&source), 4, 6),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 6),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 6)
             ))
         )
     }

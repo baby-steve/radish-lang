@@ -27,6 +27,7 @@ impl Compiler {
     fn visit(&mut self, node: &ASTNode) {
         match node {
             ASTNode::Expr(expr) => self.expression(expr),
+            ASTNode::Stmt(stmt) => self.statement(stmt),
         }
     }
 
@@ -56,6 +57,12 @@ impl Compiler {
 
     fn grouping(&mut self, expr: &ParenExpr) {
         self.visit(&expr.expr);
+    }
+
+    fn statement(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::ExpressionStmt(expr, _) => self.visit(&expr.expr),
+        }
     }
 
     fn expression(&mut self, expr: &Expr) {
