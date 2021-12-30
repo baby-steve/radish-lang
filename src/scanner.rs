@@ -41,10 +41,8 @@ impl Scanner {
     }
 
     fn make_token(&mut self, token_type: TokenType) -> Token {
-        let value = &self.source.contents[self.previous..self.current];
         let token = Token::new(
             token_type,
-            value.to_string(),
             Span::new(Rc::clone(&self.source), self.previous, self.current),
         );
         self.previous = self.current;
@@ -53,7 +51,7 @@ impl Scanner {
 
     fn make_error_token(&mut self, msg: String) -> Token {
         let span = Span::new(self.source.clone(), self.previous, self.current);
-        Token::new(TokenType::Error, msg, span)
+        Token::new(TokenType::Error(msg.into_boxed_str()), span)
     }
 
     fn remaining(&mut self) -> &str {
@@ -95,7 +93,9 @@ impl Scanner {
             self.advance();
         }
 
-        self.make_token(TokenType::Number)
+        let string_value = &self.source.contents[self.previous..self.current];
+        let parse_value = string_value.parse::<f64>().unwrap();
+        self.make_token(TokenType::Number(parse_value))
     }
 
     fn identifier(&mut self) -> Token {
@@ -112,7 +112,7 @@ impl Scanner {
         match &value[..] {
             "true" => TokenType::True,
             "false" => TokenType::False,
-            _ => TokenType::Ident,
+            _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
 
@@ -173,19 +173,19 @@ mod tests {
         let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Plus);
-        assert_eq!(token.value, "+");
+        assert_eq!(token.syntax(), "+");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Minus);
-        assert_eq!(token.value, "-");
+        assert_eq!(token.syntax(), "-");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Star);
-        assert_eq!(token.value, "*");
+        assert_eq!(token.syntax(), "*");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Slash);
-        assert_eq!(token.value, "/");
+        assert_eq!(token.syntax(), "/");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
-        assert_eq!(token.value, "");
+        assert_eq!(token.syntax(), "<Eof>");
     }
 
     #[test]
@@ -193,11 +193,11 @@ mod tests {
         let src = String::from("123");
         let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token();
-        assert_eq!(token.token_type, TokenType::Number);
-        assert_eq!(token.value, "123");
+        assert_eq!(token.token_type, TokenType::Number(123.0));
+        assert_eq!(token.syntax(), "123");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
-        assert_eq!(token.value, "");
+        assert_eq!(token.syntax(), "<Eof>");
     }
 
     #[test]
@@ -205,7 +205,7 @@ mod tests {
         let mut scanner = new_test_scanner("true");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::True);
-        assert_eq!(token.value, "true");
+        assert_eq!(token.syntax(), "true");
     }
 
     #[test]
@@ -213,18 +213,18 @@ mod tests {
         let mut scanner = new_test_scanner("false");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::False);
-        assert_eq!(token.value, "false");
+        assert_eq!(token.syntax(), "false");
     }
 
     #[test]
     fn test_identifier_token() {
         let mut scanner = new_test_scanner("radishes cats");
         let token = scanner.scan_token();
-        assert_eq!(token.token_type, TokenType::Ident);
-        assert_eq!(token.value, "radishes");
+        assert_eq!(token.token_type, TokenType::Ident(String::from("radishes").into_boxed_str()));
+        assert_eq!(token.syntax(), "radishes");
         let token = scanner.scan_token();
-        assert_eq!(token.token_type, TokenType::Ident);
-        assert_eq!(token.value, "cats");
+        assert_eq!(token.token_type, TokenType::Ident(String::from("cats").into_boxed_str()));
+        assert_eq!(token.syntax(), "cats");
     }
 
     #[test]
@@ -237,9 +237,9 @@ mod tests {
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
         let src = String::from("  123    + 45  ");
         let mut scanner = new_test_scanner(&src);
-        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(123.0));
         assert_eq!(scanner.scan_token().token_type, TokenType::Plus);
-        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(45.0));
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
     }
 
@@ -248,36 +248,36 @@ mod tests {
         let src = String::from("猫");
         let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token();
-        assert_eq!(token.token_type, TokenType::Error);
-        assert_eq!(token.value, "Unexpected character: '猫'");
+        assert_eq!(token.token_type, TokenType::Error(String::from("Unexpected character: '猫'").into_boxed_str()));
+        assert_eq!(token.syntax(), "Unexpected character: '猫'");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
-        assert_eq!(token.value, "");
+        assert_eq!(token.syntax(), "<Eof>");
     }
     #[test]
     fn test_multiple_tokens() {
         let src = String::from("1 + 23 + 456");
         let mut scanner = new_test_scanner(&src);
-        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(1.0));
         assert_eq!(scanner.scan_token().token_type, TokenType::Plus);
-        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(23.0));
         assert_eq!(scanner.scan_token().token_type, TokenType::Plus);
-        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(456.0));
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
     }
 
     #[test]
     fn test_parentheses() {
         let mut scanner = new_test_scanner("123 (456 789)");
-        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(123.0));
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::LeftParen);
-        assert_eq!(token.value, "(");
-        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
-        assert_eq!(scanner.scan_token().token_type, TokenType::Number);
+        assert_eq!(token.syntax(), "(");
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(456.0));
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(789.0));
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::RightParen);
-        assert_eq!(token.value, ")");
+        assert_eq!(token.syntax(), ")");
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
     }
 
