@@ -11,7 +11,7 @@ impl AST {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum ASTNode {
     Expr(Expr),
 }
@@ -24,7 +24,7 @@ impl ASTNode {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     BinaryExpr(Box<BinaryExpr>, Span),
     ParenExpr(Box<ParenExpr>, Span),
@@ -43,19 +43,19 @@ impl Expr {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BinaryExpr {
     pub left: ASTNode,
     pub op: Op,
     pub right: ASTNode,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ParenExpr {
     pub expr: ASTNode,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct UnaryExpr {
     pub op: Op,
     pub arg: ASTNode,
@@ -67,7 +67,7 @@ pub enum Literal {
     Bool(bool),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Op {
     Add,
     Subtract,

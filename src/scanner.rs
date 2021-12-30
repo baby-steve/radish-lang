@@ -34,7 +34,7 @@ impl Scanner {
             _ if is_alpha(c.unwrap()) => self.identifier(),
             _ if is_digit(c.unwrap()) => self.number(),
             _ => {
-                let msg = format!("Unexpected character: '{}'", c.unwrap());
+                let msg = format!("{}", c.unwrap());
                 return self.make_error_token(msg);
             }
         }
@@ -248,8 +248,8 @@ mod tests {
         let src = String::from("猫");
         let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token();
-        assert_eq!(token.token_type, TokenType::Error(String::from("Unexpected character: '猫'").into_boxed_str()));
-        assert_eq!(token.syntax(), "Unexpected character: '猫'");
+        assert_eq!(token.token_type, TokenType::Error(String::from("猫").into_boxed_str()));
+        assert_eq!(token.syntax(), "猫");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
         assert_eq!(token.syntax(), "<Eof>");

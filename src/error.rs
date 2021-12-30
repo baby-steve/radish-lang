@@ -1,75 +1,79 @@
+use crate::span::Span;
 use std::fmt;
 
-use crate::span::Span;
-
-#[derive(Debug, PartialEq)]
-pub enum InternalError {
-    ParseFloatError,
+#[derive(Debug, PartialEq, Clone)]
+/// An error for when some unexpected token was found.
+pub enum UnexpectedError {
+    UnexpectedToken(String),
+    UnexpectedEOF,
 }
 
-impl fmt::Display for InternalError {
+impl fmt::Display for UnexpectedError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use InternalError::*;
+        use UnexpectedError::*;
 
         match &self {
-            ParseFloatError => f.write_str("Parse float error while parsing "),
+            UnexpectedToken(token) => f.write_str(&format!("found unexpected token '{}'.", token)),
+            UnexpectedEOF => f.write_str(&format!("found unexpected '<Eof>'.")),
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
+/// An error for when one thing is expected, but found something else.
+pub enum ExpectedError {
+    ExpectedExpression(String),
+    ExpectedRightParen(String),
+}
+
+impl fmt::Display for ExpectedError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use ExpectedError::*;
+
+        match &self {
+            ExpectedExpression(p) => f.write_str(&format!("Expected expression, {}", p)),
+            ExpectedRightParen(p) => f.write_str(&format!("Expected right parenthesis, {}", p)),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
 pub enum SyntaxError {
-    UnexpectedToken,
-    UnexpectedEOF,
+    ExpectedError(ExpectedError),
+    UnexpectedError(UnexpectedError),
 }
 
 impl fmt::Display for SyntaxError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use SyntaxError::*;
-
         match &self {
-            UnexpectedToken => f.write_str("Unexpected token "),
-            UnexpectedEOF => f.write_str("Unexpected end of file")
+            SyntaxError::UnexpectedError(e) => e.fmt(f),
+            SyntaxError::ExpectedError(e) => e.fmt(f),
         }
     }
 }
 
-#[derive(Debug, PartialEq)]
-pub enum ErrorType {
-    InternalError(InternalError),
-    SyntaxError(SyntaxError),
-}
-
-impl From<InternalError> for ErrorType {
-    fn from(e: InternalError) -> ErrorType {
-        ErrorType::InternalError(e)
+impl SyntaxError {
+    pub fn is_unexpected(&self) -> bool {
+        matches!(self, Self::UnexpectedError(_))
     }
 }
 
-impl From<SyntaxError> for ErrorType {
-    fn from(e: SyntaxError) -> ErrorType {
-        ErrorType::SyntaxError(e)
-    }
-}
-
-impl fmt::Display for ErrorType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ErrorType::InternalError(e) => e.fmt(f),
-            ErrorType::SyntaxError(e) => e.fmt(f),
-        }
-    }
-}
-
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct ParserError {
-    pub error: ErrorType,
+    pub error: SyntaxError,
     pub span: Span,
 }
 
 impl ParserError {
-    pub fn new(error: ErrorType, span: Span) -> ParserError {
-        ParserError { error, span }
+    pub fn new(error: SyntaxError, span: &Span) -> ParserError {
+        ParserError {
+            error,
+            span: Span::from(span),
+        }
+    }
+
+    pub fn is_unexpected(&self) -> bool {
+        self.error.is_unexpected()
     }
 }
 

@@ -22,6 +22,15 @@ impl Span {
         }
     }
 
+    pub fn empty() -> Span {
+        let source = Source::source("");
+        Span {
+            source: Rc::clone(&source),
+            start: 0,
+            end: 0,
+        }
+    }
+
     pub fn combine(span_1: &Span, span_2: &Span) -> Span {
         if span_1.source != span_2.source {
             panic!("Cannot combine two Spans from different sources.");
@@ -82,9 +91,9 @@ impl fmt::Display for Span {
          *  --> path/to/file:4:12
          *   |
          * 4 | x = call().resolt
-         *   |            ^^^^^^ undefined or something
+         *   |            
          *  - help: did you mean `result`?
-         *  - note: your code sucks.
+         *  - note: some kind of note.
          */
 
         let contents = self.source.contents.clone();
