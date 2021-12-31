@@ -72,14 +72,17 @@ impl Parser {
     }
 
     fn parse_body(&mut self) -> Result<Vec<ASTNode>, ParserError> {
-        let mut items = vec![self.parse_statement()?];
+        let mut items = vec![];
 
-        while self.match_token(&TokenType::Newline) {
-            self.consume(TokenType::Newline);
-            items.push(self.parse_statement()?);
+        loop {
+            if self.match_token(&TokenType::Eof) {
+                return Ok(items);
+            } else if self.match_token(&TokenType::Newline) {
+                continue;
+            } else {
+                items.push(self.parse_statement()?);
+            }
         }
-
-        Ok(items)
     }
 
     fn parse_statement(&mut self) -> Result<ASTNode, ParserError> {
