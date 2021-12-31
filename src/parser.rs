@@ -75,10 +75,13 @@ impl Parser {
         let mut items = vec![];
 
         loop {
+            // <eof>
             if self.match_token(&TokenType::Eof) {
                 return Ok(items);
+            // \n
             } else if self.match_token(&TokenType::Newline) {
                 continue;
+            // ...
             } else {
                 items.push(self.parse_statement()?);
             }
@@ -101,7 +104,149 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<ASTNode, ParserError> {
-        self.parse_sum()
+        self.parse_boolean_factor()
+    }
+
+    fn parse_boolean_factor(&mut self) -> Result<ASTNode, ParserError> {
+        let mut node = self.parse_sum()?;
+
+        loop {
+            match self.current.as_ref().unwrap().token_type {
+                // expr < ...
+                TokenType::LessThan => {
+                    self.consume(TokenType::LessThan);
+
+                    let right = match self.parse_sum() {
+                        // expr < expr
+                        Ok(expr) => expr,
+                        // expr < <error>
+                        Err(err) => {
+                            return Err(self.make_error(
+                                err.clone(),
+                                ExpectedError(ExpectedExpression(err.error.to_string())),
+                            ))
+                        }
+                    };
+
+                    let span = Span::combine(&node.position(), &right.position());
+                    node = ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            right,
+                            left: node,
+                            op: Op::LessThan,
+                        }),
+                        span,
+                    ))
+                }
+                // expr <= ...
+                TokenType::LessThanEquals => {
+                    self.consume(TokenType::LessThanEquals);
+
+                    let right = match self.parse_sum() {
+                        // expr <= expr
+                        Ok(expr) => expr,
+                        // expr <= <error>
+                        Err(err) => {
+                            return Err(self.make_error(
+                                err.clone(),
+                                ExpectedError(ExpectedExpression(err.error.to_string())),
+                            ))
+                        }
+                    };
+
+                    let span = Span::combine(&node.position(), &right.position());
+                    node = ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            right,
+                            left: node,
+                            op: Op::LessThanEquals,
+                        }),
+                        span,
+                    ))
+                }
+                // expr > ...
+                TokenType::GreaterThan => {
+                    self.consume(TokenType::GreaterThan);
+
+                    let right = match self.parse_sum() {
+                        // expr > expr
+                        Ok(expr) => expr,
+                        // expr > <error>
+                        Err(err) => {
+                            return Err(self.make_error(
+                                err.clone(),
+                                ExpectedError(ExpectedExpression(err.error.to_string())),
+                            ))
+                        }
+                    };
+
+                    let span = Span::combine(&node.position(), &right.position());
+                    node = ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            right,
+                            left: node,
+                            op: Op::GreaterThan,
+                        }),
+                        span,
+                    ))
+                }
+                // expr >= ...
+                TokenType::GreaterThanEquals => {
+                    self.consume(TokenType::GreaterThanEquals);
+
+                    let right = match self.parse_sum() {
+                        // expr >= expr
+                        Ok(expr) => expr,
+                        // expr >= <error>
+                        Err(err) => {
+                            return Err(self.make_error(
+                                err.clone(),
+                                ExpectedError(ExpectedExpression(err.error.to_string())),
+                            ))
+                        }
+                    };
+
+                    let span = Span::combine(&node.position(), &right.position());
+                    node = ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            right,
+                            left: node,
+                            op: Op::GreaterThanEquals,
+                        }),
+                        span,
+                    ))
+                }
+                // expr == ...
+                TokenType::EqualsTo => {
+                    self.consume(TokenType::EqualsTo);
+
+                    let right = match self.parse_sum() {
+                        // expr < expr
+                        Ok(expr) => expr,
+                        // expr < <error>
+                        Err(err) => {
+                            return Err(self.make_error(
+                                err.clone(),
+                                ExpectedError(ExpectedExpression(err.error.to_string())),
+                            ))
+                        }
+                    };
+
+                    let span = Span::combine(&node.position(), &right.position());
+                    node = ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            right,
+                            left: node,
+                            op: Op::EqualsTo,
+                        }),
+                        span,
+                    ))
+                }
+                _ => break,
+            }
+        }
+
+        Ok(node)
     }
 
     fn parse_sum(&mut self) -> Result<ASTNode, ParserError> {
@@ -115,7 +260,9 @@ impl Parser {
                     self.consume(TokenType::Plus);
 
                     let right = match self.parse_term() {
+                        // expr + expr
                         Ok(expr) => expr,
+                        // expr + <error>
                         Err(err) => {
                             return Err(self.make_error(
                                 err.clone(),
@@ -139,7 +286,9 @@ impl Parser {
                     self.consume(TokenType::Minus);
 
                     let right = match self.parse_term() {
+                        // expr - expr
                         Ok(expr) => expr,
+                        // expr - <error>
                         Err(err) => {
                             return Err(self.make_error(
                                 err.clone(),
@@ -177,7 +326,9 @@ impl Parser {
                     self.consume(TokenType::Star);
 
                     let right = match self.parse_factor() {
+                        // expr * expr
                         Ok(expr) => expr,
+                        // expr * <error>
                         Err(err) => {
                             return Err(self.make_error(
                                 err.clone(),
@@ -201,7 +352,9 @@ impl Parser {
                     self.consume(TokenType::Slash);
 
                     let right = match self.parse_factor() {
+                        // expr / expr
                         Ok(expr) => expr,
+                        // expr / <error>
                         Err(err) => {
                             return Err(self.make_error(
                                 err.clone(),
@@ -271,6 +424,7 @@ impl Parser {
             }
             // <eof>
             Eof => {
+                // if an <eof> token is found here, it has to be an error.
                 let span = &current.span;
                 return Err(ParserError::new(
                     UnexpectedError(UnexpectedEOF),
@@ -515,12 +669,162 @@ mod tests {
     }
 
     #[test]
+    fn parse_less_than_expr() {
+        let source = Source::source("2 < 4");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(2.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::LessThan,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(4.0),
+                                Span::new(Rc::clone(&source), 4, 5),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 5),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 5)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_less_than_equals_expr() {
+        let source = Source::source("2 <= 4");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(2.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::LessThanEquals,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(4.0),
+                                Span::new(Rc::clone(&source), 5, 6),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 6),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 6)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_greater_than_expr() {
+        let source = Source::source("2 > 4");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(2.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::GreaterThan,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(4.0),
+                                Span::new(Rc::clone(&source), 4, 5),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 5),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 5)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_greater_than_equals_expr() {
+        let source = Source::source("2 >= 4");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(2.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::GreaterThanEquals,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(4.0),
+                                Span::new(Rc::clone(&source), 5, 6),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 6),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 6)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_equals_to_expr() {
+        let source = Source::source("2 == 4");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(2.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::EqualsTo,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(4.0),
+                                Span::new(Rc::clone(&source), 5, 6),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 6),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 6)
+            ))
+        )
+    }
+
+    #[test]
     fn test_invaild_expr() {
         let sources = vec![
             Source::source("12 + error"),
             Source::source("12 - error"),
             Source::source("12 * error"),
             Source::source("12 / error"),
+            Source::source("12 < error"),
+            Source::source("12 > error"),
+            Source::source("12 <= error"),
+            Source::source("12 >= error"),
+            Source::source("12 == error"),
             Source::source("12 + 3 + error"),
             Source::source("12 + 3 - error"),
             Source::source("12 + 3 * error"),

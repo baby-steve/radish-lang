@@ -1,5 +1,5 @@
-use std::fmt;
 use std::borrow::Cow;
+use std::fmt;
 
 use crate::span::Span;
 
@@ -9,6 +9,12 @@ pub enum TokenType {
     Slash,
     Star,
     Minus,
+    Equals,
+    LessThan,
+    GreaterThan,
+    LessThanEquals,
+    GreaterThanEquals,
+    EqualsTo,
     Newline,
     LeftParen,
     RightParen,
@@ -32,6 +38,12 @@ impl fmt::Display for TokenType {
             Slash => write!(f, "Slash"),
             Star => write!(f, "Star"),
             Minus => write!(f, "Minus"),
+            Equals => write!(f, "Equals"),
+            LessThan => write!(f, "LessThan"),
+            GreaterThan => write!(f, "GreaterThan"),
+            LessThanEquals => write!(f, "LessThanEquals"),
+            GreaterThanEquals => write!(f, "GreaterThanEquals"),
+            EqualsTo => write!(f, "EqualsTo"),
             Newline => write!(f, "Newline"),
             LeftParen => write!(f, "LeftParen"),
             RightParen => write!(f, "RightParen"),
@@ -64,6 +76,12 @@ impl Token {
             Minus => "-",
             Star => "*",
             Slash => "/",
+            Equals => "=",
+            LessThan => "<",
+            GreaterThan => ">",
+            LessThanEquals => "<=",
+            GreaterThanEquals => ">=",
+            EqualsTo => "==",
             Newline => "\n",
             LeftParen => "(",
             RightParen => ")",
@@ -73,7 +91,7 @@ impl Token {
 
             Eof => "<Eof>",
 
-            _ => "ERROR"
+            _ => "ERROR",
         }
     }
 
@@ -86,7 +104,6 @@ impl Token {
             Error(err) => err.to_string().into(),
 
             _ => self.literal_syntax().into(),
-
         }
     }
 }

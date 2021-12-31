@@ -28,6 +28,27 @@ impl Scanner {
             Some("-") => self.make_token(TokenType::Minus),
             Some("/") => self.make_token(TokenType::Slash),
             Some("*") => self.make_token(TokenType::Star),
+            Some("<") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::LessThanEquals)
+                } else {
+                    self.make_token(TokenType::LessThan)
+                }
+            }
+            Some(">") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::GreaterThanEquals)
+                } else {
+                    self.make_token(TokenType::GreaterThan)
+                }
+            }
+            Some("=") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::EqualsTo)
+                } else {
+                    self.make_token(TokenType::Equals)
+                }
+            }
             Some("\n") => self.make_token(TokenType::Newline),
             Some("(") => self.make_token(TokenType::LeftParen),
             Some(")") => self.make_token(TokenType::RightParen),
@@ -86,6 +107,15 @@ impl Scanner {
             }
 
             Some(&source[0..end])
+        }
+    }
+
+    fn match_(&mut self, check: &str) -> bool {
+        if self.peek() == Some(check) {
+            self.advance();
+            true
+        } else {
+            false
         }
     }
 
@@ -187,6 +217,35 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);
         assert_eq!(token.syntax(), "<Eof>");
+    }
+
+    #[test]
+    fn test_comparison_op_token() {
+        let mut scanner = new_test_scanner("< > = <= >= ==");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::LessThan);
+        assert_eq!(token.syntax(), "<");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::GreaterThan);
+        assert_eq!(token.syntax(), ">");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Equals);
+        assert_eq!(token.syntax(), "=");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::LessThanEquals);
+        assert_eq!(token.syntax(), "<=");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::GreaterThanEquals);
+        assert_eq!(token.syntax(), ">=");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::EqualsTo);
+        assert_eq!(token.syntax(), "==");
     }
 
     #[test]

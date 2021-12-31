@@ -93,4 +93,9 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    LessThan,
+    LessThanEquals,
+    GreaterThan,
+    GreaterThanEquals,
+    EqualsTo,
 }
