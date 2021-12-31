@@ -24,6 +24,8 @@ pub enum TokenType {
 
     Number(f64),
     Ident(Box<str>),
+    // bool is for if the comment is multiline.
+    Comment(Box<str>, bool),
 
     Error(Box<str>),
     Eof,
@@ -51,6 +53,7 @@ impl fmt::Display for TokenType {
             False => write!(f, "False"),
             Number(_) => write!(f, "Number"),
             Ident(_) => write!(f, "Ident"),
+            Comment(_, _) => write!(f, "Comment"),
             Error(_) => write!(f, "Error"),
             Eof => write!(f, "Eof"),
         }
@@ -82,7 +85,7 @@ impl Token {
             LessThanEquals => "<=",
             GreaterThanEquals => ">=",
             EqualsTo => "==",
-            Newline => "\n",
+            Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
 
@@ -101,6 +104,7 @@ impl Token {
         match &self.token_type {
             Number(val) => val.to_string().into(),
             Ident(id) => id.to_string().into(),
+            Comment(msg, _) => msg.to_string().into(),
             Error(err) => err.to_string().into(),
 
             _ => self.literal_syntax().into(),

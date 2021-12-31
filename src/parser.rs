@@ -75,16 +75,22 @@ impl Parser {
         let mut items = vec![];
 
         loop {
-            // <eof>
-            if self.match_token(&TokenType::Eof) {
-                return Ok(items);
-            // \n
-            } else if self.match_token(&TokenType::Newline) {
-                continue;
-            // ...
-            } else {
-                items.push(self.parse_statement()?);
-            }
+            match self.current.as_ref().unwrap().token_type {
+                // <Eof>
+                TokenType::Eof => {
+                    self.advance();
+                    return Ok(items);
+                }
+                // \n or //...
+                TokenType::Newline
+                | TokenType::Comment(_, false) => {
+                    // should single-line comments be parsed?
+                    self.advance();
+                    continue
+                }
+                // ...
+                _ => items.push(self.parse_statement()?),
+            } 
         }
     }
 
@@ -97,9 +103,9 @@ impl Parser {
 
         let span = Span::from(&expr.position());
 
-        Ok(ASTNode::Stmt(Stmt::ExpressionStmt(
-            Box::new(ExpressionStmt { expr }),
-            span,
+        Ok(ASTNode::from(Stmt::ExpressionStmt(
+            Box::new(ExpressionStmt {expr }),
+            span
         )))
     }
 
@@ -129,7 +135,7 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = ASTNode::Expr(Expr::BinaryExpr(
+                    node = ASTNode::from(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
                             left: node,
@@ -155,7 +161,7 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = ASTNode::Expr(Expr::BinaryExpr(
+                    node = ASTNode::from(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
                             left: node,
@@ -181,7 +187,7 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = ASTNode::Expr(Expr::BinaryExpr(
+                    node = ASTNode::from(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
                             left: node,
@@ -207,7 +213,7 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = ASTNode::Expr(Expr::BinaryExpr(
+                    node = ASTNode::from(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
                             left: node,
@@ -233,7 +239,7 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = ASTNode::Expr(Expr::BinaryExpr(
+                    node = ASTNode::from(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
                             left: node,
@@ -272,7 +278,7 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = ASTNode::Expr(Expr::BinaryExpr(
+                    node = ASTNode::from(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
                             left: node,
@@ -299,7 +305,7 @@ impl Parser {
 
                     let span = Span::combine(&node.position(), &right.position());
 
-                    node = ASTNode::Expr(Expr::BinaryExpr(
+                    node = ASTNode::from(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
                             left: node,
@@ -338,7 +344,7 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = ASTNode::Expr(Expr::BinaryExpr(
+                    node = ASTNode::from(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
                             left: node,
@@ -364,7 +370,7 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = ASTNode::Expr(Expr::BinaryExpr(
+                    node = ASTNode::from(Expr::BinaryExpr(
                         Box::new(BinaryExpr {
                             right,
                             left: node,
@@ -383,60 +389,72 @@ impl Parser {
     fn parse_factor(&mut self) -> Result<ASTNode, ParserError> {
         use TokenType::*;
 
-        let current = self.current.as_ref().unwrap().clone();
+        loop {
+            let current = self.current.as_ref().unwrap().clone();
 
-        match current.token_type {
-            // <number>
-            Number(val) => {
-                let span = Span::from(&current.span);
-
-                let node = ASTNode::Expr(Expr::Literal(Literal::Number(val), span));
-                self.consume(TokenType::Number(val));
-
-                return Ok(node);
-            }
-            // ( ...
-            LeftParen => self.parse_paren(),
-            // - ...
-            Minus => {
-                self.consume(TokenType::Minus);
-                let op = Op::Subtract;
-                let arg = self.parse_factor()?;
-
-                let span = Span::combine(&current.span, &arg.position());
-
-                let node = ASTNode::Expr(Expr::UnaryExpr(Box::new(UnaryExpr { arg, op }), span));
-                return Ok(node);
-            }
-            // "true"
-            True => {
-                let span = Span::from(&current.span);
-                let node = ASTNode::Expr(Expr::Literal(Literal::Bool(true), span));
-                self.consume(TokenType::True);
-                return Ok(node);
-            }
-            // "false"
-            False => {
-                let span = Span::from(&current.span);
-                let node = ASTNode::Expr(Expr::Literal(Literal::Bool(false), span));
-                self.consume(TokenType::False);
-                return Ok(node);
-            }
-            // <eof>
-            Eof => {
-                // if an <eof> token is found here, it has to be an error.
-                let span = &current.span;
-                return Err(ParserError::new(
-                    UnexpectedError(UnexpectedEOF),
-                    &Span::new(Rc::clone(&self.source), span.start, span.end + 1),
-                ));
-            }
-            // lexer error
-            _ => {
-                return Err(ParserError::new(
-                    UnexpectedError(UnexpectedToken(current.syntax().to_string())),
-                    &current.span,
-                ));
+            match current.token_type {
+                // <number>
+                Number(val) => {
+                    let span = Span::from(&current.span);
+    
+                    let node = ASTNode::from(Expr::Literal(Literal::Number(val), span));
+                    self.consume(TokenType::Number(val));
+    
+                    return Ok(node);
+                }
+                // ( ...
+                LeftParen => return self.parse_paren(),
+                // - ...
+                Minus => {
+                    self.consume(TokenType::Minus);
+                    let op = Op::Subtract;
+                    let arg = self.parse_factor()?;
+    
+                    let span = Span::combine(&current.span, &arg.position());
+    
+                    let node = ASTNode::from(Expr::UnaryExpr(Box::new(UnaryExpr { arg, op }), span));
+                    return Ok(node);
+                }
+                // "true"
+                True => {
+                    let span = Span::from(&current.span);
+                    let node = ASTNode::from(Expr::Literal(Literal::Bool(true), span));
+                    self.consume(TokenType::True);
+                    return Ok(node);
+                }
+                // "false"
+                False => {
+                    let span = Span::from(&current.span);
+                    let node = ASTNode::from(Expr::Literal(Literal::Bool(false), span));
+                    self.consume(TokenType::False);
+                    return Ok(node);
+                }
+                // <eof>
+                Eof => {
+                    // if an <eof> token is found here, it has to be an error.
+                    let span = &current.span;
+                    return Err(ParserError::new(
+                        UnexpectedError(UnexpectedEOF),
+                        &Span::new(Rc::clone(&self.source), span.start, span.end + 1),
+                    ));
+                } 
+                // single-line comment
+                Comment(_, false) => {
+                    self.advance();
+                    continue;
+                }
+                // \n
+                Newline => {
+                    self.advance();
+                    continue;
+                }
+                // lexer error
+                _ => {
+                    return Err(ParserError::new(
+                        UnexpectedError(UnexpectedToken(current.syntax().to_string())),
+                        &current.span,
+                    ));
+                }
             }
         }
     }
@@ -486,7 +504,7 @@ impl Parser {
             start.start,
             expr.position().end + 1,
         );
-        let node = ASTNode::Expr(Expr::ParenExpr(Box::new(ParenExpr { expr }), span));
+        let node = ASTNode::from(Expr::ParenExpr(Box::new(ParenExpr { expr }), span));
         Ok(node)
     }
 }
