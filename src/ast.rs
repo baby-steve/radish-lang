@@ -17,6 +17,18 @@ pub enum ASTNode {
     Stmt(Stmt),
 }
 
+impl From<Stmt> for ASTNode {
+    fn from(stmt: Stmt) -> Self {
+        ASTNode::Stmt(stmt)
+    }
+}
+
+impl From<Expr> for ASTNode {
+    fn from(expr: Expr) -> Self {
+        ASTNode::Expr(expr)
+    }
+}
+
 impl ASTNode {
     pub fn position(&self) -> Span {
         match self {
