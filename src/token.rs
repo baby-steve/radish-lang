@@ -1,5 +1,5 @@
-use std::fmt;
 use std::borrow::Cow;
+use std::fmt;
 
 use crate::span::Span;
 
@@ -9,14 +9,23 @@ pub enum TokenType {
     Slash,
     Star,
     Minus,
-
+    Equals,
+    LessThan,
+    GreaterThan,
+    LessThanEquals,
+    GreaterThanEquals,
+    EqualsTo,
+    Newline,
     LeftParen,
     RightParen,
 
-    Number(f64),
     True,
     False,
+
+    Number(f64),
     Ident(Box<str>),
+    // bool is for if the comment is multiline.
+    Comment(Box<str>, bool),
 
     Error(Box<str>),
     Eof,
@@ -24,19 +33,29 @@ pub enum TokenType {
 
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use TokenType::*;
+
         match *self {
-            TokenType::Plus => write!(f, "Plus"),
-            TokenType::Slash => write!(f, "Slash"),
-            TokenType::Star => write!(f, "Star"),
-            TokenType::Minus => write!(f, "Minus"),
-            TokenType::LeftParen => write!(f, "LeftParen"),
-            TokenType::RightParen => write!(f, "RightParen"),
-            TokenType::Number(_) => write!(f, "Number"),
-            TokenType::True => write!(f, "True"),
-            TokenType::False => write!(f, "False"),
-            TokenType::Ident(_) => write!(f, "Ident"),
-            TokenType::Error(_) => write!(f, "Error"),
-            TokenType::Eof => write!(f, "Eof"),
+            Plus => write!(f, "Plus"),
+            Slash => write!(f, "Slash"),
+            Star => write!(f, "Star"),
+            Minus => write!(f, "Minus"),
+            Equals => write!(f, "Equals"),
+            LessThan => write!(f, "LessThan"),
+            GreaterThan => write!(f, "GreaterThan"),
+            LessThanEquals => write!(f, "LessThanEquals"),
+            GreaterThanEquals => write!(f, "GreaterThanEquals"),
+            EqualsTo => write!(f, "EqualsTo"),
+            Newline => write!(f, "Newline"),
+            LeftParen => write!(f, "LeftParen"),
+            RightParen => write!(f, "RightParen"),
+            True => write!(f, "True"),
+            False => write!(f, "False"),
+            Number(_) => write!(f, "Number"),
+            Ident(_) => write!(f, "Ident"),
+            Comment(_, _) => write!(f, "Comment"),
+            Error(_) => write!(f, "Error"),
+            Eof => write!(f, "Eof"),
         }
     }
 }
@@ -60,6 +79,13 @@ impl Token {
             Minus => "-",
             Star => "*",
             Slash => "/",
+            Equals => "=",
+            LessThan => "<",
+            GreaterThan => ">",
+            LessThanEquals => "<=",
+            GreaterThanEquals => ">=",
+            EqualsTo => "==",
+            Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
 
@@ -68,7 +94,7 @@ impl Token {
 
             Eof => "<Eof>",
 
-            _ => "ERROR"
+            _ => "ERROR",
         }
     }
 
@@ -78,10 +104,10 @@ impl Token {
         match &self.token_type {
             Number(val) => val.to_string().into(),
             Ident(id) => id.to_string().into(),
+            Comment(msg, _) => msg.to_string().into(),
             Error(err) => err.to_string().into(),
 
             _ => self.literal_syntax().into(),
-
         }
     }
 }

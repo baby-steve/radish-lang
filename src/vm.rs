@@ -99,6 +99,31 @@ impl VM {
                     let a = self.stack.pop().unwrap();
                     self.stack.push(a / b);
                 }
+                Opcode::LessThan => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(Value::Boolean(a < b));
+                }
+                Opcode::LessThanEquals => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(Value::Boolean(a <= b));
+                }
+                Opcode::GreaterThan => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(Value::Boolean(a > b));
+                }
+                Opcode::GreaterThanEquals => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(Value::Boolean(a >= b));
+                }
+                Opcode::EqualsTo => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(Value::Boolean(a == b));
+                }
                 Opcode::Halt => {
                     println!("VM Stack: {:?}", self.stack);
                     break;
@@ -192,6 +217,76 @@ mod tests {
         let mut vm = VM::new(Chunk { code, constants });
         vm.run();
         assert_eq!(vm.stack.peek(), Some(Value::Number(2.0)));
+    }
+    
+    #[test]
+    fn test_less_than_opcode() {
+        let code = vec![
+            Opcode::Constant as u8, 0,
+            Opcode::Constant as u8, 1,
+            Opcode::LessThan as u8,
+            Opcode::Halt as u8,            
+        ];
+        let constants = vec![Value::Number(4.0), Value::Number(5.0)];
+        let mut vm = VM::new(Chunk { code, constants });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
+    }
+
+    #[test]
+    fn test_less_than_equals_opcode() {
+        let code = vec![
+            Opcode::Constant as u8, 0,
+            Opcode::Constant as u8, 1,
+            Opcode::LessThanEquals as u8,
+            Opcode::Halt as u8,            
+        ];
+        let constants = vec![Value::Number(4.0), Value::Number(5.0)];
+        let mut vm = VM::new(Chunk { code, constants });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
+    }
+
+    #[test]
+    fn test_greater_than_opcode() {
+        let code = vec![
+            Opcode::Constant as u8, 0,
+            Opcode::Constant as u8, 1,
+            Opcode::GreaterThan as u8,
+            Opcode::Halt as u8,            
+        ];
+        let constants = vec![Value::Number(6.0), Value::Number(5.0)];
+        let mut vm = VM::new(Chunk { code, constants });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
+    }
+
+    #[test]
+    fn test_greater_than_equal_opcode() {
+        let code = vec![
+            Opcode::Constant as u8, 0,
+            Opcode::Constant as u8, 1,
+            Opcode::GreaterThanEquals as u8,
+            Opcode::Halt as u8,            
+        ];
+        let constants = vec![Value::Number(8.0), Value::Number(5.0)];
+        let mut vm = VM::new(Chunk { code, constants });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
+    }
+
+    #[test]
+    fn test_equals_to_opcode() {
+        let code = vec![
+            Opcode::Constant as u8, 0,
+            Opcode::Constant as u8, 1,
+            Opcode::EqualsTo as u8,
+            Opcode::Halt as u8,            
+        ];
+        let constants = vec![Value::Number(5.0), Value::Number(5.0)];
+        let mut vm = VM::new(Chunk { code, constants });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
     }
 
     #[test]

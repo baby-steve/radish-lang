@@ -1,9 +1,32 @@
 use std::ops::{Add, Div, Mul, Neg, Sub};
+use std::fmt;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Number(f64),
     Boolean(bool),
+}
+
+impl From<f64> for Value {
+    fn from(num: f64) -> Self {
+        Value::Number(num)
+    }
+}
+
+impl From<bool> for Value {
+    fn from(val: bool) -> Self {
+        Value::Boolean(val)
+    }
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Value::Number(num) => f.write_str(&format!("{}", num.to_string())),
+            Value::Boolean(false) => f.write_str("false"),
+            Value::Boolean(true) => f.write_str("true"), 
+        }
+    }
 }
 
 impl Add for Value {

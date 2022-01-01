@@ -26,8 +26,36 @@ impl Scanner {
         match c {
             Some("+") => self.make_token(TokenType::Plus),
             Some("-") => self.make_token(TokenType::Minus),
-            Some("/") => self.make_token(TokenType::Slash),
+            Some("/") => {
+                if self.match_("/") {
+                    self.single_line_comment()
+                } else {
+                    self.make_token(TokenType::Slash)
+                }
+            }
             Some("*") => self.make_token(TokenType::Star),
+            Some("<") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::LessThanEquals)
+                } else {
+                    self.make_token(TokenType::LessThan)
+                }
+            }
+            Some(">") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::GreaterThanEquals)
+                } else {
+                    self.make_token(TokenType::GreaterThan)
+                }
+            }
+            Some("=") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::EqualsTo)
+                } else {
+                    self.make_token(TokenType::Equals)
+                }
+            }
+            Some("\n") => self.make_token(TokenType::Newline),
             Some("(") => self.make_token(TokenType::LeftParen),
             Some(")") => self.make_token(TokenType::RightParen),
             None => self.make_token(TokenType::Eof),
@@ -88,6 +116,15 @@ impl Scanner {
         }
     }
 
+    fn match_(&mut self, check: &str) -> bool {
+        if self.peek() == Some(check) {
+            self.advance();
+            true
+        } else {
+            false
+        }
+    }
+
     fn number(&mut self) -> Token {
         while self.peek() != None && is_digit(self.peek().unwrap()) {
             self.advance();
@@ -114,6 +151,16 @@ impl Scanner {
             "false" => TokenType::False,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
+    }
+
+    fn single_line_comment(&mut self) -> Token {
+        while self.peek() != None && self.peek() != Some("\n") {
+            self.advance();
+        }
+
+        // incerment previous by two so that the comment message doesn't contain the starting '//'.
+        let value = self.source.contents[self.previous + 2..self.current].to_string();
+        self.make_token(TokenType::Comment(value.into_boxed_str(), false))
     }
 
     fn skip_whitespace(&mut self) -> &mut Self {
@@ -189,6 +236,35 @@ mod tests {
     }
 
     #[test]
+    fn test_comparison_op_token() {
+        let mut scanner = new_test_scanner("< > = <= >= ==");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::LessThan);
+        assert_eq!(token.syntax(), "<");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::GreaterThan);
+        assert_eq!(token.syntax(), ">");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Equals);
+        assert_eq!(token.syntax(), "=");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::LessThanEquals);
+        assert_eq!(token.syntax(), "<=");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::GreaterThanEquals);
+        assert_eq!(token.syntax(), ">=");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::EqualsTo);
+        assert_eq!(token.syntax(), "==");
+    }
+
+    #[test]
     fn test_number_token_type() {
         let src = String::from("123");
         let mut scanner = new_test_scanner(&src);
@@ -220,11 +296,38 @@ mod tests {
     fn test_identifier_token() {
         let mut scanner = new_test_scanner("radishes cats");
         let token = scanner.scan_token();
-        assert_eq!(token.token_type, TokenType::Ident(String::from("radishes").into_boxed_str()));
+        assert_eq!(
+            token.token_type,
+            TokenType::Ident(String::from("radishes").into_boxed_str())
+        );
         assert_eq!(token.syntax(), "radishes");
         let token = scanner.scan_token();
-        assert_eq!(token.token_type, TokenType::Ident(String::from("cats").into_boxed_str()));
+        assert_eq!(
+            token.token_type,
+            TokenType::Ident(String::from("cats").into_boxed_str())
+        );
         assert_eq!(token.syntax(), "cats");
+    }
+
+    #[test]
+    fn test_newline_token() {
+        let mut scanner = new_test_scanner("123\n456");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Number(123.0));
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Newline);
+        assert_eq!(token.syntax(), "\\n");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Number(456.0));
+    }
+
+    #[test]
+    fn test_single_line_comment() {
+        let mut scanner = new_test_scanner("//this is a comment");
+        assert_eq!(
+            scanner.scan_token().token_type,
+            TokenType::Comment("this is a comment".to_string().into_boxed_str(), false)
+        );
     }
 
     #[test]
@@ -248,7 +351,10 @@ mod tests {
         let src = String::from("猫");
         let mut scanner = new_test_scanner(&src);
         let token = scanner.scan_token();
-        assert_eq!(token.token_type, TokenType::Error(String::from("猫").into_boxed_str()));
+        assert_eq!(
+            token.token_type,
+            TokenType::Error(String::from("猫").into_boxed_str())
+        );
         assert_eq!(token.syntax(), "猫");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);

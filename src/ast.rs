@@ -14,14 +14,46 @@ impl AST {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ASTNode {
     Expr(Expr),
+    Stmt(Stmt),
+}
+
+impl From<Stmt> for ASTNode {
+    fn from(stmt: Stmt) -> Self {
+        ASTNode::Stmt(stmt)
+    }
+}
+
+impl From<Expr> for ASTNode {
+    fn from(expr: Expr) -> Self {
+        ASTNode::Expr(expr)
+    }
 }
 
 impl ASTNode {
     pub fn position(&self) -> Span {
         match self {
             Self::Expr(expr) => expr.position(), 
+            Self::Stmt(stmt) => stmt.position(), 
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Stmt {
+    ExpressionStmt(Box<ExpressionStmt>, Span),
+}
+
+impl Stmt {
+    pub fn position(&self) -> Span {
+        match self {
+            Self::ExpressionStmt(_, pos) => pos.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExpressionStmt {
+    pub expr: ASTNode,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -73,4 +105,9 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    LessThan,
+    LessThanEquals,
+    GreaterThan,
+    GreaterThanEquals,
+    EqualsTo,
 }

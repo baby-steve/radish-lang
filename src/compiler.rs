@@ -27,6 +27,7 @@ impl Compiler {
     fn visit(&mut self, node: &ASTNode) {
         match node {
             ASTNode::Expr(expr) => self.expression(expr),
+            ASTNode::Stmt(stmt) => self.statement(stmt),
         }
     }
 
@@ -58,6 +59,12 @@ impl Compiler {
         self.visit(&expr.expr);
     }
 
+    fn statement(&mut self, stmt: &Stmt) {
+        match stmt {
+            Stmt::ExpressionStmt(expr, _) => self.visit(&expr.expr),
+        }
+    }
+
     fn expression(&mut self, expr: &Expr) {
         match expr {
             Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
@@ -76,6 +83,11 @@ impl Compiler {
             Op::Subtract => self.emit_byte(Opcode::Subtract as u8),
             Op::Multiply => self.emit_byte(Opcode::Multiply as u8),
             Op::Divide => self.emit_byte(Opcode::Divide as u8),
+            Op::LessThan => self.emit_byte(Opcode::LessThan as u8),
+            Op::LessThanEquals => self.emit_byte(Opcode::LessThanEquals as u8),
+            Op::GreaterThan => self.emit_byte(Opcode::GreaterThan as u8),
+            Op::GreaterThanEquals => self.emit_byte(Opcode::GreaterThanEquals as u8),
+            Op::EqualsTo => self.emit_byte(Opcode::EqualsTo as u8),            
         }
     }
 
@@ -193,6 +205,96 @@ mod tests {
         assert_eq!(
          result.chunk.constants,
             vec!(Value::Number(12.0), Value::Number(4.0),)
+        );
+    }
+
+    #[test]
+    fn compile_less_than_expr() {
+        let result = run_test_compiler("5 < 2");
+        assert_eq!(
+         result.chunk.code,
+            vec!(
+                Opcode::Constant as u8, 0,
+                Opcode::Constant as u8, 1,
+                Opcode::LessThan as u8,
+                Opcode::Halt as u8
+            )
+        );
+        assert_eq!(
+         result.chunk.constants,
+            vec!(Value::Number(5.0), Value::Number(2.0))
+        );
+    }
+
+    #[test]
+    fn compile_less_than_equals_expr() {
+        let result = run_test_compiler("5 <= 2");
+        assert_eq!(
+         result.chunk.code,
+            vec!(
+                Opcode::Constant as u8, 0,
+                Opcode::Constant as u8, 1,
+                Opcode::LessThanEquals as u8,
+                Opcode::Halt as u8
+            )
+        );
+        assert_eq!(
+         result.chunk.constants,
+            vec!(Value::Number(5.0), Value::Number(2.0))
+        );
+    }
+
+    #[test]
+    fn compile_greater_than_expr() {
+        let result = run_test_compiler("5 > 2");
+        assert_eq!(
+         result.chunk.code,
+            vec!(
+                Opcode::Constant as u8, 0,
+                Opcode::Constant as u8, 1,
+                Opcode::GreaterThan as u8,
+                Opcode::Halt as u8
+            )
+        );
+        assert_eq!(
+         result.chunk.constants,
+            vec!(Value::Number(5.0), Value::Number(2.0),)
+        );
+    }
+
+    #[test]
+    fn compile_greater_than_equal_expr() {
+        let result = run_test_compiler("5 >= 2");
+        assert_eq!(
+         result.chunk.code,
+            vec!(
+                Opcode::Constant as u8, 0,
+                Opcode::Constant as u8, 1,
+                Opcode::GreaterThanEquals as u8,
+                Opcode::Halt as u8
+            )
+        );
+        assert_eq!(
+         result.chunk.constants,
+            vec!(Value::Number(5.0), Value::Number(2.0),)
+        );
+    }
+
+    #[test]
+    fn compile_equals_to_expr() {
+        let result = run_test_compiler("5 == 2");
+        assert_eq!(
+         result.chunk.code,
+            vec!(
+                Opcode::Constant as u8, 0,
+                Opcode::Constant as u8, 1,
+                Opcode::EqualsTo as u8,
+                Opcode::Halt as u8
+            )
+        );
+        assert_eq!(
+         result.chunk.constants,
+            vec!(Value::Number(5.0), Value::Number(2.0),)
         );
     }
 

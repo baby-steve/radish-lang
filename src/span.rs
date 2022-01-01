@@ -59,6 +59,10 @@ impl Span {
         string.split('\n').map(|l| l.to_string() + "\n").collect()
     }
 
+    fn lines(string: &str) -> Vec<String> {
+        string.split('\n').map(|l| l.to_string()).collect()
+    }
+
     pub fn get_line_index(string: &str, index: usize) -> Option<(usize, usize)> {
         let lines = Span::lines_newline(&string[..index]);
         let line = lines.len() - 1;
@@ -91,17 +95,13 @@ impl fmt::Display for Span {
          *  --> path/to/file:4:12
          *   |
          * 4 | x = call().resolt
-         *   |            
+         *   |            ^^^^^^
          *  - help: did you mean `result`?
          *  - note: some kind of note.
          */
 
         let contents = self.source.contents.clone();
-        let lines = self
-            .source
-            .contents
-            .split_inclusive("\n")
-            .collect::<Vec<&str>>();
+        let lines = Span::lines(&contents);
 
         let (start_line, start_col) = match Span::get_line_index(&contents, self.start) {
             Some(pos) => pos,
@@ -143,10 +143,12 @@ impl fmt::Display for Span {
             writeln!(f, "{}", location)?;
             writeln!(f, "{}", separator)?;
             writeln!(f, "{}", excerpt)?;
-            writeln!(f, "{}", span)?;
+            writeln!(f, "{}", span)
+        } else {
+            writeln!(f, "Hey stupid, you forgot to implement support for mutliline errors")
         }
 
-        writeln!(f, "{}", separator)
+        //writeln!(f, "{}", separator)
     }
 }
 
@@ -173,7 +175,7 @@ mod tests {
         let test_span = Span::new(Source::source(test_source), 4, 9);
         assert_eq!(
             format!("{}", test_span),
-            "  --> ./main:1:5\n   |\n 1 | 1 + 2 * 3\n   |     ^^^^^\n   |\n"
+            "  --> ./main:1:5\n   |\n 1 | 1 + 2 * 3\n   |     ^^^^^\n"
         )
     }
 
@@ -183,7 +185,7 @@ mod tests {
         let test_span = Span::new(Source::source(test_source), 0, 1);
         assert_eq!(
             format!("{}", test_span),
-            "  --> ./main:1:1\n   |\n 1 | 1 + 2 * 3\n   | ^\n   |\n"
+            "  --> ./main:1:1\n   |\n 1 | 1 + 2 * 3\n   | ^\n"
         )
     }
 

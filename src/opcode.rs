@@ -10,6 +10,11 @@ pub enum Opcode {
     Subtract,
     Multiply,
     Divide,
+    LessThan,
+    LessThanEquals,
+    GreaterThan,
+    GreaterThanEquals,
+    EqualsTo,
 
     Negate,
 

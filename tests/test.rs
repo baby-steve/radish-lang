@@ -93,3 +93,27 @@ fn test_boolean_literals() {
     let mut vm = run_test_vm(test_string);
     assert_eq!(vm.stack.peek().unwrap(), Value::Boolean(false));
 }
+
+#[test]
+fn test_multiline_input() {
+    let test_string = "1 + 2\n3 - 4";
+    let mut vm = run_test_vm(test_string);
+    assert_eq!(vm.stack.peek().unwrap(), Value::Number(-1.0));
+
+    let test_string = "1 + 2\n 3 - 4\n 5 * 6 + 7 / 8";
+    let mut vm = run_test_vm(test_string);
+    assert_eq!(vm.stack.peek().unwrap(), Value::Number(30.875));
+
+    let test_string = "1 + 2\n\n\n\n 4 + 5";
+    let mut vm = run_test_vm(test_string);
+    assert_eq!(vm.stack.peek().unwrap(), Value::Number(9.0));
+
+    let test_string = "1 + 2\n 4 + 5\n";
+    let mut vm = run_test_vm(test_string);
+    assert_eq!(vm.stack.peek().unwrap(), Value::Number(9.0)); 
+    
+    let test_string = "\n";
+    let mut vm = run_test_vm(test_string);
+    assert_eq!(vm.stack.peek(), None);
+
+}
