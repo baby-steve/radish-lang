@@ -79,6 +79,10 @@ impl VM {
                     let value = self.stack.pop().unwrap();
                     self.stack.push(-value);
                 }
+                Opcode::Not => {
+                    let value = self.stack.pop().unwrap();
+                    self.stack.push(!value);
+                }
                 Opcode::Add => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
@@ -123,6 +127,11 @@ impl VM {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a == b));
+                }
+                Opcode::NotEqual => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(Value::Boolean(a != b));
                 }
                 Opcode::Halt => {
                     println!("VM Stack: {:?}", self.stack);
@@ -290,6 +299,20 @@ mod tests {
     }
 
     #[test]
+    fn test_not_equal_opcode() {
+        let code = vec![
+            Opcode::Constant as u8, 0,
+            Opcode::Constant as u8, 1,
+            Opcode::NotEqual as u8,
+            Opcode::Halt as u8,            
+        ];
+        let constants = vec![Value::Number(9.0), Value::Number(5.0)];
+        let mut vm = VM::new(Chunk { code, constants });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
+    }
+
+    #[test]
     fn test_multiple_opcodes() {
         let code = vec![
             Opcode::Constant as u8, 0,
@@ -326,6 +349,18 @@ mod tests {
         let mut vm = VM::new(Chunk { code, constants });
         vm.run();
         assert_eq!(vm.stack.peek(), Some(Value::Number(-2.0)));
+    }
+
+    #[test]
+    fn test_not_opcode() {
+        let code = vec![
+            Opcode::True as u8,
+            Opcode::Not as u8,
+            Opcode::Halt as u8
+        ];
+        let mut vm = VM::new(Chunk { code, constants: vec![] });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::from(false)));
     }
 
     #[test]

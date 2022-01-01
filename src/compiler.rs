@@ -87,7 +87,9 @@ impl Compiler {
             Op::LessThanEquals => self.emit_byte(Opcode::LessThanEquals as u8),
             Op::GreaterThan => self.emit_byte(Opcode::GreaterThan as u8),
             Op::GreaterThanEquals => self.emit_byte(Opcode::GreaterThanEquals as u8),
-            Op::EqualsTo => self.emit_byte(Opcode::EqualsTo as u8),            
+            Op::EqualsTo => self.emit_byte(Opcode::EqualsTo as u8),      
+            Op::NotEqual => self.emit_byte(Opcode::NotEqual as u8),      
+            _ => unreachable!(format!("{:?} is not a binary operator.", expr.op)),
         }
     }
 
@@ -96,6 +98,7 @@ impl Compiler {
 
         match &node.op {
             Op::Subtract => self.emit_byte(Opcode::Negate as u8),
+            Op::Bang => self.emit_byte(Opcode::Not as u8),
             _ => unreachable!(), // Add error message?
         }
     }
@@ -299,6 +302,24 @@ mod tests {
     }
 
     #[test]
+    fn compile_not_equal_expr() {
+        let result = run_test_compiler("5 != 2");
+        assert_eq!(
+         result.chunk.code,
+            vec!(
+                Opcode::Constant as u8, 0,
+                Opcode::Constant as u8, 1,
+                Opcode::NotEqual as u8,
+                Opcode::Halt as u8
+            )
+        );
+        assert_eq!(
+         result.chunk.constants,
+            vec!(Value::Number(5.0), Value::Number(2.0))
+        );
+    }
+
+    #[test]
     fn compile_multiple_binary_expr() {
         let result = run_test_compiler("1 + 23 * 5");
         assert_eq!(
@@ -330,6 +351,19 @@ mod tests {
             )
         );
         assert_eq!(result.chunk.constants, vec!(Value::Number(23.0)))
+    }
+
+    #[test]
+    fn compile_unary_not() {
+        let result = run_test_compiler("!true");
+        assert_eq!(
+            result.chunk.code,
+            vec![
+                Opcode::True as u8,
+                Opcode::Not as u8,
+                Opcode::Halt as u8
+            ]
+        );
     }
 
     #[test]

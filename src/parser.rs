@@ -227,9 +227,9 @@ impl Parser {
                     self.consume(TokenType::EqualsTo);
 
                     let right = match self.parse_sum() {
-                        // expr < expr
+                        // expr == expr
                         Ok(expr) => expr,
-                        // expr < <error>
+                        // expr == <error>
                         Err(err) => {
                             return Err(self.make_error(
                                 err.clone(),
@@ -244,6 +244,32 @@ impl Parser {
                             right,
                             left: node,
                             op: Op::EqualsTo,
+                        }),
+                        span,
+                    ))
+                }
+                // expr != ...
+                TokenType::NotEqual => {
+                    self.consume(TokenType::NotEqual);
+
+                    let right = match self.parse_sum() {
+                        // expr != expr
+                        Ok(expr) => expr,
+                        // expr != <error>
+                        Err(err) => {
+                            return Err(self.make_error(
+                                err.clone(),
+                                ExpectedError(ExpectedExpression(err.error.to_string())),
+                            ))
+                        }
+                    };
+
+                    let span = Span::combine(&node.position(), &right.position());
+                    node = ASTNode::from(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            right,
+                            left: node,
+                            op: Op::NotEqual,
                         }),
                         span,
                     ))
@@ -415,6 +441,17 @@ impl Parser {
                     let node = ASTNode::from(Expr::UnaryExpr(Box::new(UnaryExpr { arg, op }), span));
                     return Ok(node);
                 }
+                // ! ...
+                Bang => {
+                    self.consume(TokenType::Bang);
+                    let op = Op::Bang;
+                    let arg = self.parse_factor()?;
+
+                    let span = Span::combine(&current.span, &arg.position());
+
+                    let node = ASTNode::from(Expr::UnaryExpr(Box::new(UnaryExpr {arg, op }), span));
+                    return Ok(node);
+                }
                 // "true"
                 True => {
                     let span = Span::from(&current.span);
@@ -560,6 +597,31 @@ mod tests {
                     expr: ASTNode::Expr(Expr::UnaryExpr(
                         Box::new(UnaryExpr {
                             op: Op::Subtract,
+                            arg: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(23.0),
+                                Span::new(Rc::clone(&source), 1, 3)
+                            ))
+                        }),
+                        Span::new(Rc::clone(&source), 0, 3)
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 3)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_unary_not() {
+        let source = Source::source("!23");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::UnaryExpr(
+                        Box::new(UnaryExpr {
+                            op: Op::Bang,
                             arg: ASTNode::Expr(Expr::Literal(
                                 Literal::Number(23.0),
                                 Span::new(Rc::clone(&source), 1, 3)
@@ -818,6 +880,35 @@ mod tests {
                                 Span::new(Rc::clone(&source), 0, 1),
                             )),
                             op: Op::EqualsTo,
+                            right: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(4.0),
+                                Span::new(Rc::clone(&source), 5, 6),
+                            )),
+                        },),
+                        Span::new(Rc::clone(&source), 0, 6),
+                    ),)
+                }),
+                Span::new(Rc::clone(&source), 0, 6)
+            ))
+        )
+    }
+
+    #[test]
+    fn parse_not_equal_expr() {
+        let source = Source::source("2 != 4");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::BinaryExpr(
+                        Box::new(BinaryExpr {
+                            left: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(2.0),
+                                Span::new(Rc::clone(&source), 0, 1),
+                            )),
+                            op: Op::NotEqual,
                             right: ASTNode::Expr(Expr::Literal(
                                 Literal::Number(4.0),
                                 Span::new(Rc::clone(&source), 5, 6),

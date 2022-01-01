@@ -1,5 +1,5 @@
-use std::ops::{Add, Div, Mul, Neg, Sub};
 use std::fmt;
+use std::ops::{Add, Div, Mul, Neg, Not, Sub};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum Value {
@@ -24,7 +24,7 @@ impl fmt::Display for Value {
         match self {
             Value::Number(num) => f.write_str(&format!("{}", num.to_string())),
             Value::Boolean(false) => f.write_str("false"),
-            Value::Boolean(true) => f.write_str("true"), 
+            Value::Boolean(true) => f.write_str("true"),
         }
     }
 }
@@ -75,6 +75,16 @@ impl Neg for Value {
         match self {
             Value::Number(val) => Value::Number(-val),
             _ => panic!("Operands must be numbers"),
+        }
+    }
+}
+
+impl Not for Value {
+    type Output = Self;
+    fn not(self) -> Self::Output {
+        match self {
+            Value::Boolean(val) => Value::Boolean(!val),
+            _ => panic!("Operand must be boolean"),
         }
     }
 }

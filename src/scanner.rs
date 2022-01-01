@@ -34,6 +34,13 @@ impl Scanner {
                 }
             }
             Some("*") => self.make_token(TokenType::Star),
+            Some("!") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::NotEqual)
+                } else {
+                    self.make_token(TokenType::Bang)
+                }
+            }
             Some("<") => {
                 if self.match_("=") {
                     self.make_token(TokenType::LessThanEquals)
@@ -237,7 +244,7 @@ mod tests {
 
     #[test]
     fn test_comparison_op_token() {
-        let mut scanner = new_test_scanner("< > = <= >= ==");
+        let mut scanner = new_test_scanner("< > = <= >= == !=");
 
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::LessThan);
@@ -262,6 +269,10 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::EqualsTo);
         assert_eq!(token.syntax(), "==");
+
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::NotEqual);
+        assert_eq!(token.syntax(), "!=");
     }
 
     #[test]
@@ -328,6 +339,12 @@ mod tests {
             scanner.scan_token().token_type,
             TokenType::Comment("this is a comment".to_string().into_boxed_str(), false)
         );
+    }
+
+    #[test]
+    fn test_bang_token() {
+        let mut scanner = new_test_scanner("!");
+        assert_eq!(scanner.scan_token().token_type, TokenType::Bang);
     }
 
     #[test]

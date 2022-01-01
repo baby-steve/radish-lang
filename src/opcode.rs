@@ -15,8 +15,10 @@ pub enum Opcode {
     GreaterThan,
     GreaterThanEquals,
     EqualsTo,
+    NotEqual,
 
     Negate,
+    Not,
 
     Halt,
 }

@@ -5,21 +5,39 @@ use crate::span::Span;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
+    // +
     Plus,
+    // /
     Slash,
+    // *
     Star,
+    // -
     Minus,
+    // !
+    Bang,
+    // =
     Equals,
+    // <
     LessThan,
-    GreaterThan,
+    // <=
     LessThanEquals,
+    // >
+    GreaterThan,
+    // >=
     GreaterThanEquals,
+    // ==
     EqualsTo,
+    // !=
+    NotEqual,
+    // \n
     Newline,
+    // (
     LeftParen,
+    // )
     RightParen,
-
+    // true
     True,
+    // false
     False,
 
     Number(f64),
@@ -28,6 +46,7 @@ pub enum TokenType {
     Comment(Box<str>, bool),
 
     Error(Box<str>),
+    // <Eof>
     Eof,
 }
 
@@ -40,12 +59,14 @@ impl fmt::Display for TokenType {
             Slash => write!(f, "Slash"),
             Star => write!(f, "Star"),
             Minus => write!(f, "Minus"),
+            Bang => write!(f, "Bang"),
             Equals => write!(f, "Equals"),
             LessThan => write!(f, "LessThan"),
-            GreaterThan => write!(f, "GreaterThan"),
             LessThanEquals => write!(f, "LessThanEquals"),
+            GreaterThan => write!(f, "GreaterThan"),
             GreaterThanEquals => write!(f, "GreaterThanEquals"),
             EqualsTo => write!(f, "EqualsTo"),
+            NotEqual => write!(f, "NotEqual"),
             Newline => write!(f, "Newline"),
             LeftParen => write!(f, "LeftParen"),
             RightParen => write!(f, "RightParen"),
@@ -79,12 +100,14 @@ impl Token {
             Minus => "-",
             Star => "*",
             Slash => "/",
+            Bang => "!",
             Equals => "=",
             LessThan => "<",
             GreaterThan => ">",
             LessThanEquals => "<=",
             GreaterThanEquals => ">=",
             EqualsTo => "==",
+            NotEqual => "!=",
             Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
