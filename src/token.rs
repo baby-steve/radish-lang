@@ -39,6 +39,8 @@ pub enum TokenType {
     True,
     // false
     False,
+    // var (might change)
+    Var,
 
     Number(f64),
     Ident(Box<str>),
@@ -72,6 +74,7 @@ impl fmt::Display for TokenType {
             RightParen => write!(f, "RightParen"),
             True => write!(f, "True"),
             False => write!(f, "False"),
+            Var => write!(f, "Var"),
             Number(_) => write!(f, "Number"),
             Ident(_) => write!(f, "Ident"),
             Comment(_, _) => write!(f, "Comment"),
@@ -114,6 +117,7 @@ impl Token {
 
             True => "true",
             False => "false",
+            Var => "var",
 
             Eof => "<Eof>",
 

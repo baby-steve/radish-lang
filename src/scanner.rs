@@ -156,6 +156,7 @@ impl Scanner {
         match &value[..] {
             "true" => TokenType::True,
             "false" => TokenType::False,
+            "var" => TokenType::Var,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -345,6 +346,14 @@ mod tests {
     fn test_bang_token() {
         let mut scanner = new_test_scanner("!");
         assert_eq!(scanner.scan_token().token_type, TokenType::Bang);
+    }
+
+    #[test]
+    fn test_var_token() {
+        let mut scanner = new_test_scanner("var");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Var);
+        assert_eq!(token.syntax(), "var");
     }
 
     #[test]

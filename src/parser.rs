@@ -82,30 +82,57 @@ impl Parser {
                     return Ok(items);
                 }
                 // \n or //...
-                TokenType::Newline
-                | TokenType::Comment(_, false) => {
+                TokenType::Newline | TokenType::Comment(_, false) => {
                     // should single-line comments be parsed?
                     self.advance();
-                    continue
+                    continue;
                 }
                 // ...
                 _ => items.push(self.parse_statement()?),
-            } 
+            }
         }
     }
 
     fn parse_statement(&mut self) -> Result<ASTNode, ParserError> {
-        self.expression_statement()
+        match self.current.as_ref().unwrap().token_type {
+            // var ...
+            TokenType::Var => self.parse_var_declaration(),
+            // expr ...
+            _ => self.parse_expression_statement(),
+        }
     }
 
-    fn expression_statement(&mut self) -> Result<ASTNode, ParserError> {
+    fn parse_var_declaration(&mut self) -> Result<ASTNode, ParserError> {
+        // var ...
+        let start = Span::from(&self.current.as_ref().unwrap().span);
+
+        self.consume(TokenType::Var);
+
+        // var id ...
+        let id = self.parse_identifier()?;
+
+        // var id = ...
+        self.consume(TokenType::Equals);
+
+        // var id = expr
+        let init = self.expression()?;
+
+        let span = Span::combine(&start, &init.position());
+
+        Ok(ASTNode::from(Stmt::VarDeclaration(
+            Box::new(VarDeclaration { id, init }),
+            span,
+        )))
+    }
+
+    fn parse_expression_statement(&mut self) -> Result<ASTNode, ParserError> {
         let expr = self.expression()?;
 
         let span = Span::from(&expr.position());
 
         Ok(ASTNode::from(Stmt::ExpressionStmt(
-            Box::new(ExpressionStmt {expr }),
-            span
+            Box::new(ExpressionStmt { expr }),
+            span,
         )))
     }
 
@@ -422,10 +449,8 @@ impl Parser {
                 // <number>
                 Number(val) => {
                     let span = Span::from(&current.span);
-    
                     let node = ASTNode::from(Expr::Literal(Literal::Number(val), span));
                     self.consume(TokenType::Number(val));
-    
                     return Ok(node);
                 }
                 // ( ...
@@ -435,10 +460,10 @@ impl Parser {
                     self.consume(TokenType::Minus);
                     let op = Op::Subtract;
                     let arg = self.parse_factor()?;
-    
                     let span = Span::combine(&current.span, &arg.position());
-    
-                    let node = ASTNode::from(Expr::UnaryExpr(Box::new(UnaryExpr { arg, op }), span));
+
+                    let node =
+                        ASTNode::from(Expr::UnaryExpr(Box::new(UnaryExpr { arg, op }), span));
                     return Ok(node);
                 }
                 // ! ...
@@ -449,7 +474,8 @@ impl Parser {
 
                     let span = Span::combine(&current.span, &arg.position());
 
-                    let node = ASTNode::from(Expr::UnaryExpr(Box::new(UnaryExpr {arg, op }), span));
+                    let node =
+                        ASTNode::from(Expr::UnaryExpr(Box::new(UnaryExpr { arg, op }), span));
                     return Ok(node);
                 }
                 // "true"
@@ -474,7 +500,7 @@ impl Parser {
                         UnexpectedError(UnexpectedEOF),
                         &Span::new(Rc::clone(&self.source), span.start, span.end + 1),
                     ));
-                } 
+                }
                 // single-line comment
                 Comment(_, false) => {
                     self.advance();
@@ -492,6 +518,30 @@ impl Parser {
                         &current.span,
                     ));
                 }
+            }
+        }
+    }
+
+    fn parse_identifier(&mut self) -> Result<Ident, ParserError> {
+        let token = self.current.as_ref().unwrap().clone();
+
+        match token.token_type {
+            // id
+            TokenType::Ident(id) => {
+                self.consume(TokenType::Ident(id.clone()));
+
+                Ok(Ident {
+                    name: id.to_string(),
+                    pos: Span::from(&token.span),
+                })
+            }
+            // <error>
+            _ => {
+                let err = format!("found unexpected '{}'", token.syntax().to_string());
+                Err(ParserError::new(
+                    ExpectedError(ExpectedIdentifier(err)),
+                    &token.span,
+                ))
             }
         }
     }
@@ -920,6 +970,29 @@ mod tests {
                 Span::new(Rc::clone(&source), 0, 6)
             ))
         )
+    }
+
+    #[test]
+    fn parse_var_assign() {
+        let source = Source::source("var x = 23");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::from(Stmt::VarDeclaration(
+                Box::new(VarDeclaration {
+                    id: Ident {
+                        name: "x".to_string(),
+                        pos: Span::new(Rc::clone(&source), 4, 5)
+                    },
+                    init: ASTNode::from(Expr::Literal(
+                        Literal::Number(23.0),
+                        Span::new(Rc::clone(&source), 8, 10)
+                    ))
+                }),
+                Span::new(Rc::clone(&source), 0, 10)
+            ))
+        );
     }
 
     #[test]

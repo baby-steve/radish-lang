@@ -1,5 +1,11 @@
 use crate::span::Span;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ident {
+    pub name: String,
+    pub pos: Span,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct AST {
     pub items: Vec<ASTNode>,
@@ -41,18 +47,34 @@ impl ASTNode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     ExpressionStmt(Box<ExpressionStmt>, Span),
+    VarDeclaration(Box<VarDeclaration>, Span),
+    // Assignment(Box<Assignment>, Span),
 }
 
 impl Stmt {
     pub fn position(&self) -> Span {
         match self {
-            Self::ExpressionStmt(_, pos) => pos.clone(),
+            Self::VarDeclaration(_, pos)
+            | Self::ExpressionStmt(_, pos) => pos.clone(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExpressionStmt {
+    pub expr: ASTNode,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarDeclaration {
+    pub id: Ident,
+    pub init: ASTNode,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Assignment {
+    pub id: Ident,
+    pub op: OpAssignment,
     pub expr: ASTNode,
 }
 
@@ -112,4 +134,9 @@ pub enum Op {
     GreaterThanEquals,
     EqualsTo,
     NotEqual,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum OpAssignment {
+    Equals,
 }
