@@ -48,13 +48,14 @@ impl ASTNode {
 pub enum Stmt {
     ExpressionStmt(Box<ExpressionStmt>, Span),
     VarDeclaration(Box<VarDeclaration>, Span),
-    // Assignment(Box<Assignment>, Span),
+    Assignment(Box<Assignment>, Span),
 }
 
 impl Stmt {
     pub fn position(&self) -> Span {
         match self {
             Self::VarDeclaration(_, pos)
+            | Self::Assignment(_, pos)
             | Self::ExpressionStmt(_, pos) => pos.clone(),
         }
     }
@@ -83,6 +84,7 @@ pub enum Expr {
     BinaryExpr(Box<BinaryExpr>, Span),
     ParenExpr(Box<ParenExpr>, Span),
     UnaryExpr(Box<UnaryExpr>, Span),
+    Identifier(Ident),
     Literal(Literal, Span),
 }
 
@@ -93,6 +95,15 @@ impl Expr {
             | Self::ParenExpr(_, pos)
             | Self::UnaryExpr(_, pos)
             | Self::Literal(_, pos) => pos.clone(),
+            
+            Self::Identifier(id) => id.pos.clone(),
+        }
+    }
+
+    pub fn is_ident(&self) -> bool {
+        match self {
+            Self::Identifier(_) => true,
+            _ => false,
         }
     }
 }

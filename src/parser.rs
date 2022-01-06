@@ -97,6 +97,8 @@ impl Parser {
         match self.current.as_ref().unwrap().token_type {
             // var ...
             TokenType::Var => self.parse_var_declaration(),
+            // id ...
+            TokenType::Ident(_) => self.parse_assignment_statement(),
             // expr ...
             _ => self.parse_expression_statement(),
         }
@@ -134,6 +136,56 @@ impl Parser {
             Box::new(ExpressionStmt { expr }),
             span,
         )))
+    }
+
+    fn parse_assignment_statement(&mut self) -> Result<ASTNode, ParserError> {
+        let mut node = self.expression()?;
+
+        match self.current.as_ref().unwrap().token_type {
+            // expr = ...
+            TokenType::Equals => {
+                self.consume(TokenType::Equals);
+
+                let id = match node.clone() {
+                    ASTNode::Expr(Expr::Identifier(id)) => id,
+                    _ => {
+                        return Err(
+                            ParserError::new(
+                                ExpectedError(
+                                    ExpectedIdentifier("".to_string())
+                                ),
+                                &node.position(),
+                            )
+                        )
+                    }
+                };
+
+                let right = match self.parse_sum() {
+                    // expr < expr
+                    Ok(expr) => expr,
+                    // expr < <error>
+                    Err(err) => {
+                        return Err(self.make_error(
+                            err.clone(),
+                            ExpectedError(ExpectedExpression(err.error.to_string())),
+                        ))
+                    }
+                };
+
+                let span = Span::combine(&node.position(), &right.position());
+                node = ASTNode::from(Stmt::Assignment(
+                    Box::new(Assignment {
+                        id,
+                        op: OpAssignment::Equals,
+                        expr: right,
+                    }),
+                    span,
+                ));
+                Ok(node)
+            }
+            // expr
+            _ => Ok(node),
+        }
     }
 
     fn expression(&mut self) -> Result<ASTNode, ParserError> {
@@ -440,23 +492,21 @@ impl Parser {
     }
 
     fn parse_factor(&mut self) -> Result<ASTNode, ParserError> {
-        use TokenType::*;
-
         loop {
             let current = self.current.as_ref().unwrap().clone();
 
             match current.token_type {
                 // <number>
-                Number(val) => {
+                TokenType::Number(val) => {
                     let span = Span::from(&current.span);
                     let node = ASTNode::from(Expr::Literal(Literal::Number(val), span));
                     self.consume(TokenType::Number(val));
                     return Ok(node);
                 }
                 // ( ...
-                LeftParen => return self.parse_paren(),
+                TokenType::LeftParen => return self.parse_paren(),
                 // - ...
-                Minus => {
+                TokenType::Minus => {
                     self.consume(TokenType::Minus);
                     let op = Op::Subtract;
                     let arg = self.parse_factor()?;
@@ -467,7 +517,7 @@ impl Parser {
                     return Ok(node);
                 }
                 // ! ...
-                Bang => {
+                TokenType::Bang => {
                     self.consume(TokenType::Bang);
                     let op = Op::Bang;
                     let arg = self.parse_factor()?;
@@ -479,21 +529,30 @@ impl Parser {
                     return Ok(node);
                 }
                 // "true"
-                True => {
+                TokenType::True => {
                     let span = Span::from(&current.span);
                     let node = ASTNode::from(Expr::Literal(Literal::Bool(true), span));
                     self.consume(TokenType::True);
                     return Ok(node);
                 }
                 // "false"
-                False => {
+                TokenType::False => {
                     let span = Span::from(&current.span);
                     let node = ASTNode::from(Expr::Literal(Literal::Bool(false), span));
                     self.consume(TokenType::False);
                     return Ok(node);
                 }
+                // <id>
+                TokenType::Ident(id) => {
+                    let node = ASTNode::from(Expr::Identifier(Ident {
+                        name: id.to_string(),
+                        pos: Span::from(&current.span),
+                    }));
+                    self.consume(TokenType::Ident(id));
+                    return Ok(node);
+                }
                 // <eof>
-                Eof => {
+                TokenType::Eof => {
                     // if an <eof> token is found here, it has to be an error.
                     let span = &current.span;
                     return Err(ParserError::new(
@@ -502,12 +561,12 @@ impl Parser {
                     ));
                 }
                 // single-line comment
-                Comment(_, false) => {
+                TokenType::Comment(_, false) => {
                     self.advance();
                     continue;
                 }
                 // \n
-                Newline => {
+                TokenType::Newline => {
                     self.advance();
                     continue;
                 }
@@ -998,31 +1057,31 @@ mod tests {
     #[test]
     fn test_invaild_expr() {
         let sources = vec![
-            Source::source("12 + error"),
-            Source::source("12 - error"),
-            Source::source("12 * error"),
-            Source::source("12 / error"),
-            Source::source("12 < error"),
-            Source::source("12 > error"),
-            Source::source("12 <= error"),
-            Source::source("12 >= error"),
-            Source::source("12 == error"),
-            Source::source("12 + 3 + error"),
-            Source::source("12 + 3 - error"),
-            Source::source("12 + 3 * error"),
-            Source::source("12 + 3 / error"),
+            Source::source("12 + ?"),
+            Source::source("12 - ?"),
+            Source::source("12 * ?"),
+            Source::source("12 / ?"),
+            Source::source("12 < ?"),
+            Source::source("12 > ?"),
+            Source::source("12 <= ?"),
+            Source::source("12 >= ?"),
+            Source::source("12 == ?"),
+            Source::source("12 + 3 + ?"),
+            Source::source("12 + 3 - ?"),
+            Source::source("12 + 3 * ?"),
+            Source::source("12 + 3 / ?"),
         ];
 
         for source in sources {
             let result = Parser::new(Rc::clone(&source)).parse();
             let err = match result {
                 Err(err) => err,
-                Ok(_) => unreachable!(),
+                Ok(_) => unreachable!("The parser should return an error."),
             };
             assert_eq!(
                 err.error,
                 ExpectedError(ExpectedExpression(
-                    "found unexpected token 'error'.".to_string()
+                    "found unexpected token '?'.".to_string()
                 ))
             );
         }
