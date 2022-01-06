@@ -65,12 +65,13 @@ impl Scanner {
             Some("\n") => self.make_token(TokenType::Newline),
             Some("(") => self.make_token(TokenType::LeftParen),
             Some(")") => self.make_token(TokenType::RightParen),
+            Some("\"") => self.scan_string(),
             None => self.make_token(TokenType::Eof),
             _ if is_alpha(c.unwrap()) => self.identifier(),
             _ if is_digit(c.unwrap()) => self.number(),
             _ => {
                 let msg = format!("{}", c.unwrap());
-                return self.make_error_token(msg);
+                return self.make_error_token(&msg);
             }
         }
     }
@@ -84,9 +85,9 @@ impl Scanner {
         token
     }
 
-    fn make_error_token(&mut self, msg: String) -> Token {
+    fn make_error_token(&mut self, msg: &str) -> Token {
         let span = Span::new(self.source.clone(), self.previous, self.current);
-        Token::new(TokenType::Error(msg.into_boxed_str()), span)
+        Token::new(TokenType::Error(msg.to_string().into_boxed_str()), span)
     }
 
     fn remaining(&mut self) -> &str {
@@ -121,6 +122,10 @@ impl Scanner {
 
             Some(&source[0..end])
         }
+    }
+
+    fn skip_next(&mut self) {
+        self.previous = self.current;
     }
 
     fn match_(&mut self, check: &str) -> bool {
@@ -169,6 +174,25 @@ impl Scanner {
         // incerment previous by two so that the comment message doesn't contain the starting '//'.
         let value = self.source.contents[self.previous + 2..self.current].to_string();
         self.make_token(TokenType::Comment(value.into_boxed_str(), false))
+    }
+
+    fn scan_string(&mut self) -> Token {
+        // first quote
+        self.skip_next();
+
+        while self.peek() != Some("\"") {
+            if self.peek() == None {
+                return self.make_error_token("Unterminated string");
+            }
+            self.advance();
+        };
+
+        let value = self.source.contents[self.previous..self.current].to_string();
+        // closing quote
+        self.advance();
+        self.skip_next();
+
+        self.make_token(TokenType::String(value.into_boxed_str()))
     }
 
     fn skip_whitespace(&mut self) -> &mut Self {
@@ -396,6 +420,27 @@ mod tests {
         assert_eq!(scanner.scan_token().token_type, TokenType::Plus);
         assert_eq!(scanner.scan_token().token_type, TokenType::Number(456.0));
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_string_token() {
+        let src = "2 \"Hello, World!\" 3";
+        let mut scanner = new_test_scanner(src);
+        scanner.scan_token();
+        assert_eq!(
+            scanner.scan_token().token_type,
+            TokenType::String("Hello, World!".to_string().into_boxed_str())
+        );
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(3.0));
+
+        let src = "2 \"\" 3";
+        let mut scanner = new_test_scanner(src);
+        scanner.scan_token();
+        assert_eq!(
+            scanner.scan_token().token_type,
+            TokenType::String("".to_string().into_boxed_str())
+        );
+        assert_eq!(scanner.scan_token().token_type, TokenType::Number(3.0));
     }
 
     #[test]

@@ -42,10 +42,14 @@ pub enum TokenType {
     // var (might change)
     Var,
 
+    // number
     Number(f64),
+    // id
     Ident(Box<str>),
     // bool is for if the comment is multiline.
     Comment(Box<str>, bool),
+    // string
+    String(Box<str>),
 
     Error(Box<str>),
     // <Eof>
@@ -78,6 +82,7 @@ impl fmt::Display for TokenType {
             Number(_) => write!(f, "Number"),
             Ident(_) => write!(f, "Ident"),
             Comment(_, _) => write!(f, "Comment"),
+            String(_) => write!(f, "String"),
             Error(_) => write!(f, "Error"),
             Eof => write!(f, "Eof"),
         }
@@ -132,6 +137,7 @@ impl Token {
             Number(val) => val.to_string().into(),
             Ident(id) => id.to_string().into(),
             Comment(msg, _) => msg.to_string().into(),
+            String(val) => val.to_string().into(),
             Error(err) => err.to_string().into(),
 
             _ => self.literal_syntax().into(),
