@@ -2,10 +2,9 @@
 #[derive(Debug, PartialEq, Eq)]
 pub enum Opcode {
     Constant,
-    
+    Pop,    
     True,
     False,
-
     Add,
     Subtract,
     Multiply,

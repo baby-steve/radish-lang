@@ -75,6 +75,9 @@ impl VM {
                 Opcode::False => {
                     self.stack.push(Value::Boolean(false));
                 }
+                Opcode::Pop => {
+                    self.stack.pop();
+                }
                 Opcode::Negate => {
                     let value = self.stack.pop().unwrap();
                     self.stack.push(-value);
