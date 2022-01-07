@@ -130,6 +130,7 @@ pub struct UnaryExpr {
 pub enum Literal {
     Number(f64),
     Bool(bool),
+    String(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]

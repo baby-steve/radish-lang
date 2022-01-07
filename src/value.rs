@@ -5,6 +5,7 @@ use std::ops::{Add, Div, Mul, Neg, Not, Sub};
 pub enum Value {
     Number(f64),
     Boolean(bool),
+    String(String),
 }
 
 impl From<f64> for Value {
@@ -25,6 +26,7 @@ impl fmt::Display for Value {
             Value::Number(num) => f.write_str(&format!("{}", num.to_string())),
             Value::Boolean(false) => f.write_str("false"),
             Value::Boolean(true) => f.write_str("true"),
+            Value::String(val) => f.write_str(&format!("{}", val)),
         }
     }
 }

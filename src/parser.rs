@@ -503,6 +503,13 @@ impl Parser {
                     self.consume(TokenType::Number(val));
                     return Ok(node);
                 }
+                // <string>
+                TokenType::String(val) => {
+                    let span = Span::from(&current.span);
+                    let node = ASTNode::from(Expr::Literal(Literal::String(val.to_string()), span));
+                    self.consume(TokenType::String(val));
+                    return Ok(node);
+                }
                 // ( ...
                 TokenType::LeftParen => return self.parse_paren(),
                 // - ...
