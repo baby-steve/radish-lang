@@ -23,6 +23,7 @@ impl fmt::Display for UnexpectedError {
 /// An error for when one thing is expected, but found something else.
 pub enum ExpectedError {
     ExpectedExpression(String),
+    ExpectedIdentifier(String),
     ExpectedRightParen(String),
 }
 
@@ -32,6 +33,7 @@ impl fmt::Display for ExpectedError {
 
         match &self {
             ExpectedExpression(p) => f.write_str(&format!("Expected expression, {}", p)),
+            ExpectedIdentifier(p) => f.write_str(&format!("Expected an identifier, {}", p)),
             ExpectedRightParen(p) => f.write_str(&format!("Expected right parenthesis, {}", p)),
         }
     }

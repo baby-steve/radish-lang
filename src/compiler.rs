@@ -55,14 +55,46 @@ impl Compiler {
         self.chunk.add_constant(value) as u8
     }
 
-    fn grouping(&mut self, expr: &ParenExpr) {
-        self.visit(&expr.expr);
+    fn identifier_constant(&mut self, name: &str) -> u8 {
+        self.make_constant(Value::String(name.to_string())) as u8
+    }
+
+    fn define_variable(&mut self, global: u8) {
+        self.emit_bytes(Opcode::DefGlobal as u8, global);
+    }
+
+    fn named_variable(&mut self, name: &str) {
+        let arg = self.identifier_constant(name);
+        self.emit_bytes(Opcode::GetGlobal as u8, arg);
     }
 
     fn statement(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::ExpressionStmt(expr, _) => self.visit(&expr.expr),
+            Stmt::ExpressionStmt(expr, _) => self.expression_stmt(&expr),
+            Stmt::VarDeclaration(decl, _) => self.var_declaration(&decl),
+            Stmt::Assignment(stmt, _) => self.assignment(&stmt),
         }
+    }
+
+    fn var_declaration(&mut self, decl: &VarDeclaration) {
+        let global = self.identifier_constant(&decl.id.name);
+
+        self.visit(&decl.init);
+
+        self.define_variable(global);
+    }
+
+    fn assignment(&mut self, stmt: &Assignment) {
+        self.visit(&stmt.expr);
+
+        let arg = self.identifier_constant(&stmt.id.name);
+        self.emit_bytes(Opcode::SetGlobal as u8, arg);
+    }
+
+    fn expression_stmt(&mut self, stmt: &ExpressionStmt) {
+        self.visit(&stmt.expr);
+
+        self.emit_byte(Opcode::Pop as u8);
     }
 
     fn expression(&mut self, expr: &Expr) {
@@ -70,15 +102,20 @@ impl Compiler {
             Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
             Expr::ParenExpr(expr, _) => self.grouping(expr),
             Expr::UnaryExpr(arg, _) => self.unary(arg),
+            Expr::Identifier(id) => self.identifier(id),
             Expr::Literal(lit, _) => self.literal(lit),
         }
+    }
+
+    fn grouping(&mut self, expr: &ParenExpr) {
+        self.visit(&expr.expr);
     }
 
     fn binary_expression(&mut self, expr: &BinaryExpr) {
         self.visit(&expr.left);
         self.visit(&expr.right);
 
-        match expr.op {
+        match &expr.op {
             Op::Add => self.emit_byte(Opcode::Add as u8),
             Op::Subtract => self.emit_byte(Opcode::Subtract as u8),
             Op::Multiply => self.emit_byte(Opcode::Multiply as u8),
@@ -87,7 +124,9 @@ impl Compiler {
             Op::LessThanEquals => self.emit_byte(Opcode::LessThanEquals as u8),
             Op::GreaterThan => self.emit_byte(Opcode::GreaterThan as u8),
             Op::GreaterThanEquals => self.emit_byte(Opcode::GreaterThanEquals as u8),
-            Op::EqualsTo => self.emit_byte(Opcode::EqualsTo as u8),            
+            Op::EqualsTo => self.emit_byte(Opcode::EqualsTo as u8),      
+            Op::NotEqual => self.emit_byte(Opcode::NotEqual as u8),      
+            _ => unreachable!("{:?} is not a binary operator.", &expr.op),
         }
     }
 
@@ -96,19 +135,29 @@ impl Compiler {
 
         match &node.op {
             Op::Subtract => self.emit_byte(Opcode::Negate as u8),
-            _ => unreachable!(), // Add error message?
+            Op::Bang => self.emit_byte(Opcode::Not as u8),
+            _ => unreachable!("{:?} is not an unary operator.", &node.op),
         }
+    }
+
+    fn identifier(&mut self, id: &Ident) {
+        self.named_variable(&id.name);
     }
 
     fn literal(&mut self, node: &Literal) {
         match node {
             Literal::Number(val) => self.number(val),
             Literal::Bool(val) => self.boolean(val),
+            Literal::String(val) => self.string(val),
         }
     }
 
     fn number(&mut self, val: &f64) {
         self.emit_constant(Value::Number(*val));
+    }
+
+    fn string(&mut self, val: &str) {
+        self.emit_constant(Value::String(val.to_string()));
     }
 
     fn boolean(&mut self, val: &bool) {
@@ -145,6 +194,7 @@ mod tests {
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
                 Opcode::Add as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -163,6 +213,7 @@ mod tests {
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
                 Opcode::Subtract as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -181,6 +232,7 @@ mod tests {
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
                 Opcode::Multiply as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -199,6 +251,7 @@ mod tests {
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
                 Opcode::Divide as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -217,6 +270,7 @@ mod tests {
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
                 Opcode::LessThan as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -235,6 +289,7 @@ mod tests {
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
                 Opcode::LessThanEquals as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -253,6 +308,7 @@ mod tests {
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
                 Opcode::GreaterThan as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -271,6 +327,7 @@ mod tests {
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
                 Opcode::GreaterThanEquals as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -289,12 +346,32 @@ mod tests {
                 Opcode::Constant as u8, 0,
                 Opcode::Constant as u8, 1,
                 Opcode::EqualsTo as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
         assert_eq!(
          result.chunk.constants,
             vec!(Value::Number(5.0), Value::Number(2.0),)
+        );
+    }
+
+    #[test]
+    fn compile_not_equal_expr() {
+        let result = run_test_compiler("5 != 2");
+        assert_eq!(
+         result.chunk.code,
+            vec!(
+                Opcode::Constant as u8, 0,
+                Opcode::Constant as u8, 1,
+                Opcode::NotEqual as u8,
+                Opcode::Pop as u8,
+                Opcode::Halt as u8
+            )
+        );
+        assert_eq!(
+         result.chunk.constants,
+            vec!(Value::Number(5.0), Value::Number(2.0))
         );
     }
 
@@ -309,6 +386,7 @@ mod tests {
                 Opcode::Constant as u8, 2,
                 Opcode::Multiply as u8,
                 Opcode::Add as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -326,6 +404,7 @@ mod tests {
             vec!(
                 Opcode::Constant as u8, 0,
                 Opcode::Negate as u8,
+                Opcode::Pop as u8,
                 Opcode::Halt as u8
             )
         );
@@ -333,11 +412,38 @@ mod tests {
     }
 
     #[test]
+    fn compile_unary_not() {
+        let result = run_test_compiler("!true");
+        assert_eq!(
+            result.chunk.code,
+            vec![
+                Opcode::True as u8,
+                Opcode::Not as u8,
+                Opcode::Pop as u8,
+                Opcode::Halt as u8
+            ]
+        );
+    }
+
+    #[test]
     fn compile_boolean_literal() {
         let result = run_test_compiler("true");
-        assert_eq!(result.chunk.code, vec!(Opcode::True as u8, Opcode::Halt as u8));
+        assert_eq!(result.chunk.code, vec!(Opcode::True as u8, Opcode::Pop as u8, Opcode::Halt as u8));
 
         let result = run_test_compiler("false");
-        assert_eq!(result.chunk.code, vec!(Opcode::False as u8, Opcode::Halt as u8));
+        assert_eq!(result.chunk.code, vec!(Opcode::False as u8, Opcode::Pop as u8, Opcode::Halt as u8));
+    }
+
+    #[test]
+    fn compile_string_literal() {
+        let result = run_test_compiler("\"Hello, World!\"");
+        assert_eq!(
+            result.chunk.code,
+            vec![
+                Opcode::Constant as u8, 0,
+                Opcode::Pop as u8,
+                Opcode::Halt as u8, 
+            ]
+        );
     }
 }

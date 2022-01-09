@@ -1,7 +1,10 @@
+use std::collections::hash_map::Entry::{Vacant, Occupied};
+use std::collections::HashMap;
+
 use crate::opcode::Opcode;
 use crate::value::Value;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
@@ -15,7 +18,7 @@ impl Chunk {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Stack {
     stack: Vec<Value>,
 }
@@ -42,10 +45,13 @@ impl Stack {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub struct VM {
     pub chunk: Chunk,
     pub stack: Stack,
     pub ip: usize,
+
+    pub globals: HashMap<String, Value>,
 }
 
 impl VM {
@@ -54,6 +60,7 @@ impl VM {
             chunk,
             ip: 0,
             stack: Stack::new(),
+            globals: HashMap::new(),
         }
     }
 
@@ -63,6 +70,12 @@ impl VM {
 
     fn run(&mut self) {
         loop {
+
+            for slot in &self.stack.stack {
+                print!("[ {} ]", &slot);
+            }
+            print!("\n");
+
             match self.decode_opcode() {
                 Opcode::Constant => {
                     self.ip += 1;
@@ -75,9 +88,40 @@ impl VM {
                 Opcode::False => {
                     self.stack.push(Value::Boolean(false));
                 }
+                Opcode::Pop => {
+                    self.stack.pop();
+                }
+                Opcode::DefGlobal => {
+                    self.ip += 1;
+                    let name = self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone();
+                    self.globals.insert(name.to_string(), self.stack.peek().unwrap());
+                    self.stack.pop();
+                }
+                Opcode::GetGlobal => {
+                    self.ip += 1;
+                    let name = self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone();
+                    match self.globals.get(&name.to_string()) {
+                        Some(value) => self.stack.push(value.clone()),
+                        None => panic!("Found an undefined global."),
+                    }
+                }
+                Opcode::SetGlobal => {
+                    self.ip += 1;
+                    let name = self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone();
+                    let entry = self.globals.entry(name.to_string());
+                    match entry {
+                        Occupied(mut val) => val.insert(self.stack.pop().unwrap()),
+                        Vacant(_) => panic!("Cannot assign to a undefined global variable"),
+                    };
+                    println!("{:?}", self.globals);
+                }
                 Opcode::Negate => {
                     let value = self.stack.pop().unwrap();
                     self.stack.push(-value);
+                }
+                Opcode::Not => {
+                    let value = self.stack.pop().unwrap();
+                    self.stack.push(!value);
                 }
                 Opcode::Add => {
                     let b = self.stack.pop().unwrap();
@@ -123,6 +167,11 @@ impl VM {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a == b));
+                }
+                Opcode::NotEqual => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(Value::Boolean(a != b));
                 }
                 Opcode::Halt => {
                     println!("VM Stack: {:?}", self.stack);
@@ -290,6 +339,20 @@ mod tests {
     }
 
     #[test]
+    fn test_not_equal_opcode() {
+        let code = vec![
+            Opcode::Constant as u8, 0,
+            Opcode::Constant as u8, 1,
+            Opcode::NotEqual as u8,
+            Opcode::Halt as u8,            
+        ];
+        let constants = vec![Value::Number(9.0), Value::Number(5.0)];
+        let mut vm = VM::new(Chunk { code, constants });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
+    }
+
+    #[test]
     fn test_multiple_opcodes() {
         let code = vec![
             Opcode::Constant as u8, 0,
@@ -329,6 +392,18 @@ mod tests {
     }
 
     #[test]
+    fn test_not_opcode() {
+        let code = vec![
+            Opcode::True as u8,
+            Opcode::Not as u8,
+            Opcode::Halt as u8
+        ];
+        let mut vm = VM::new(Chunk { code, constants: vec![] });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::from(false)));
+    }
+
+    #[test]
     fn test_true_opcode() {
         let code = vec!(Opcode::True as u8, Opcode::Halt as u8);
         let mut vm = VM::new(Chunk { code, constants: vec!() });
@@ -342,5 +417,23 @@ mod tests {
         let mut vm = VM::new(Chunk { code, constants: vec!() });
         vm.run();
         assert_eq!(vm.stack.peek(), Some(Value::Boolean(false)));
+    }
+
+    #[test]
+    fn test_define_global_opcode() {
+        let code = vec![
+            Opcode::Constant as u8, 1, // 23
+            Opcode::DefGlobal as u8, 0, // "a"
+            Opcode::Halt as u8,
+        ];
+
+        let constants = vec![Value::from("a"), Value::from(23.0)];
+
+        let mut vm = VM::new(Chunk {code, constants});
+        vm.run();
+
+        println!("{:?}", vm.stack);
+        println!("{:?}", vm.globals);
+        assert_eq!(vm.globals.get("a"), Some(&Value::from(23.0)));
     }
 }

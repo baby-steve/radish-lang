@@ -1,5 +1,11 @@
 use crate::span::Span;
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Ident {
+    pub name: String,
+    pub pos: Span,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct AST {
     pub items: Vec<ASTNode>,
@@ -41,12 +47,16 @@ impl ASTNode {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     ExpressionStmt(Box<ExpressionStmt>, Span),
+    VarDeclaration(Box<VarDeclaration>, Span),
+    Assignment(Box<Assignment>, Span),
 }
 
 impl Stmt {
     pub fn position(&self) -> Span {
         match self {
-            Self::ExpressionStmt(_, pos) => pos.clone(),
+            Self::VarDeclaration(_, pos)
+            | Self::Assignment(_, pos)
+            | Self::ExpressionStmt(_, pos) => pos.clone(),
         }
     }
 }
@@ -57,10 +67,24 @@ pub struct ExpressionStmt {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+pub struct VarDeclaration {
+    pub id: Ident,
+    pub init: ASTNode,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Assignment {
+    pub id: Ident,
+    pub op: OpAssignment,
+    pub expr: ASTNode,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     BinaryExpr(Box<BinaryExpr>, Span),
     ParenExpr(Box<ParenExpr>, Span),
     UnaryExpr(Box<UnaryExpr>, Span),
+    Identifier(Ident),
     Literal(Literal, Span),
 }
 
@@ -71,6 +95,15 @@ impl Expr {
             | Self::ParenExpr(_, pos)
             | Self::UnaryExpr(_, pos)
             | Self::Literal(_, pos) => pos.clone(),
+            
+            Self::Identifier(id) => id.pos.clone(),
+        }
+    }
+
+    pub fn is_ident(&self) -> bool {
+        match self {
+            Self::Identifier(_) => true,
+            _ => false,
         }
     }
 }
@@ -97,6 +130,7 @@ pub struct UnaryExpr {
 pub enum Literal {
     Number(f64),
     Bool(bool),
+    String(String),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,9 +139,16 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    Bang,
     LessThan,
     LessThanEquals,
     GreaterThan,
     GreaterThanEquals,
     EqualsTo,
+    NotEqual,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum OpAssignment {
+    Equals,
 }

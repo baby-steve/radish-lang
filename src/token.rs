@@ -5,29 +5,54 @@ use crate::span::Span;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
+    // +
     Plus,
+    // /
     Slash,
+    // *
     Star,
+    // -
     Minus,
+    // !
+    Bang,
+    // =
     Equals,
+    // <
     LessThan,
-    GreaterThan,
+    // <=
     LessThanEquals,
+    // >
+    GreaterThan,
+    // >=
     GreaterThanEquals,
+    // ==
     EqualsTo,
+    // !=
+    NotEqual,
+    // \n
     Newline,
+    // (
     LeftParen,
+    // )
     RightParen,
-
+    // true
     True,
+    // false
     False,
+    // var (might change)
+    Var,
 
+    // number
     Number(f64),
+    // id
     Ident(Box<str>),
     // bool is for if the comment is multiline.
     Comment(Box<str>, bool),
+    // string
+    String(Box<str>),
 
     Error(Box<str>),
+    // <Eof>
     Eof,
 }
 
@@ -40,20 +65,24 @@ impl fmt::Display for TokenType {
             Slash => write!(f, "Slash"),
             Star => write!(f, "Star"),
             Minus => write!(f, "Minus"),
+            Bang => write!(f, "Bang"),
             Equals => write!(f, "Equals"),
             LessThan => write!(f, "LessThan"),
-            GreaterThan => write!(f, "GreaterThan"),
             LessThanEquals => write!(f, "LessThanEquals"),
+            GreaterThan => write!(f, "GreaterThan"),
             GreaterThanEquals => write!(f, "GreaterThanEquals"),
             EqualsTo => write!(f, "EqualsTo"),
+            NotEqual => write!(f, "NotEqual"),
             Newline => write!(f, "Newline"),
             LeftParen => write!(f, "LeftParen"),
             RightParen => write!(f, "RightParen"),
             True => write!(f, "True"),
             False => write!(f, "False"),
+            Var => write!(f, "Var"),
             Number(_) => write!(f, "Number"),
             Ident(_) => write!(f, "Ident"),
             Comment(_, _) => write!(f, "Comment"),
+            String(_) => write!(f, "String"),
             Error(_) => write!(f, "Error"),
             Eof => write!(f, "Eof"),
         }
@@ -79,18 +108,21 @@ impl Token {
             Minus => "-",
             Star => "*",
             Slash => "/",
+            Bang => "!",
             Equals => "=",
             LessThan => "<",
             GreaterThan => ">",
             LessThanEquals => "<=",
             GreaterThanEquals => ">=",
             EqualsTo => "==",
+            NotEqual => "!=",
             Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
 
             True => "true",
             False => "false",
+            Var => "var",
 
             Eof => "<Eof>",
 
@@ -105,6 +137,7 @@ impl Token {
             Number(val) => val.to_string().into(),
             Ident(id) => id.to_string().into(),
             Comment(msg, _) => msg.to_string().into(),
+            String(val) => val.to_string().into(),
             Error(err) => err.to_string().into(),
 
             _ => self.literal_syntax().into(),

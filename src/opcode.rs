@@ -2,10 +2,14 @@
 #[derive(Debug, PartialEq, Eq)]
 pub enum Opcode {
     Constant,
+    Pop,   
     
+    DefGlobal,
+    GetGlobal,
+    SetGlobal,
+
     True,
     False,
-
     Add,
     Subtract,
     Multiply,
@@ -15,8 +19,10 @@ pub enum Opcode {
     GreaterThan,
     GreaterThanEquals,
     EqualsTo,
+    NotEqual,
 
     Negate,
+    Not,
 
     Halt,
 }
