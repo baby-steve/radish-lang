@@ -2,7 +2,12 @@
 #[derive(Debug, PartialEq, Eq)]
 pub enum Opcode {
     Constant,
-    Pop,    
+    Pop,   
+    
+    DefGlobal,
+    GetGlobal,
+    SetGlobal,
+
     True,
     False,
     Add,

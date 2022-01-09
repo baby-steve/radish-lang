@@ -20,6 +20,12 @@ impl From<bool> for Value {
     }
 }
 
+impl From<&str> for Value {
+    fn from(val: &str) -> Self {
+        Value::String(val.to_string())
+    }
+}
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

@@ -55,6 +55,19 @@ impl Compiler {
         self.chunk.add_constant(value) as u8
     }
 
+    fn identifier_constant(&mut self, name: &str) -> u8 {
+        self.make_constant(Value::String(name.to_string())) as u8
+    }
+
+    fn define_variable(&mut self, global: u8) {
+        self.emit_bytes(Opcode::DefGlobal as u8, global);
+    }
+
+    fn named_variable(&mut self, name: &str) {
+        let arg = self.identifier_constant(name);
+        self.emit_bytes(Opcode::GetGlobal as u8, arg);
+    }
+
     fn statement(&mut self, stmt: &Stmt) {
         match stmt {
             Stmt::ExpressionStmt(expr, _) => self.expression_stmt(&expr),
@@ -64,11 +77,18 @@ impl Compiler {
     }
 
     fn var_declaration(&mut self, decl: &VarDeclaration) {
-        todo!()
+        let global = self.identifier_constant(&decl.id.name);
+
+        self.visit(&decl.init);
+
+        self.define_variable(global);
     }
 
     fn assignment(&mut self, stmt: &Assignment) {
-        todo!()
+        self.visit(&stmt.expr);
+
+        let arg = self.identifier_constant(&stmt.id.name);
+        self.emit_bytes(Opcode::SetGlobal as u8, arg);
     }
 
     fn expression_stmt(&mut self, stmt: &ExpressionStmt) {
@@ -121,7 +141,7 @@ impl Compiler {
     }
 
     fn identifier(&mut self, id: &Ident) {
-        todo!()
+        self.named_variable(&id.name);
     }
 
     fn literal(&mut self, node: &Literal) {
