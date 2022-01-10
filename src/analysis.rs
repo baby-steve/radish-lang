@@ -1,10 +1,7 @@
-use std::fmt;
 use std::collections::HashSet;
+use std::fmt;
 
-use crate::{
-    span::Span,
-    ast::*,
-};
+use crate::{ast::*, span::Span, visitor::Visitor};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SemanticError {
@@ -31,7 +28,9 @@ pub struct SymbolTable {
 
 impl SymbolTable {
     pub fn new() -> Self {
-        SymbolTable { symbols: HashSet::new() }
+        SymbolTable {
+            symbols: HashSet::new(),
+        }
     }
 
     pub fn insert(&mut self, value: Symbol) -> bool {
@@ -39,8 +38,16 @@ impl SymbolTable {
     }
 }
 
-pub struct SemanticAnalyzer {
+pub struct SemanticAnalyzer {}
 
+impl Visitor for SemanticAnalyzer {
+    fn var_declaration(&mut self, decl: &VarDeclaration) {
+        self.visit(&decl.init);
+    }
+
+    fn assignment(&mut self, stmt: &Assignment) {}
+
+    fn identifier(&mut self, id: &Ident) {}
 }
 
 impl SemanticAnalyzer {
@@ -52,59 +59,5 @@ impl SemanticAnalyzer {
         for node in &ast.items {
             self.visit(&node)
         }
-    }
-
-    fn visit(&mut self, node: &ASTNode) {
-        match node {
-            ASTNode::Stmt(stmt) => self.statement(&stmt),
-            ASTNode::Expr(expr) => self.expression(&expr),
-        }
-    }
-
-    fn statement(&mut self, stmt: &Stmt) {
-        match stmt {
-            Stmt::ExpressionStmt(expr, _) => self.visit(&expr.expr),
-            Stmt::VarDeclaration(decl, _) => self.var_declaration(&decl),
-            Stmt::Assignment(stmt, _) => self.assignment(&stmt),
-        }
-    }
-
-    fn var_declaration(&mut self, decl: &VarDeclaration) {
-        self.visit(&decl.init);
-
-        
-    }
-
-    fn assignment(&mut self, stmt: &Assignment) {
-
-    }
-
-    fn expression(&mut self, expr: &Expr) {
-        use Expr::*;
-
-        match expr {
-            BinaryExpr(expr, _) => self.binary_expression(&expr),
-            ParenExpr(expr, _) => self.grouping(&expr),
-            UnaryExpr(arg, _) => self.unary(&arg),
-            Identifier(id) => self.identifier(&id),
-            Literal(_, _) => return,
-        }
-    }
-
-    fn grouping(&mut self, expr: &ParenExpr) {
-        self.visit(&expr.expr);
-    }
-
-    fn binary_expression(&mut self, expr: &BinaryExpr) {
-        self.visit(&expr.left);
-        self.visit(&expr.right);
-    }
-
-    fn unary(&mut self, node: &UnaryExpr) {
-        self.visit(&node.arg);
-    }
-
-    fn identifier(&mut self, id: &Ident) {
-
     }
 }

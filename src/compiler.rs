@@ -2,80 +2,13 @@ use crate::ast::*;
 use crate::opcode::Opcode;
 use crate::value::Value;
 use crate::vm::Chunk;
+use crate::visitor::Visitor;
 
 pub struct Compiler {
     pub chunk: Chunk,
 }
 
-impl Compiler {
-    pub fn new() -> Compiler {
-        Compiler {
-            chunk: Chunk {
-                code: vec![],
-                constants: vec![],
-            },
-        }
-    }
-    pub fn run(&mut self, ast: &AST) {
-        for node in &ast.items {
-            self.visit(node);
-        }
-
-        self.emit_return();
-    }
-
-    fn visit(&mut self, node: &ASTNode) {
-        match node {
-            ASTNode::Expr(expr) => self.expression(expr),
-            ASTNode::Stmt(stmt) => self.statement(stmt),
-        }
-    }
-
-    fn emit_byte(&mut self, byte: u8) {
-        // should also emit the byte's location in source?
-        self.chunk.code.push(byte);
-    }
-
-    fn emit_bytes(&mut self, byte_1: u8, byte_2: u8) {
-        self.emit_byte(byte_1);
-        self.emit_byte(byte_2);
-    }
-
-    fn emit_return(&mut self) {
-        self.emit_byte(Opcode::Halt as u8);
-    }
-
-    fn emit_constant(&mut self, value: Value) {
-        // Todo: if there are over 255 constants in one chunk, should emit a load_long opcode.
-        let index = self.make_constant(value);
-        self.emit_bytes(Opcode::Constant as u8, index);
-    }
-
-    fn make_constant(&mut self, value: Value) -> u8 {
-        self.chunk.add_constant(value) as u8
-    }
-
-    fn identifier_constant(&mut self, name: &str) -> u8 {
-        self.make_constant(Value::String(name.to_string())) as u8
-    }
-
-    fn define_variable(&mut self, global: u8) {
-        self.emit_bytes(Opcode::DefGlobal as u8, global);
-    }
-
-    fn named_variable(&mut self, name: &str) {
-        let arg = self.identifier_constant(name);
-        self.emit_bytes(Opcode::GetGlobal as u8, arg);
-    }
-
-    fn statement(&mut self, stmt: &Stmt) {
-        match stmt {
-            Stmt::ExpressionStmt(expr, _) => self.expression_stmt(&expr),
-            Stmt::VarDeclaration(decl, _) => self.var_declaration(&decl),
-            Stmt::Assignment(stmt, _) => self.assignment(&stmt),
-        }
-    }
-
+impl Visitor for Compiler {
     fn var_declaration(&mut self, decl: &VarDeclaration) {
         let global = self.identifier_constant(&decl.id.name);
 
@@ -95,20 +28,6 @@ impl Compiler {
         self.visit(&stmt.expr);
 
         self.emit_byte(Opcode::Pop as u8);
-    }
-
-    fn expression(&mut self, expr: &Expr) {
-        match expr {
-            Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
-            Expr::ParenExpr(expr, _) => self.grouping(expr),
-            Expr::UnaryExpr(arg, _) => self.unary(arg),
-            Expr::Identifier(id) => self.identifier(id),
-            Expr::Literal(lit, _) => self.literal(lit),
-        }
-    }
-
-    fn grouping(&mut self, expr: &ParenExpr) {
-        self.visit(&expr.expr);
     }
 
     fn binary_expression(&mut self, expr: &BinaryExpr) {
@@ -144,14 +63,6 @@ impl Compiler {
         self.named_variable(&id.name);
     }
 
-    fn literal(&mut self, node: &Literal) {
-        match node {
-            Literal::Number(val) => self.number(val),
-            Literal::Bool(val) => self.boolean(val),
-            Literal::String(val) => self.string(val),
-        }
-    }
-
     fn number(&mut self, val: &f64) {
         self.emit_constant(Value::Number(*val));
     }
@@ -165,6 +76,61 @@ impl Compiler {
             true => self.emit_byte(Opcode::True as u8),
             false => self.emit_byte(Opcode::False as u8),
         }
+    }
+}
+
+impl Compiler {
+    pub fn new() -> Compiler {
+        Compiler {
+            chunk: Chunk {
+                code: vec![],
+                constants: vec![],
+            },
+        }
+    }
+    pub fn run(&mut self, ast: &AST) {
+        for node in &ast.items {
+            self.visit(node);
+        }
+
+        self.emit_return();
+    }
+
+    fn emit_byte(&mut self, byte: u8) {
+        // should also emit the byte's location in source?
+        self.chunk.code.push(byte);
+    }
+
+    fn emit_bytes(&mut self, byte_1: u8, byte_2: u8) {
+        self.emit_byte(byte_1);
+        self.emit_byte(byte_2);
+    }
+
+    fn emit_return(&mut self) {
+        self.emit_byte(Opcode::Halt as u8);
+    }
+
+    fn emit_constant(&mut self, value: Value) {
+        // Todo: if there are over 255 constants in one chunk, should emit a load_long opcode.
+        let index = self.make_constant(value);
+        self.emit_bytes(Opcode::LoadConst as u8, index);
+    }
+
+    fn make_constant(&mut self, value: Value) -> u8 {
+        self.chunk.add_constant(value) as u8
+    }
+
+    fn identifier_constant(&mut self, name: &str) -> u8 {
+        self.make_constant(Value::String(name.to_string())) as u8
+    }
+
+    fn define_variable(&mut self, global: u8) {
+        self.emit_bytes(Opcode::DefGlobal as u8, global);
+    }
+
+    fn named_variable(&mut self, name: &str) {
+        let arg = self.identifier_constant(name);
+        self.emit_bytes(Opcode::GetGlobal as u8, arg);
     }
 }
 
@@ -191,8 +157,8 @@ mod tests {
         assert_eq!(
             result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::Add as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -210,8 +176,8 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::Subtract as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -229,8 +195,8 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::Multiply as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -248,8 +214,8 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::Divide as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -267,8 +233,8 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::LessThan as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -286,8 +252,8 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::LessThanEquals as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -305,8 +271,8 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::GreaterThan as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -324,8 +290,8 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::GreaterThanEquals as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -343,8 +309,8 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::EqualsTo as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -362,8 +328,8 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
                 Opcode::NotEqual as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -381,9 +347,9 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
-                Opcode::Constant as u8, 1,
-                Opcode::Constant as u8, 2,
+                Opcode::LoadConst as u8, 0,
+                Opcode::LoadConst as u8, 1,
+                Opcode::LoadConst as u8, 2,
                 Opcode::Multiply as u8,
                 Opcode::Add as u8,
                 Opcode::Pop as u8,
@@ -402,7 +368,7 @@ mod tests {
         assert_eq!(
          result.chunk.code,
             vec!(
-                Opcode::Constant as u8, 0,
+                Opcode::LoadConst as u8, 0,
                 Opcode::Negate as u8,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8
@@ -440,7 +406,7 @@ mod tests {
         assert_eq!(
             result.chunk.code,
             vec![
-                Opcode::Constant as u8, 0,
+                Opcode::LoadConst as u8, 0,
                 Opcode::Pop as u8,
                 Opcode::Halt as u8, 
             ]

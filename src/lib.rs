@@ -9,4 +9,5 @@ pub mod source;
 pub mod span;
 pub mod token;
 pub mod value;
+pub mod visitor;
 pub mod vm;
