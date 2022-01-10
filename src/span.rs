@@ -103,15 +103,9 @@ impl fmt::Display for Span {
         let contents = self.source.contents.clone();
         let lines = Span::lines(&contents);
 
-        let (start_line, start_col) = match Span::get_line_index(&contents, self.start) {
-            Some(pos) => pos,
-            None => unreachable!(),
-        };
+        let (start_line, start_col) = Span::get_line_index(&contents, self.start).unwrap();
 
-        let (end_line, _end_col) = match Span::get_line_index(&contents, self.start) {
-            Some(pos) => pos,
-            None => unreachable!(),
-        };
+        let (end_line, _end_col) = Span::get_line_index(&contents, self.end).unwrap();
 
         let readable_start_line = (start_line + 1).to_string();
         let readable_end_line = (end_line + 1).to_string();
@@ -145,10 +139,22 @@ impl fmt::Display for Span {
             writeln!(f, "{}", excerpt)?;
             writeln!(f, "{}", span)
         } else {
-            writeln!(f, "Hey stupid, you forgot to implement support for mutliline errors")
-        }
+            let mut formatted = vec![];
 
-        //writeln!(f, "{}", separator)
+            for (i, line) in lines.iter().enumerate() {
+                let readable_line_no = (start_line + i + 1).to_string();
+                let partial_padding = " ".repeat(padding - readable_line_no.len());
+                formatted.push(format!(
+                    " {}{} |> {}",
+                    partial_padding, readable_line_no, line
+                ));
+            }
+
+            writeln!(f, "{}", location)?;
+            writeln!(f, "{}", separator)?;
+            writeln!(f, "{}", formatted.join("\n"))?;
+            writeln!(f, "{}", separator)
+        }
     }
 }
 
