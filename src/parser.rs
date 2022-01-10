@@ -149,21 +149,18 @@ impl Parser {
                 let id = match node.clone() {
                     ASTNode::Expr(Expr::Identifier(id)) => id,
                     _ => {
-                        return Err(
-                            ParserError::new(
-                                ExpectedError(
-                                    ExpectedIdentifier("".to_string())
-                                ),
-                                &node.position(),
-                            )
-                        )
+                        return Err(ParserError::new(
+                            ExpectedError(ExpectedIdentifier("".to_string())),
+                            &node.position(),
+                        ))
                     }
                 };
 
-                let right = match self.parse_sum() {
-                    // expr < expr
+                // id = ....
+                let right = match self.expression() {
+                    // id = expr
                     Ok(expr) => expr,
-                    // expr < <error>
+                    // id = <error>
                     Err(err) => {
                         return Err(self.make_error(
                             err.clone(),
@@ -549,6 +546,13 @@ impl Parser {
                     self.consume(TokenType::False);
                     return Ok(node);
                 }
+                // "nil"
+                TokenType::Nil => {
+                    let span = Span::from(&current.span);
+                    let node = ASTNode::from(Expr::Literal(Literal::Nil, span));
+                    self.consume(TokenType::Nil);
+                    return Ok(node);
+                }
                 // <id>
                 TokenType::Ident(id) => {
                     let node = ASTNode::from(Expr::Identifier(Ident {
@@ -699,6 +703,25 @@ mod tests {
                 Span::new(Rc::clone(&source), 0, 5)
             ))
         )
+    }
+
+    #[test]
+    fn parse_nil_literal() {
+        let source = Source::source("nil");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::Stmt(Stmt::ExpressionStmt(
+                Box::new(ExpressionStmt {
+                    expr: ASTNode::Expr(Expr::Literal(
+                        Literal::Nil,
+                        Span::new(Rc::clone(&source), 0, 3)
+                    ))
+                }),
+                Span::new(Rc::clone(&source), 0, 3)
+            ))
+        );
     }
 
     #[test]

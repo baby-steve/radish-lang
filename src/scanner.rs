@@ -161,6 +161,7 @@ impl Scanner {
         match &value[..] {
             "true" => TokenType::True,
             "false" => TokenType::False,
+            "nil" => TokenType::Nil,
             "var" => TokenType::Var,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
@@ -363,6 +364,15 @@ mod tests {
         assert_eq!(
             scanner.scan_token().token_type,
             TokenType::Comment("this is a comment".to_string().into_boxed_str(), false)
+        );
+    }
+
+    #[test]
+    fn test_nil_token() {
+        let mut scanner = new_test_scanner("nil");
+        assert_eq!(
+            scanner.scan_token().token_type,
+            TokenType::Nil,
         );
     }
 

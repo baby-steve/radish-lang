@@ -39,6 +39,8 @@ pub enum TokenType {
     True,
     // false
     False,
+    // nil
+    Nil,
     // var (might change)
     Var,
 
@@ -78,6 +80,7 @@ impl fmt::Display for TokenType {
             RightParen => write!(f, "RightParen"),
             True => write!(f, "True"),
             False => write!(f, "False"),
+            Nil => write!(f, "Nil"),
             Var => write!(f, "Var"),
             Number(_) => write!(f, "Number"),
             Ident(_) => write!(f, "Ident"),
@@ -111,8 +114,8 @@ impl Token {
             Bang => "!",
             Equals => "=",
             LessThan => "<",
-            GreaterThan => ">",
             LessThanEquals => "<=",
+            GreaterThan => ">",
             GreaterThanEquals => ">=",
             EqualsTo => "==",
             NotEqual => "!=",
@@ -122,6 +125,7 @@ impl Token {
 
             True => "true",
             False => "false",
+            Nil => "nil",
             Var => "var",
 
             Eof => "<Eof>",

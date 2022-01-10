@@ -1,7 +1,7 @@
 #[repr(u8)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum Opcode {
-    Constant,
+    LoadConst,
     Pop,   
     
     DefGlobal,
@@ -10,6 +10,7 @@ pub enum Opcode {
 
     True,
     False,
+    Nil,
     Add,
     Subtract,
     Multiply,

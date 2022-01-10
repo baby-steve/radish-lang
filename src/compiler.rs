@@ -77,6 +77,10 @@ impl Visitor for Compiler {
             false => self.emit_byte(Opcode::False as u8),
         }
     }
+
+    fn nil(&mut self) {
+        self.emit_byte(Opcode::Nil as u8);
+    }
 }
 
 impl Compiler {
@@ -398,6 +402,12 @@ mod tests {
 
         let result = run_test_compiler("false");
         assert_eq!(result.chunk.code, vec!(Opcode::False as u8, Opcode::Pop as u8, Opcode::Halt as u8));
+    }
+
+    #[test]
+    fn compile_nil_literal() {
+        let result = run_test_compiler("nil");
+        assert_eq!(result.chunk.code, vec![Opcode::Nil as u8, Opcode::Pop as u8, Opcode::Halt as u8]);
     }
 
     #[test]

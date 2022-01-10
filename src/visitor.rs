@@ -56,11 +56,13 @@ pub trait Visitor {
             Literal::Number(val) => self.number(val),
             Literal::Bool(val) => self.boolean(val),
             Literal::String(val) => self.string(val),
+            Literal::Nil => self.nil(),
         }
     }
 
-    fn identifier(&mut self, id: &Ident) {}
-    fn number(&mut self, val: &f64) {}
-    fn string(&mut self, val: &str) {}
-    fn boolean(&mut self, val: &bool) {}
+    fn identifier(&mut self, _: &Ident) {}
+    fn number(&mut self, _: &f64) {}
+    fn string(&mut self, _: &str) {}
+    fn boolean(&mut self, _: &bool) {}
+    fn nil(&mut self) {}
 }
