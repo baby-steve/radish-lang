@@ -10,6 +10,7 @@ pub trait Visitor {
 
     fn statement(&mut self, stmt: &Stmt) {
         match stmt {
+            Stmt::BlockStmt(block, _) => todo!(),
             Stmt::ExpressionStmt(expr, _) => self.expression_stmt(&expr),
             Stmt::VarDeclaration(decl, _) => self.var_declaration(&decl),
             Stmt::Assignment(stmt, _) => self.assignment(&stmt),

@@ -65,6 +65,8 @@ impl Scanner {
             Some("\n") => self.make_token(TokenType::Newline),
             Some("(") => self.make_token(TokenType::LeftParen),
             Some(")") => self.make_token(TokenType::RightParen),
+            Some("{") => self.make_token(TokenType::LeftBrace),
+            Some("}") => self.make_token(TokenType::RightBrace),
             Some("\"") => self.scan_string(),
             None => self.make_token(TokenType::Eof),
             _ if is_alpha(c.unwrap()) => self.identifier(),
@@ -466,6 +468,17 @@ mod tests {
         assert_eq!(token.token_type, TokenType::RightParen);
         assert_eq!(token.syntax(), ")");
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_curly_brace_token() {
+        let mut scanner = new_test_scanner("{}");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::LeftBrace);
+        assert_eq!(token.syntax(), "{");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::RightBrace);
+        assert_eq!(token.syntax(), "}");
     }
 
     #[test]

@@ -25,6 +25,7 @@ pub enum ExpectedError {
     ExpectedExpression(String),
     ExpectedIdentifier(String),
     ExpectedRightParen(String),
+    ExpectedRightBrace(String),
 }
 
 impl fmt::Display for ExpectedError {
@@ -35,6 +36,7 @@ impl fmt::Display for ExpectedError {
             ExpectedExpression(p) => f.write_str(&format!("Expected expression, {}", p)),
             ExpectedIdentifier(p) => f.write_str(&format!("Expected an identifier, {}", p)),
             ExpectedRightParen(p) => f.write_str(&format!("Expected right parenthesis, {}", p)),
+            ExpectedRightBrace(p) => f.write_str(&format!("Expected '}}' after block, {}", p)),
         }
     }
 }

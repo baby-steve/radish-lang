@@ -46,6 +46,7 @@ impl ASTNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
+    BlockStmt(Box<BlockStmt>, Span),
     ExpressionStmt(Box<ExpressionStmt>, Span),
     VarDeclaration(Box<VarDeclaration>, Span),
     Assignment(Box<Assignment>, Span),
@@ -55,10 +56,16 @@ impl Stmt {
     pub fn position(&self) -> Span {
         match self {
             Self::VarDeclaration(_, pos)
+            | Self::BlockStmt(_, pos)
             | Self::Assignment(_, pos)
             | Self::ExpressionStmt(_, pos) => pos.clone(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockStmt {
+    pub body: Vec<ASTNode>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

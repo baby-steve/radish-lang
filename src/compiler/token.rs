@@ -35,6 +35,10 @@ pub enum TokenType {
     LeftParen,
     // )
     RightParen,
+    // {
+    LeftBrace,
+    // }
+    RightBrace,
     // true
     True,
     // false
@@ -78,6 +82,8 @@ impl fmt::Display for TokenType {
             Newline => write!(f, "Newline"),
             LeftParen => write!(f, "LeftParen"),
             RightParen => write!(f, "RightParen"),
+            LeftBrace => write!(f, "LeftBrace"),
+            RightBrace => write!(f, "RightBrace"),
             True => write!(f, "True"),
             False => write!(f, "False"),
             Nil => write!(f, "Nil"),
@@ -122,7 +128,8 @@ impl Token {
             Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
-
+            LeftBrace => "{",
+            RightBrace => "}",
             True => "true",
             False => "false",
             Nil => "nil",
@@ -146,6 +153,35 @@ impl Token {
 
             _ => self.literal_syntax().into(),
         }
+    }
+
+    pub fn lookup_from_string(&self, syntax: &str) -> Option<TokenType> {
+        Some(match syntax {
+            "+" => TokenType::Plus,
+            "-" => TokenType::Minus,
+            "*" => TokenType::Star,
+            "/" => TokenType::Slash,
+            "!" => TokenType::Bang,
+            "=" => TokenType::Equals,
+            "<" => TokenType::LessThan,
+            "<=" => TokenType::LessThanEquals,
+            ">" => TokenType::GreaterThan,
+            ">=" => TokenType::GreaterThanEquals, 
+            "==" => TokenType::EqualsTo,
+            "!=" => TokenType::NotEqual,
+            "\\n" => TokenType::Newline,
+            "(" => TokenType::LeftParen,
+            ")" => TokenType::RightParen,
+            "{" => TokenType::LeftBrace,
+            "}" => TokenType::RightBrace,
+            "true" => TokenType::True,
+            "false" => TokenType::False,
+            "nil" => TokenType::Nil,
+            "var" => TokenType::Var,
+            "<Eof>" => TokenType::Eof,
+
+            _ => return None,
+        })
     }
 }
 

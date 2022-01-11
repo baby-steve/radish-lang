@@ -94,9 +94,49 @@ impl Parser {
         }
     }
 
+    fn parse_block(&mut self, end: &str) -> Result<ASTNode, ParserError> {
+        let mut body = vec![];
+        let start_span = Span::from(&self.previous.as_ref().unwrap().span);
+
+        while self.current.as_ref().unwrap().syntax() != end {
+            let current = self.current.as_ref().unwrap().clone();
+
+            match self.current.as_ref().unwrap().token_type {
+                // <Eof>
+                TokenType::Eof => {
+                    let msg = format!("found unexpected {}.", current.syntax());
+                    return Err(ParserError::new(
+                        SyntaxError::ExpectedError(ExpectedRightBrace(msg)),
+                        &current.span,
+                    ));
+                }
+                // \n or //...
+                TokenType::Newline | TokenType::Comment(_, false) => {
+                    // should single-line comments be parsed?
+                    self.advance();
+                    continue;
+                }
+                // ...
+                _ => body.push(self.parse_statement()?),
+            };
+        }
+
+        self.advance();
+        let node = ASTNode::from(Stmt::BlockStmt(
+            Box::new(BlockStmt { body }),
+            Span::combine(&start_span, &self.current.as_ref().unwrap().span),
+        ));
+        return Ok(node);
+    }
+
     fn parse_statement(&mut self) -> Result<ASTNode, ParserError> {
         match self.current.as_ref().unwrap().token_type {
-            // var ...
+            // "{" ...
+            TokenType::LeftBrace => {
+                self.consume(TokenType::LeftBrace);
+                self.parse_block("}")
+            }
+            // "var" ...
             TokenType::Var => self.parse_var_declaration(),
             // id ...
             TokenType::Ident(_) => self.parse_assignment_statement(),
@@ -1107,6 +1147,30 @@ mod tests {
                 Span::new(Rc::clone(&source), 0, 10)
             ))
         );
+    }
+
+    #[test]
+    fn parse_block_statement() {
+        let source = Source::source("{ 23 }");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::from(Stmt::BlockStmt(
+                Box::new(BlockStmt {
+                    body: vec![ASTNode::Stmt(Stmt::ExpressionStmt(
+                        Box::new(ExpressionStmt {
+                            expr: ASTNode::Expr(Expr::Literal(
+                                Literal::Number(23.0),
+                                Span::new(Rc::clone(&source), 2, 4)
+                            ))
+                        }),
+                        Span::new(Rc::clone(&source), 2, 4)
+                    ))]
+                }),
+                Span::new(Rc::clone(&source), 0, 6)
+            ))
+        )
     }
 
     #[test]
