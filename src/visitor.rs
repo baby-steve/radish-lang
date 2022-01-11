@@ -21,7 +21,10 @@ pub trait Visitor {
     }
 
     fn var_declaration(&mut self, decl: &VarDeclaration) {
-        self.visit(&decl.init);
+        match &decl.init {
+            Some(expr) => self.visit(&expr),
+            None => return,
+        }
     }
 
     fn assignment(&mut self, stmt: &Assignment) {

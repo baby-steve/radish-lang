@@ -113,13 +113,17 @@ impl Parser {
         // var id ...
         let id = self.parse_identifier()?;
 
-        // var id = ...
-        self.consume(TokenType::Equals);
+        let current = self.current.as_ref().unwrap();
 
-        // var id = expr
-        let init = self.expression()?;
-
-        let span = Span::combine(&start, &init.position());
+        let (init, span) = match current.token_type {
+            TokenType::Equals => {
+                self.consume(TokenType::Equals);
+                let init = self.expression()?;
+                let span = Span::combine(&start, &init.position());
+                (Some(init), span)
+            }
+            _ => (None, Span::combine(&start, &current.span)),
+        };
 
         Ok(ASTNode::from(Stmt::VarDeclaration(
             Box::new(VarDeclaration { id, init }),
@@ -1062,7 +1066,27 @@ mod tests {
     }
 
     #[test]
-    fn parse_var_assign() {
+    fn parse_var_declaration() {
+        let source = Source::source("var x");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::from(Stmt::VarDeclaration(
+                Box::new(VarDeclaration {
+                    id: Ident {
+                        name: "x".to_string(),
+                        pos: Span::new(Rc::clone(&source), 4, 5)
+                    },
+                    init: None,
+                }),
+                Span::new(Rc::clone(&source), 0, 5)
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_var_declaration_with_value() {
         let source = Source::source("var x = 23");
         let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
 
@@ -1074,10 +1098,10 @@ mod tests {
                         name: "x".to_string(),
                         pos: Span::new(Rc::clone(&source), 4, 5)
                     },
-                    init: ASTNode::from(Expr::Literal(
+                    init: Some(ASTNode::from(Expr::Literal(
                         Literal::Number(23.0),
                         Span::new(Rc::clone(&source), 8, 10)
-                    ))
+                    )))
                 }),
                 Span::new(Rc::clone(&source), 0, 10)
             ))

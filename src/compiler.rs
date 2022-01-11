@@ -12,7 +12,11 @@ impl Visitor for Compiler {
     fn var_declaration(&mut self, decl: &VarDeclaration) {
         let global = self.identifier_constant(&decl.id.name);
 
-        self.visit(&decl.init);
+        if let Some(expr) = &decl.init {
+            self.visit(&expr);
+        } else {
+            self.emit_byte(Opcode::Nil as u8);
+        }
 
         self.define_variable(global);
     }
@@ -408,6 +412,32 @@ mod tests {
     fn compile_nil_literal() {
         let result = run_test_compiler("nil");
         assert_eq!(result.chunk.code, vec![Opcode::Nil as u8, Opcode::Pop as u8, Opcode::Halt as u8]);
+    }
+
+    #[test]
+    fn compile_variable_declaration() {
+        let result = run_test_compiler("var a");
+        assert_eq!(
+            result.chunk.code,
+            vec![
+                Opcode::Nil as u8,
+                Opcode::DefGlobal as u8, 0,
+                Opcode::Halt as u8,
+            ]
+        )
+    }
+
+    #[test]
+    fn compile_variable_declaration_with_value() {
+        let result = run_test_compiler("var a = 23");
+        assert_eq!(
+            result.chunk.code,
+            vec![
+                Opcode::LoadConst as u8, 1,
+                Opcode::DefGlobal as u8, 0,
+                Opcode::Halt as u8,
+            ]
+        )
     }
 
     #[test]

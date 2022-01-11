@@ -69,7 +69,7 @@ pub struct ExpressionStmt {
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarDeclaration {
     pub id: Ident,
-    pub init: ASTNode,
+    pub init: Option<ASTNode>,
 }
 
 #[derive(Debug, Clone, PartialEq)]

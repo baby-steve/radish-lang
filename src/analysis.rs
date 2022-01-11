@@ -42,12 +42,14 @@ pub struct SemanticAnalyzer {}
 
 impl Visitor for SemanticAnalyzer {
     fn var_declaration(&mut self, decl: &VarDeclaration) {
-        self.visit(&decl.init);
+        if let Some(expr) = &decl.init {
+            self.visit(&expr);
+        }
     }
 
-    fn assignment(&mut self, stmt: &Assignment) {}
+    fn assignment(&mut self, _: &Assignment) {}
 
-    fn identifier(&mut self, id: &Ident) {}
+    fn identifier(&mut self, _: &Ident) {}
 }
 
 impl SemanticAnalyzer {

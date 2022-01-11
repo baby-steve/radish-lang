@@ -1,0 +1,9 @@
+var a = 23
+var b = a
+
+var c = 23 + 45
+
+b = a + 2
+
+var d
+d = true
