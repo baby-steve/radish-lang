@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 use std::fmt;
 
-use crate::{ast::*, span::Span, visitor::Visitor};
+use crate::compiler::{ast::*, visitor::Visitor};
+use crate::span::Span;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SemanticError {

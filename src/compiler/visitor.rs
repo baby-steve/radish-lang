@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::compiler::ast::*;
 
 pub trait Visitor {
     fn visit(&mut self, node: &ASTNode) {

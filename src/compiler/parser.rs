@@ -1,13 +1,14 @@
 use std::rc::Rc;
 
-use crate::ast::*;
-use crate::error::{
-    ExpectedError::*, ParserError, SyntaxError, SyntaxError::*, UnexpectedError::*,
+use crate::compiler::{
+    ast::*,
+    error::{ExpectedError::*, ParserError, SyntaxError, SyntaxError::*, UnexpectedError::*},
+    scanner::Scanner,
+    token::{Token, TokenType},
 };
-use crate::scanner::Scanner;
+
 use crate::source::Source;
 use crate::span::Span;
-use crate::token::{Token, TokenType};
 
 pub struct Parser {
     source: Rc<Source>,

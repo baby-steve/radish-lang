@@ -1,5 +1,7 @@
-use radish_lang::compiler::Compiler;
-use radish_lang::parser::Parser;
+use radish_lang::compiler::{
+    parser::Parser,
+    compiler::Compiler,
+};
 use radish_lang::source::Source;
 use radish_lang::vm::VM;
 

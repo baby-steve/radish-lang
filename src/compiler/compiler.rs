@@ -1,8 +1,11 @@
-use crate::ast::*;
 use crate::opcode::Opcode;
 use crate::value::Value;
 use crate::vm::Chunk;
-use crate::visitor::Visitor;
+
+use crate::compiler::{
+    ast::*,
+    visitor::Visitor,
+};
 
 pub struct Compiler {
     pub chunk: Chunk,
@@ -148,7 +151,7 @@ mod tests {
 
     use std::rc::Rc;
 
-    use crate::parser::Parser;
+    use crate::compiler::parser::Parser;
     use crate::source::Source;
 
     fn run_test_compiler(test_string: &str) -> Compiler {
