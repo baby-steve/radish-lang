@@ -165,6 +165,7 @@ impl Scanner {
             "false" => TokenType::False,
             "nil" => TokenType::Nil,
             "var" => TokenType::Var,
+            "print" => TokenType::Print,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -390,6 +391,14 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Var);
         assert_eq!(token.syntax(), "var");
+    }
+
+    #[test]
+    fn test_print_token() {
+        let mut scanner = new_test_scanner("print");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Print);
+        assert_eq!(token.syntax(), "print");
     }
 
     #[test]

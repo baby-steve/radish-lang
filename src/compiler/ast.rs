@@ -50,12 +50,14 @@ pub enum Stmt {
     ExpressionStmt(Box<ExpressionStmt>, Span),
     VarDeclaration(Box<VarDeclaration>, Span),
     Assignment(Box<Assignment>, Span),
+    PrintStmt(Box<ASTNode>, Span),
 }
 
 impl Stmt {
     pub fn position(&self) -> Span {
         match self {
             Self::VarDeclaration(_, pos)
+            | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
             | Self::Assignment(_, pos)
             | Self::ExpressionStmt(_, pos) => pos.clone(),

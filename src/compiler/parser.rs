@@ -138,6 +138,8 @@ impl Parser {
             }
             // "var" ...
             TokenType::Var => self.parse_var_declaration(),
+            // "print" ...
+            TokenType::Print => self.parse_print_statement(),
             // id ...
             TokenType::Ident(_) => self.parse_assignment_statement(),
             // expr ...
@@ -169,6 +171,21 @@ impl Parser {
         Ok(ASTNode::from(Stmt::VarDeclaration(
             Box::new(VarDeclaration { id, init }),
             span,
+        )))
+    }
+
+    fn parse_print_statement(&mut self) -> Result<ASTNode, ParserError> {
+        let start = self.current.as_ref().unwrap().clone().span;
+
+        self.consume(TokenType::Print);
+
+        // "print" <expr>
+        let expr = self.expression()?;
+        let end = &expr.position();
+
+        Ok(ASTNode::from(Stmt::PrintStmt(
+            Box::new(expr),
+            Span::combine(&start, end),
         )))
     }
 
@@ -1145,6 +1162,23 @@ mod tests {
                     )))
                 }),
                 Span::new(Rc::clone(&source), 0, 10)
+            ))
+        );
+    }
+
+    #[test]
+    fn parse_print_statement() {
+        let source = Source::source("print 23");
+        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
+
+        assert_eq!(
+            *result,
+            ASTNode::from(Stmt::PrintStmt(
+                Box::new(ASTNode::from(Expr::Literal(
+                    Literal::Number(23.0),
+                    Span::new(Rc::clone(&source), 6, 8)
+                ))),
+                Span::new(Rc::clone(&source), 0, 8),
             ))
         );
     }

@@ -10,10 +10,11 @@ pub trait Visitor {
 
     fn statement(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::BlockStmt(block, _) => todo!(),
+            Stmt::BlockStmt(_block, _) => todo!(),
             Stmt::ExpressionStmt(expr, _) => self.expression_stmt(&expr),
             Stmt::VarDeclaration(decl, _) => self.var_declaration(&decl),
             Stmt::Assignment(stmt, _) => self.assignment(&stmt),
+            Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
 
@@ -26,6 +27,10 @@ pub trait Visitor {
             Some(expr) => self.visit(&expr),
             None => return,
         }
+    }
+
+    fn print(&mut self, expr: &ASTNode) {
+        self.visit(&expr);
     }
 
     fn assignment(&mut self, stmt: &Assignment) {

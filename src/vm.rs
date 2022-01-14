@@ -178,6 +178,9 @@ impl VM {
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a != b));
                 }
+                Opcode::Print => {
+                    println!("{}", self.stack.pop().unwrap());
+                }
                 Opcode::Halt => {
                     break;
                 }
@@ -459,4 +462,15 @@ mod tests {
         println!("{:?}", vm.globals);
         assert_eq!(vm.globals.get("a"), Some(&Value::from(23.0)));
     }
+    /*
+    #[test]
+    fn test_print_opcode() {
+        let code = vec![
+            Opcode::LoadConst as u8, 0,
+            Opcode::Print as u8,
+            Opcode::Halt as u8,
+        ];
+
+        let constants = vec![Value::from(23.0)];
+    }*/
 }

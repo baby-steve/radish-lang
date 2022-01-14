@@ -26,6 +26,7 @@ pub enum Opcode {
     Negate,
     Not,
 
+    Print,
     Halt,
 }
 

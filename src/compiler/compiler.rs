@@ -12,6 +12,12 @@ pub struct Compiler {
 }
 
 impl Visitor for Compiler {
+    fn print(&mut self, expr: &ASTNode) {
+        self.visit(&expr);
+
+        self.emit_byte(Opcode::Print as u8);
+    }
+
     fn var_declaration(&mut self, decl: &VarDeclaration) {
         let global = self.identifier_constant(&decl.id.name);
 
@@ -464,6 +470,19 @@ mod tests {
             vec![
                 Opcode::LoadConst as u8, 1,
                 Opcode::DefGlobal as u8, 0, 0, 0, 0,
+                Opcode::Halt as u8,
+            ]
+        )
+    }
+
+    #[test]
+    fn compile_print_statement() {
+        let result = run_test_compiler("print 23");
+        assert_eq!(
+            result.chunk.code,
+            vec![
+                Opcode::LoadConst as u8, 0,
+                Opcode::Print as u8,
                 Opcode::Halt as u8,
             ]
         )
