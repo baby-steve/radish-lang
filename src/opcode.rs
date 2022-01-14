@@ -2,6 +2,7 @@
 #[derive(Debug, PartialEq, Eq)]
 pub enum Opcode {
     LoadConst,
+    LoadConstLong,
     Pop,   
     
     DefGlobal,

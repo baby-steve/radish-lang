@@ -1,5 +1,6 @@
 use std::collections::hash_map::Entry::{Vacant, Occupied};
 use std::collections::HashMap;
+use std::convert::TryInto;
 
 use crate::opcode::Opcode;
 use crate::value::Value;
@@ -71,17 +72,20 @@ impl VM {
     fn run(&mut self) {
         loop {
 
-            /*
             for slot in &self.stack.stack {
                 print!("[ {} ]", &slot);
             }
-            print!("\n");*/
+            print!("\n");
 
             match self.decode_opcode() {
                 Opcode::LoadConst => {
                     self.ip += 1;
                     self.stack
                         .push(self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone());
+                }
+                Opcode::LoadConstLong => {
+                    let constant = self.read_constant_long();
+                    self.stack.push(constant);
                 }
                 Opcode::True => {
                     self.stack.push(Value::Boolean(true));
@@ -96,22 +100,19 @@ impl VM {
                     self.stack.pop();
                 }
                 Opcode::DefGlobal => {
-                    self.ip += 1;
-                    let name = self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone();
+                    let name = self.read_constant_long();
                     self.globals.insert(name.to_string(), self.stack.peek().unwrap());
                     self.stack.pop();
                 }
                 Opcode::GetGlobal => {
-                    self.ip += 1;
-                    let name = self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone();
+                    let name = self.read_constant_long();
                     match self.globals.get(&name.to_string()) {
                         Some(value) => self.stack.push(value.clone()),
                         None => panic!("Found an undefined global."),
                     }
                 }
                 Opcode::SetGlobal => {
-                    self.ip += 1;
-                    let name = self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone();
+                    let name = self.read_constant_long();
                     let entry = self.globals.entry(name.to_string());
                     match entry {
                         Occupied(mut val) => val.insert(self.stack.pop().unwrap()),
@@ -178,7 +179,6 @@ impl VM {
                     self.stack.push(Value::Boolean(a != b));
                 }
                 Opcode::Halt => {
-                    //println!("VM Stack: {:?}", self.stack);
                     break;
                 }
             }
@@ -189,6 +189,17 @@ impl VM {
         let op = Opcode::from(self.chunk.code[self.ip]);
         self.ip += 1;
         return op;
+    }
+
+    /// Reads a u32 index from [`code`] and returns the [`Value`] 
+    /// at [`constants[index]`].
+    fn read_constant_long(&mut self) -> Value {
+        self.ip += 4;
+        let bytes = self.chunk.code[self.ip - 4 as usize..self.ip as usize]
+            .try_into()
+            .expect(&format!("Expected a slice of length {}.", 4));
+        
+        self.chunk.constants[u32::from_le_bytes(bytes) as usize].clone()
     }
 }
 
@@ -435,7 +446,7 @@ mod tests {
     fn test_define_global_opcode() {
         let code = vec![
             Opcode::LoadConst as u8, 1, // 23
-            Opcode::DefGlobal as u8, 0, // "a"
+            Opcode::DefGlobal as u8, 0, 0, 0, 0, // "a"
             Opcode::Halt as u8,
         ];
 

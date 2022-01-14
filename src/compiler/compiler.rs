@@ -28,7 +28,12 @@ impl Visitor for Compiler {
         self.visit(&stmt.expr);
 
         let arg = self.identifier_constant(&stmt.id.name);
-        self.emit_bytes(Opcode::SetGlobal as u8, arg);
+
+        self.emit_byte(Opcode::SetGlobal as u8);
+
+        for byte in arg.to_le_bytes() {
+            self.emit_byte(byte);
+        }
     }
 
     fn expression_stmt(&mut self, stmt: &ExpressionStmt) {
@@ -122,26 +127,47 @@ impl Compiler {
     }
 
     fn emit_constant(&mut self, value: Value) {
-        // Todo: if there are over 255 constants in one chunk, should emit a load_long opcode.
         let index = self.make_constant(value);
-        self.emit_bytes(Opcode::LoadConst as u8, index);
+
+        if index > 255 {
+            self.emit_byte(Opcode::LoadConstLong as u8);
+
+            let bytes = index.to_le_bytes();
+            println!("{:?}", bytes);
+
+            for byte in bytes {
+                self.emit_byte(byte);
+            }
+
+        } else {
+            self.emit_bytes(Opcode::LoadConst as u8, index as u8);
+        }
     }
 
-    fn make_constant(&mut self, value: Value) -> u8 {
-        self.chunk.add_constant(value) as u8
+    fn make_constant(&mut self, value: Value) -> u32 {
+        self.chunk.add_constant(value) as u32
     }
 
-    fn identifier_constant(&mut self, name: &str) -> u8 {
-        self.make_constant(Value::String(name.to_string())) as u8
+    fn identifier_constant(&mut self, name: &str) -> u32 {
+        self.make_constant(Value::String(name.to_string()))
     }
 
-    fn define_variable(&mut self, global: u8) {
-        self.emit_bytes(Opcode::DefGlobal as u8, global);
+    fn define_variable(&mut self, global: u32) {
+        self.emit_byte(Opcode::DefGlobal as u8);
+
+        for byte in global.to_le_bytes() {
+            self.emit_byte(byte);
+        }
     }
 
     fn named_variable(&mut self, name: &str) {
         let arg = self.identifier_constant(name);
-        self.emit_bytes(Opcode::GetGlobal as u8, arg);
+
+        self.emit_byte(Opcode::GetGlobal as u8);
+
+        for byte in arg.to_le_bytes() {
+            self.emit_byte(byte);
+        }
     }
 }
 
@@ -424,7 +450,7 @@ mod tests {
             result.chunk.code,
             vec![
                 Opcode::Nil as u8,
-                Opcode::DefGlobal as u8, 0,
+                Opcode::DefGlobal as u8, 0, 0, 0, 0,
                 Opcode::Halt as u8,
             ]
         )
@@ -437,7 +463,7 @@ mod tests {
             result.chunk.code,
             vec![
                 Opcode::LoadConst as u8, 1,
-                Opcode::DefGlobal as u8, 0,
+                Opcode::DefGlobal as u8, 0, 0, 0, 0,
                 Opcode::Halt as u8,
             ]
         )
