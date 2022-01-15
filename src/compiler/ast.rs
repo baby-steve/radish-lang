@@ -1,4 +1,4 @@
-use crate::span::Span;
+use crate::common::span::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Ident {
@@ -46,19 +46,28 @@ impl ASTNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
+    BlockStmt(Box<BlockStmt>, Span),
     ExpressionStmt(Box<ExpressionStmt>, Span),
     VarDeclaration(Box<VarDeclaration>, Span),
     Assignment(Box<Assignment>, Span),
+    PrintStmt(Box<ASTNode>, Span),
 }
 
 impl Stmt {
     pub fn position(&self) -> Span {
         match self {
             Self::VarDeclaration(_, pos)
+            | Self::PrintStmt(_, pos)
+            | Self::BlockStmt(_, pos)
             | Self::Assignment(_, pos)
             | Self::ExpressionStmt(_, pos) => pos.clone(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BlockStmt {
+    pub body: Vec<ASTNode>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,7 +78,7 @@ pub struct ExpressionStmt {
 #[derive(Debug, Clone, PartialEq)]
 pub struct VarDeclaration {
     pub id: Ident,
-    pub init: ASTNode,
+    pub init: Option<ASTNode>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -131,6 +140,7 @@ pub enum Literal {
     Number(f64),
     Bool(bool),
     String(String),
+    Nil
 }
 
 #[derive(Debug, Clone, PartialEq)]

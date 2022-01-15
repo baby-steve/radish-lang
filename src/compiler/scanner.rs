@@ -1,8 +1,10 @@
 use std::rc::Rc;
 
-use crate::source::Source;
-use crate::span::Span;
-use crate::token::{Token, TokenType};
+use crate::common::{
+    source::Source,
+    span::Span,
+};
+use crate::compiler::token::{Token, TokenType};
 
 pub struct Scanner {
     pub source: Rc<Source>,
@@ -65,6 +67,8 @@ impl Scanner {
             Some("\n") => self.make_token(TokenType::Newline),
             Some("(") => self.make_token(TokenType::LeftParen),
             Some(")") => self.make_token(TokenType::RightParen),
+            Some("{") => self.make_token(TokenType::LeftBrace),
+            Some("}") => self.make_token(TokenType::RightBrace),
             Some("\"") => self.scan_string(),
             None => self.make_token(TokenType::Eof),
             _ if is_alpha(c.unwrap()) => self.identifier(),
@@ -161,7 +165,9 @@ impl Scanner {
         match &value[..] {
             "true" => TokenType::True,
             "false" => TokenType::False,
+            "nil" => TokenType::Nil,
             "var" => TokenType::Var,
+            "print" => TokenType::Print,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -367,6 +373,15 @@ mod tests {
     }
 
     #[test]
+    fn test_nil_token() {
+        let mut scanner = new_test_scanner("nil");
+        assert_eq!(
+            scanner.scan_token().token_type,
+            TokenType::Nil,
+        );
+    }
+
+    #[test]
     fn test_bang_token() {
         let mut scanner = new_test_scanner("!");
         assert_eq!(scanner.scan_token().token_type, TokenType::Bang);
@@ -378,6 +393,14 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Var);
         assert_eq!(token.syntax(), "var");
+    }
+
+    #[test]
+    fn test_print_token() {
+        let mut scanner = new_test_scanner("print");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Print);
+        assert_eq!(token.syntax(), "print");
     }
 
     #[test]
@@ -456,6 +479,17 @@ mod tests {
         assert_eq!(token.token_type, TokenType::RightParen);
         assert_eq!(token.syntax(), ")");
         assert_eq!(scanner.scan_token().token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn test_curly_brace_token() {
+        let mut scanner = new_test_scanner("{}");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::LeftBrace);
+        assert_eq!(token.syntax(), "{");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::RightBrace);
+        assert_eq!(token.syntax(), "}");
     }
 
     #[test]

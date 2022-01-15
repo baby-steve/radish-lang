@@ -1,4 +1,8 @@
-use radish_lang::{compiler::Compiler, parser::Parser, source::Source, vm::VM};
+use radish_lang::{
+    compiler::{compiler::Compiler, parser::Parser},
+    common::source::Source,
+    vm::vm::VM,
+};
 use std::fs;
 use std::path::PathBuf;
 use std::rc::Rc;

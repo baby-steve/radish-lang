@@ -1,49 +1,19 @@
-use std::collections::hash_map::Entry::{Vacant, Occupied};
-use std::collections::HashMap;
+use std::{
+    collections::{
+        HashMap,
+        hash_map::Entry::{Vacant, Occupied},
+    },
+    convert::TryInto,
+};
 
-use crate::opcode::Opcode;
-use crate::value::Value;
-
-#[derive(Debug, PartialEq)]
-pub struct Chunk {
-    pub code: Vec<u8>,
-    pub constants: Vec<Value>,
-}
-
-impl Chunk {
-    pub fn add_constant(&mut self, value: Value) -> usize {
-        let index = self.constants.len();
-        self.constants.push(value);
-        index
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct Stack {
-    stack: Vec<Value>,
-}
-
-impl Stack {
-    pub fn new() -> Stack {
-        Stack { stack: vec![] }
-    }
-
-    pub fn push(&mut self, val: Value) {
-        self.stack.push(val);
-    }
-
-    pub fn pop(&mut self) -> Option<Value> {
-        self.stack.pop()
-    }
-
-    pub fn peek(&mut self) -> Option<Value> {
-        if self.stack.len() <= 0 {
-            None
-        } else {
-            Some(self.stack[self.stack.len() - 1].clone())
-        }
-    }
-}
+use crate::{
+    common::{
+        chunk::Chunk,
+        opcode::Opcode,
+        value::Value,
+    },
+    vm::stack::Stack,
+};
 
 #[derive(Debug, PartialEq)]
 pub struct VM {
@@ -77,10 +47,14 @@ impl VM {
             print!("\n");
 
             match self.decode_opcode() {
-                Opcode::Constant => {
+                Opcode::LoadConst => {
                     self.ip += 1;
                     self.stack
                         .push(self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone());
+                }
+                Opcode::LoadConstLong => {
+                    let constant = self.read_constant_long();
+                    self.stack.push(constant);
                 }
                 Opcode::True => {
                     self.stack.push(Value::Boolean(true));
@@ -88,26 +62,26 @@ impl VM {
                 Opcode::False => {
                     self.stack.push(Value::Boolean(false));
                 }
+                Opcode::Nil => {
+                    self.stack.push(Value::Nil);
+                }
                 Opcode::Pop => {
                     self.stack.pop();
                 }
                 Opcode::DefGlobal => {
-                    self.ip += 1;
-                    let name = self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone();
+                    let name = self.read_constant_long();
                     self.globals.insert(name.to_string(), self.stack.peek().unwrap());
                     self.stack.pop();
                 }
                 Opcode::GetGlobal => {
-                    self.ip += 1;
-                    let name = self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone();
+                    let name = self.read_constant_long();
                     match self.globals.get(&name.to_string()) {
                         Some(value) => self.stack.push(value.clone()),
                         None => panic!("Found an undefined global."),
                     }
                 }
                 Opcode::SetGlobal => {
-                    self.ip += 1;
-                    let name = self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone();
+                    let name = self.read_constant_long();
                     let entry = self.globals.entry(name.to_string());
                     match entry {
                         Occupied(mut val) => val.insert(self.stack.pop().unwrap()),
@@ -173,8 +147,10 @@ impl VM {
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a != b));
                 }
+                Opcode::Print => {
+                    println!("{}", self.stack.pop().unwrap());
+                }
                 Opcode::Halt => {
-                    println!("VM Stack: {:?}", self.stack);
                     break;
                 }
             }
@@ -185,6 +161,17 @@ impl VM {
         let op = Opcode::from(self.chunk.code[self.ip]);
         self.ip += 1;
         return op;
+    }
+
+    /// Reads a u32 index from [`code`] and returns the [`Value`] 
+    /// at [`constants[index]`].
+    fn read_constant_long(&mut self) -> Value {
+        self.ip += 4;
+        let bytes = self.chunk.code[self.ip - 4 as usize..self.ip as usize]
+            .try_into()
+            .expect(&format!("Expected a slice of length {}.", 4));
+        
+        self.chunk.constants[u32::from_le_bytes(bytes) as usize].clone()
     }
 }
 
@@ -205,7 +192,7 @@ mod tests {
 
     #[test]
     fn test_constant_opcode() {
-        let code = vec![Opcode::Constant as u8, 0, Opcode::Halt as u8];
+        let code = vec![Opcode::LoadConst as u8, 0, Opcode::Halt as u8];
         let constants = vec![Value::Number(123.0)];
         let mut vm = VM::new(Chunk { code, constants });
         vm.run();
@@ -215,8 +202,8 @@ mod tests {
     #[test]
     fn test_add_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::Add as u8,
             Opcode::Halt as u8,
         ];
@@ -229,8 +216,8 @@ mod tests {
     #[test]
     fn test_subtract_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::Subtract as u8,
             Opcode::Halt as u8,
         ];
@@ -243,8 +230,8 @@ mod tests {
     #[test]
     fn test_multiply_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::Multiply as u8,
             Opcode::Halt as u8,
         ];
@@ -257,8 +244,8 @@ mod tests {
     #[test]
     fn test_divide_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::Divide as u8,
             Opcode::Halt as u8,
         ];
@@ -271,8 +258,8 @@ mod tests {
     #[test]
     fn test_less_than_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::LessThan as u8,
             Opcode::Halt as u8,            
         ];
@@ -285,8 +272,8 @@ mod tests {
     #[test]
     fn test_less_than_equals_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::LessThanEquals as u8,
             Opcode::Halt as u8,            
         ];
@@ -299,8 +286,8 @@ mod tests {
     #[test]
     fn test_greater_than_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::GreaterThan as u8,
             Opcode::Halt as u8,            
         ];
@@ -313,8 +300,8 @@ mod tests {
     #[test]
     fn test_greater_than_equal_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::GreaterThanEquals as u8,
             Opcode::Halt as u8,            
         ];
@@ -327,8 +314,8 @@ mod tests {
     #[test]
     fn test_equals_to_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::EqualsTo as u8,
             Opcode::Halt as u8,            
         ];
@@ -341,8 +328,8 @@ mod tests {
     #[test]
     fn test_not_equal_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::NotEqual as u8,
             Opcode::Halt as u8,            
         ];
@@ -355,13 +342,13 @@ mod tests {
     #[test]
     fn test_multiple_opcodes() {
         let code = vec![
-            Opcode::Constant as u8, 0,
-            Opcode::Constant as u8, 1,
+            Opcode::LoadConst as u8, 0,
+            Opcode::LoadConst as u8, 1,
             Opcode::Add as u8,
-            Opcode::Constant as u8, 2,
-            Opcode::Constant as u8, 3,
+            Opcode::LoadConst as u8, 2,
+            Opcode::LoadConst as u8, 3,
             Opcode::Divide as u8,
-            Opcode::Constant as u8, 4,
+            Opcode::LoadConst as u8, 4,
             Opcode::Multiply as u8,
             Opcode::Subtract as u8,
             Opcode::Halt as u8,
@@ -381,7 +368,7 @@ mod tests {
     #[test]
     fn test_negate_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 0,
+            Opcode::LoadConst as u8, 0,
             Opcode::Negate as u8,
             Opcode::Halt as u8
         ];
@@ -420,10 +407,18 @@ mod tests {
     }
 
     #[test]
+    fn test_nil_opcode() {
+        let code = vec![Opcode::Nil as u8, Opcode::Halt as u8];
+        let mut vm = VM::new(Chunk { code, constants: vec![] });
+        vm.run();
+        assert_eq!(vm.stack.peek(), Some(Value::Nil));
+    }
+
+    #[test]
     fn test_define_global_opcode() {
         let code = vec![
-            Opcode::Constant as u8, 1, // 23
-            Opcode::DefGlobal as u8, 0, // "a"
+            Opcode::LoadConst as u8, 1, // 23
+            Opcode::DefGlobal as u8, 0, 0, 0, 0, // "a"
             Opcode::Halt as u8,
         ];
 
@@ -436,4 +431,15 @@ mod tests {
         println!("{:?}", vm.globals);
         assert_eq!(vm.globals.get("a"), Some(&Value::from(23.0)));
     }
+    /*
+    #[test]
+    fn test_print_opcode() {
+        let code = vec![
+            Opcode::LoadConst as u8, 0,
+            Opcode::Print as u8,
+            Opcode::Halt as u8,
+        ];
+
+        let constants = vec![Value::from(23.0)];
+    }*/
 }

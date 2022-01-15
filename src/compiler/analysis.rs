@@ -1,7 +1,12 @@
-use std::collections::HashSet;
-use std::fmt;
+use std::{
+    fmt,
+    collections::HashSet,
+};
 
-use crate::{ast::*, span::Span, visitor::Visitor};
+use crate::{
+    compiler::{ast::*, visitor::Visitor},
+    common::span::Span,
+};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SemanticError {
@@ -42,12 +47,14 @@ pub struct SemanticAnalyzer {}
 
 impl Visitor for SemanticAnalyzer {
     fn var_declaration(&mut self, decl: &VarDeclaration) {
-        self.visit(&decl.init);
+        if let Some(expr) = &decl.init {
+            self.visit(&expr);
+        }
     }
 
-    fn assignment(&mut self, stmt: &Assignment) {}
+    fn assignment(&mut self, _: &Assignment) {}
 
-    fn identifier(&mut self, id: &Ident) {}
+    fn identifier(&mut self, _: &Ident) {}
 }
 
 impl SemanticAnalyzer {

@@ -1,13 +1,3 @@
-pub mod analysis;
-pub mod ast;
+pub mod common;
 pub mod compiler;
-pub mod error;
-pub mod opcode;
-pub mod parser;
-pub mod scanner;
-pub mod source;
-pub mod span;
-pub mod token;
-pub mod value;
-pub mod visitor;
 pub mod vm;

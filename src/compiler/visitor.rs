@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::compiler::ast::*;
 
 pub trait Visitor {
     fn visit(&mut self, node: &ASTNode) {
@@ -10,9 +10,11 @@ pub trait Visitor {
 
     fn statement(&mut self, stmt: &Stmt) {
         match stmt {
+            Stmt::BlockStmt(_block, _) => todo!(),
             Stmt::ExpressionStmt(expr, _) => self.expression_stmt(&expr),
             Stmt::VarDeclaration(decl, _) => self.var_declaration(&decl),
             Stmt::Assignment(stmt, _) => self.assignment(&stmt),
+            Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
 
@@ -21,7 +23,14 @@ pub trait Visitor {
     }
 
     fn var_declaration(&mut self, decl: &VarDeclaration) {
-        self.visit(&decl.init);
+        match &decl.init {
+            Some(expr) => self.visit(&expr),
+            None => return,
+        }
+    }
+
+    fn print(&mut self, expr: &ASTNode) {
+        self.visit(&expr);
     }
 
     fn assignment(&mut self, stmt: &Assignment) {
@@ -56,11 +65,13 @@ pub trait Visitor {
             Literal::Number(val) => self.number(val),
             Literal::Bool(val) => self.boolean(val),
             Literal::String(val) => self.string(val),
+            Literal::Nil => self.nil(),
         }
     }
 
-    fn identifier(&mut self, id: &Ident) {}
-    fn number(&mut self, val: &f64) {}
-    fn string(&mut self, val: &str) {}
-    fn boolean(&mut self, val: &bool) {}
+    fn identifier(&mut self, _: &Ident) {}
+    fn number(&mut self, _: &f64) {}
+    fn string(&mut self, _: &str) {}
+    fn boolean(&mut self, _: &bool) {}
+    fn nil(&mut self) {}
 }

@@ -1,7 +1,9 @@
-use std::borrow::Cow;
-use std::fmt;
+use std::{
+    borrow::Cow,
+    fmt,
+};
 
-use crate::span::Span;
+use crate::common::span::Span;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
@@ -35,12 +37,20 @@ pub enum TokenType {
     LeftParen,
     // )
     RightParen,
+    // {
+    LeftBrace,
+    // }
+    RightBrace,
     // true
     True,
     // false
     False,
+    // nil
+    Nil,
     // var (might change)
     Var,
+    // print (only temporary)
+    Print,
 
     // number
     Number(f64),
@@ -76,9 +86,13 @@ impl fmt::Display for TokenType {
             Newline => write!(f, "Newline"),
             LeftParen => write!(f, "LeftParen"),
             RightParen => write!(f, "RightParen"),
+            LeftBrace => write!(f, "LeftBrace"),
+            RightBrace => write!(f, "RightBrace"),
             True => write!(f, "True"),
             False => write!(f, "False"),
+            Nil => write!(f, "Nil"),
             Var => write!(f, "Var"),
+            Print => write!(f, "Print"),
             Number(_) => write!(f, "Number"),
             Ident(_) => write!(f, "Ident"),
             Comment(_, _) => write!(f, "Comment"),
@@ -111,18 +125,21 @@ impl Token {
             Bang => "!",
             Equals => "=",
             LessThan => "<",
-            GreaterThan => ">",
             LessThanEquals => "<=",
+            GreaterThan => ">",
             GreaterThanEquals => ">=",
             EqualsTo => "==",
             NotEqual => "!=",
             Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
-
+            LeftBrace => "{",
+            RightBrace => "}",
             True => "true",
             False => "false",
+            Nil => "nil",
             Var => "var",
+            Print => "print",
 
             Eof => "<Eof>",
 
@@ -142,6 +159,36 @@ impl Token {
 
             _ => self.literal_syntax().into(),
         }
+    }
+
+    pub fn lookup_from_string(&self, syntax: &str) -> Option<TokenType> {
+        Some(match syntax {
+            "+" => TokenType::Plus,
+            "-" => TokenType::Minus,
+            "*" => TokenType::Star,
+            "/" => TokenType::Slash,
+            "!" => TokenType::Bang,
+            "=" => TokenType::Equals,
+            "<" => TokenType::LessThan,
+            "<=" => TokenType::LessThanEquals,
+            ">" => TokenType::GreaterThan,
+            ">=" => TokenType::GreaterThanEquals, 
+            "==" => TokenType::EqualsTo,
+            "!=" => TokenType::NotEqual,
+            "\\n" => TokenType::Newline,
+            "(" => TokenType::LeftParen,
+            ")" => TokenType::RightParen,
+            "{" => TokenType::LeftBrace,
+            "}" => TokenType::RightBrace,
+            "true" => TokenType::True,
+            "false" => TokenType::False,
+            "nil" => TokenType::Nil,
+            "var" => TokenType::Var,
+            "print" => TokenType::Print,
+            "<Eof>" => TokenType::Eof,
+
+            _ => return None,
+        })
     }
 }
 
