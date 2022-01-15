@@ -2,3 +2,4 @@
 //! its datastructures.
 
 pub mod vm;
+pub mod stack;
