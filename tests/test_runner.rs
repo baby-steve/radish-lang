@@ -1,7 +1,7 @@
 use radish_lang::{
     compiler::{compiler::Compiler, parser::Parser},
     common::source::Source,
-    vm::VM,
+    vm::vm::VM,
 };
 use std::fs;
 use std::path::PathBuf;

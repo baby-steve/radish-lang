@@ -3,7 +3,7 @@ use radish_lang::compiler::{
     compiler::Compiler,
 };
 use radish_lang::common::source::Source;
-use radish_lang::vm::VM;
+use radish_lang::vm::vm::VM;
 
 use std::path::PathBuf;
 

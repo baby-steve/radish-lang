@@ -1,5 +1,6 @@
 use crate::{
     common::{
+        chunk::Chunk,
         opcode::Opcode,
         value::Value,
     },
@@ -7,7 +8,6 @@ use crate::{
         ast::*,
         visitor::Visitor,
     },
-    vm::Chunk,
 };
 
 pub struct Compiler {
