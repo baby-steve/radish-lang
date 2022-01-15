@@ -1,9 +1,17 @@
-use std::collections::hash_map::Entry::{Vacant, Occupied};
-use std::collections::HashMap;
-use std::convert::TryInto;
+use std::{
+    collections::{
+        HashMap,
+        hash_map::Entry::{Vacant, Occupied},
+    },
+    convert::TryInto,
+};
 
-use crate::opcode::Opcode;
-use crate::value::Value;
+use crate::{
+    common::{
+        opcode::Opcode,
+        value::Value,
+    },
+};
 
 #[derive(Debug, PartialEq)]
 pub struct Chunk {

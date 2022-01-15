@@ -7,8 +7,10 @@ use crate::compiler::{
     token::{Token, TokenType},
 };
 
-use crate::source::Source;
-use crate::span::Span;
+use crate::common::{
+    source::Source,
+    span::Span,
+};
 
 pub struct Parser {
     source: Rc<Source>,

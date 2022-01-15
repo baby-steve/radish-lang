@@ -1,6 +1,6 @@
 use radish_lang::{
     compiler::{compiler::Compiler, parser::Parser},
-    source::Source,
+    common::source::Source,
     vm::VM,
 };
 use std::fs;

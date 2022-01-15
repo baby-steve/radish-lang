@@ -1,5 +1,6 @@
-use crate::span::Span;
 use std::fmt;
+
+use crate::common::span::Span;
 
 #[derive(Debug, PartialEq, Clone)]
 /// An error for when some unexpected token was found.

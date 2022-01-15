@@ -1,6 +1,9 @@
-use crate::source::Source;
-use std::fmt;
-use std::rc::Rc;
+use std::{
+    fmt,
+    rc::Rc,
+};
+
+use crate::common::source::Source;
 
 #[derive(Clone, PartialEq)]
 pub struct Span {

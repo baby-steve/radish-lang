@@ -1,6 +1,3 @@
-pub mod opcode;
-pub mod source;
-pub mod span;
-pub mod value;
+pub mod common;
 pub mod compiler;
 pub mod vm;

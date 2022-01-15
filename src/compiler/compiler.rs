@@ -1,10 +1,13 @@
-use crate::opcode::Opcode;
-use crate::value::Value;
-use crate::vm::Chunk;
-
-use crate::compiler::{
-    ast::*,
-    visitor::Visitor,
+use crate::{
+    common::{
+        opcode::Opcode,
+        value::Value,
+    },
+    compiler::{
+        ast::*,
+        visitor::Visitor,
+    },
+    vm::Chunk,
 };
 
 pub struct Compiler {
@@ -184,7 +187,7 @@ mod tests {
     use std::rc::Rc;
 
     use crate::compiler::parser::Parser;
-    use crate::source::Source;
+    use crate::common::source::Source;
 
     fn run_test_compiler(test_string: &str) -> Compiler {
         let source = Source::source(test_string);
