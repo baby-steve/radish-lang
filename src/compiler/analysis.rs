@@ -1,46 +1,14 @@
-use std::{collections::HashMap, fmt};
+use std::fmt;
 
 use crate::{
-    common::span::Span,
-    compiler::{ast::*, visitor::Visitor},
+    compiler::{
+        ast::*,
+        table::{Symbol, SymbolTable},
+        visitor::Visitor,
+    },
 };
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct SemanticError {
-    pub error: String,
-    pub span: Span,
-}
-
-impl fmt::Display for SemanticError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let message = format!("{}", self.error);
-
-        write!(f, "Semantic Error: {}\n{}", &message, self.span)
-    }
-}
-
-#[derive(Debug, PartialEq, Copy, Clone, Eq, Hash)]
-pub struct Symbol {
-    pub location: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct SymbolTable {
-    pub symbols: HashMap<String, Symbol>,
-}
-
-impl SymbolTable {
-    pub fn new() -> Self {
-        SymbolTable {
-            symbols: HashMap::new(),
-        }
-    }
-
-    pub fn add_symbol(&mut self, key: &str, value: Symbol) -> Option<Symbol> {
-        self.symbols.insert(key.to_string(), value)
-    }
-}
-
+#[derive(Debug)]
 pub struct SemanticAnalyzer {
     pub scopes: Vec<SymbolTable>,
 }
@@ -48,7 +16,7 @@ pub struct SemanticAnalyzer {
 impl SemanticAnalyzer {
     pub fn new() -> Self {
         SemanticAnalyzer {
-            scopes: vec![SymbolTable::new()],
+            scopes: vec![SymbolTable::new(0)],
         }
     }
 
@@ -56,13 +24,15 @@ impl SemanticAnalyzer {
         for node in &ast.items {
             self.visit(&node)
         }
+        println!("{}", self.scopes[self.scopes.len() - 1]);
     }
 
     fn enter_scope(&mut self) {
-        self.scopes.push(SymbolTable::new());
+        self.scopes.push(SymbolTable::new(self.scopes.len()));
     }
 
     fn exit_scope(&mut self) {
+        println!("{}", self.scopes[self.scopes.len() - 1]);
         self.scopes.pop();
     }
 
@@ -126,5 +96,15 @@ impl Visitor for SemanticAnalyzer {
         if self.resolve_local(&id.name) == None {
             panic!("identifier '{}' not found.", &id.name);
         }
+    }
+}
+
+impl fmt::Display for SemanticAnalyzer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for scope in &self.scopes {
+            writeln!(f, "{}", scope)?;
+        };
+
+        Ok(())
     }
 }
