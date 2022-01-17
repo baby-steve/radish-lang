@@ -25,10 +25,7 @@ pub struct Compiler {
 impl Compiler {
     pub fn new() -> Self {
         Compiler {
-            chunk: Chunk {
-                code: vec![],
-                constants: vec![],
-            },
+            chunk: Chunk::default(),
             scope_depth: 0,
             local_count: 0,
             locals: vec![],
@@ -84,8 +81,7 @@ impl Compiler {
     /// Add a string to the constants array. Returns the identifier's index
     /// in the constant array as a [`u32`].
     fn identifier_constant(&mut self, name: &str) -> u32 {
-        // Todo: if the name is already in the constant table, return that.
-        self.make_constant(Value::String(name.to_string()))
+        self.chunk.add_identifier(name) as u32
     }
 
     fn define_variable(&mut self, global: u32) {
