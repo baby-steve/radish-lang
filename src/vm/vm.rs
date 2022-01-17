@@ -41,16 +41,15 @@ impl VM {
     fn run(&mut self) {
         loop {
 
-            for slot in &self.stack.stack {
-                print!("[ {} ]", &slot);
-            }
-            print!("\n");
+            //for slot in &self.stack.stack {
+            //    print!("[ {} ]", &slot);
+            //}
+            //print!("\n");
 
             match self.decode_opcode() {
                 Opcode::LoadConst => {
-                    self.ip += 1;
-                    self.stack
-                        .push(self.chunk.constants[self.chunk.code[self.ip - 1] as usize].clone());
+                    let index = self.read_byte() as usize;
+                    self.stack.push(self.chunk.constants[index].clone());
                 }
                 Opcode::LoadConstLong => {
                     let constant = self.read_constant_long();
@@ -87,7 +86,14 @@ impl VM {
                         Occupied(mut val) => val.insert(self.stack.pop().unwrap()),
                         Vacant(_) => panic!("Cannot assign to a undefined global variable"),
                     };
-                    println!("{:?}", self.globals);
+                }
+                Opcode::GetLocal => {
+                    let slot_index = self.read_long() as usize;
+                    self.stack.push(self.stack.stack[slot_index].clone());
+                }
+                Opcode::SetLocal => {
+                    let slot_index = self.read_long() as usize;
+                    self.stack.stack[slot_index] = self.stack.peek().unwrap();
                 }
                 Opcode::Negate => {
                     let value = self.stack.pop().unwrap();
@@ -163,15 +169,26 @@ impl VM {
         return op;
     }
 
-    /// Reads a u32 index from [`code`] and returns the [`Value`] 
-    /// at [`constants[index]`].
-    fn read_constant_long(&mut self) -> Value {
+    #[inline]
+    fn read_byte(&mut self) -> u8 {
+        self.ip += 1;
+        self.chunk.code[self.ip - 1]
+    }
+
+    #[inline]
+    fn read_long(&mut self) -> u32 {
         self.ip += 4;
         let bytes = self.chunk.code[self.ip - 4 as usize..self.ip as usize]
             .try_into()
             .expect(&format!("Expected a slice of length {}.", 4));
         
-        self.chunk.constants[u32::from_le_bytes(bytes) as usize].clone()
+        u32::from_le_bytes(bytes)
+    }
+
+    #[inline]
+    fn read_constant_long(&mut self) -> Value {
+        let index = self.read_long() as usize;
+        self.chunk.constants[index].clone()
     }
 }
 

@@ -9,6 +9,9 @@ pub enum Opcode {
     GetGlobal,
     SetGlobal,
 
+    GetLocal,
+    SetLocal,
+
     True,
     False,
     Nil,
