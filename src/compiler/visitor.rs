@@ -8,9 +8,15 @@ pub trait Visitor {
         }
     }
 
+    fn block(&mut self, block: &BlockStmt) {
+        for node in &block.body {
+            self.visit(&node);
+        }
+    }
+
     fn statement(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::BlockStmt(_block, _) => todo!(),
+            Stmt::BlockStmt(block, _) => self.block(&block),
             Stmt::ExpressionStmt(expr, _) => self.expression_stmt(&expr),
             Stmt::VarDeclaration(decl, _) => self.var_declaration(&decl),
             Stmt::Assignment(stmt, _) => self.assignment(&stmt),
