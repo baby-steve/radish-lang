@@ -206,6 +206,14 @@ impl Visitor for Compiler {
         self.leave_scope();
     }
 
+    fn if_statement(&mut self, expr: &Expr, body: &Stmt) {
+        self.expression(&expr);
+        let then_jump = self.emit_jump(Opcode::JumpIfFalse);
+        self.emit_byte(Opcode::Pop as u8);
+        self.statement(&body);
+        self.patch_jump(then_jump);
+    }
+
     fn print(&mut self, expr: &Expr) {
         self.expression(&expr);
 

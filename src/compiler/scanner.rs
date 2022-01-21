@@ -170,6 +170,8 @@ impl Scanner {
             "print" => TokenType::Print,
             "and" => TokenType::And,
             "or" => TokenType::Or,
+            "if" => TokenType::If,
+            "then" => TokenType::Then,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -414,6 +416,25 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Or);
         assert_eq!(token.syntax(), "or");
+    }
+
+    #[test]
+    fn test_if_then_token() {
+        let mut scanner = new_test_scanner("if then");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::If);
+        assert_eq!(token.syntax(), "if");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::If);
+        assert_eq!(token.syntax(), "then");
+    }
+
+    #[test]
+    fn test_end_token() {
+        let mut scanner = new_test_scanner("end");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::End);
+        assert_eq!(token.syntax(), "end");
     }
 
     #[test]

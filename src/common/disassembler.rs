@@ -110,7 +110,7 @@ impl<'a> Disassembler<'a> {
         let byte2 = self.chunk.code[offset + 2];
         
         let jump = u16::from_le_bytes([byte1, byte2]);
-        let i_padding = " ".repeat(self.chunk.constants.len().to_string().len() - jump.to_string().len());
+        let i_padding = " ".repeat(self.chunk.code.len().to_string().len() - jump.to_string().len());
 
         print!("{}{} -> {}\n", i_padding, offset, offset + 3 + sign * jump as usize);
 

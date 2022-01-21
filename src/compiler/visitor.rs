@@ -20,6 +20,7 @@ pub trait Visitor {
             Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
             Stmt::VarDeclaration(id, init, _) => self.var_declaration(&id, &init),
             Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
+            Stmt::IfStmt(expr, body, _) => self.if_statement(expr, body),
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
@@ -33,6 +34,11 @@ pub trait Visitor {
 
     fn expression_stmt(&mut self, expr: &Expr) {
         self.expression(&expr);
+    }
+
+    fn if_statement(&mut self, expr: &Expr, body: &Stmt) {
+        self.expression(&expr);
+        self.statement(&body);
     }
 
     fn print(&mut self, expr: &Expr) {

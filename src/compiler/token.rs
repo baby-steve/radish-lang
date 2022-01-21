@@ -55,6 +55,12 @@ pub enum TokenType {
     And,
     // or
     Or,
+    // if
+    If,
+    // then
+    Then,
+    // end
+    End,
 
     // number
     Number(f64),
@@ -99,6 +105,9 @@ impl fmt::Display for TokenType {
             Print => write!(f, "Print"),
             And => write!(f, "And"),
             Or => write!(f, "Or"),
+            If => write!(f, "If"),
+            Then => write!(f, "Then"),
+            End => write!(f, "End"),
             Number(_) => write!(f, "Number"),
             Ident(_) => write!(f, "Ident"),
             Comment(_, _) => write!(f, "Comment"),
@@ -148,6 +157,9 @@ impl Token {
             Print => "print",
             And => "and",
             Or => "or",
+            If => "if",
+            Then => "then",
+            End => "end",
 
             Eof => "<Eof>",
 
@@ -195,6 +207,9 @@ impl Token {
             "print" => TokenType::Print,
             "and" => TokenType::And,
             "or" => TokenType::Or,
+            "if" => TokenType::If,
+            "then" => TokenType::Then,
+            "end" => TokenType::End,
             "<Eof>" => TokenType::Eof,
 
             _ => return None,

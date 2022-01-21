@@ -140,6 +140,8 @@ impl Parser {
             }
             // "var" ...
             TokenType::Var => self.parse_var_declaration(),
+            // "if" ...
+            TokenType::If => self.parse_if_statement(),
             // "print" ...
             TokenType::Print => self.parse_print_statement(),
             // id ...
@@ -171,6 +173,23 @@ impl Parser {
         };
 
         Ok(Stmt::VarDeclaration(id, init, span))
+    }
+
+    fn parse_if_statement(&mut self) -> Result<Stmt, ParserError> {
+        // if ...
+        let start = Span::from(&self.current.as_ref().unwrap().span);
+        self.consume(TokenType::If);
+
+        // if <expr>
+        let expr = self.expression()?;
+
+        // if <expr> then
+        self.consume(TokenType::Then);
+
+        // if <expr> then <block> end
+        let block = self.parse_block("end")?;
+
+        Ok(Stmt::IfStmt(expr, Box::new(block), Span::combine(&start, &self.current.as_ref().unwrap().span)))
     }
 
     fn parse_print_statement(&mut self) -> Result<Stmt, ParserError> {

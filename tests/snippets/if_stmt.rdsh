@@ -1,0 +1,21 @@
+// Test if statements.
+
+if 23 < 45 then
+    print 1 // expect: 1
+end
+
+var a = 45
+if true != false and true then
+    var a = 66
+    print a // expect: 66
+end
+
+if 23 == 45 then
+    1 + nil // this would fail if executed
+end
+
+if 7 < 8 then
+    if 2 * 2 == 7 - 3 then
+        print "Ok" // expect: "Ok"
+    end
+end
