@@ -1,31 +1,22 @@
-1 + 2
-1 - 2
-2 * 2
-4 / 2
+// Test radish binary operators.
 
-1 + 1 + 1
-2 - 1 - 1
-2 * 3 * 4
-8 / 2 / 2
+print 12 + 3 // expect: 15
+print 40 - 1 // expect: 39 
+print 50 * 2 // expect: 100
+print 25 / 5 // expect: 5
 
-1 + 3 - 2 * 4 / 2
+print 2 + 3 - 4 * 5 / 2 // expect: -5
 
-1 * 234
 
-235897489789 + 428478278
-
-1 +
-23
-
-1 < 2
-2 > 1
-3 < 1
-4 > 5
-1 <= 2
-2 >= 1
-2 == 2
-3 != 4
-true == false
-true == true
-1 == true
-1 + 2 == 4 - 1
+print 4 < 15 // expect: true
+print 15 < 4 // expect: false
+print 12 > 1 // expect: true
+print 1 > 17 // expect: false
+print 2 == 2 // expect: true
+print 2 == 4 // expect: false
+print 4 <= 5 // expect: true
+print 5 <= 4 // expect: false
+print 7 >= 2 // expect: true
+print 2 >= 7 // expect: false
+print 2 != 5 // expect: true
+print 3 != 3 // expect: false

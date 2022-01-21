@@ -4,6 +4,7 @@ use std::{
         hash_map::Entry::{Vacant, Occupied},
     },
     convert::TryInto,
+    rc::Rc,
 };
 
 use crate::{
@@ -15,26 +16,65 @@ use crate::{
     vm::stack::Stack,
 };
 
-#[derive(Debug, PartialEq)]
+pub trait RadishFile {
+    fn write(&self, msg: &str);
+}
+
+impl std::fmt::Debug for dyn RadishFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        writeln!(f, "<RadishFile>")
+    }
+}
+
+#[derive(Debug)]
+struct RadishIO;
+
+impl RadishFile for RadishIO {
+    fn write(&self, msg: &str) {
+        print!("{}\n", msg);
+    }
+}
+
+#[derive(Debug)]
+pub struct RadishConfig {
+    stdout: Rc<dyn RadishFile>,
+}
+
+impl RadishConfig {
+    pub fn new() -> Rc<RadishConfig> {
+        Rc::new(RadishConfig {
+            stdout: Rc::new(RadishIO),
+        })
+    }
+
+    pub fn with_stdout(stdout: Rc<dyn RadishFile>) -> Rc<RadishConfig> {
+        Rc::new(RadishConfig { stdout })
+    }
+}
+
+#[derive(Debug)]
 pub struct VM {
     pub chunk: Chunk,
     pub stack: Stack,
     pub ip: usize,
 
     pub globals: HashMap<String, Value>,
+    pub config: Rc<RadishConfig>
 }
 
 impl VM {
-    pub fn new(chunk: Chunk) -> VM {
+    pub fn new(config: &Rc<RadishConfig>) -> VM {
         VM {
-            chunk,
+            chunk: Chunk::default(),
             ip: 0,
             stack: Stack::new(),
             globals: HashMap::new(),
+            config: Rc::clone(&config),
         }
     }
 
-    pub fn interpret(&mut self) {
+    pub fn interpret(&mut self, chunk: Chunk) {
+        self.chunk = chunk;
         self.run();
     }
 
@@ -153,8 +193,21 @@ impl VM {
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a != b));
                 }
+                Opcode::JumpIfFalse => {
+                    let offset = self.read_short();
+                    if self.is_falsey() {
+                        self.ip += offset as usize;
+                    }
+                }
+                Opcode::JumpIfTrue => {
+                    let offset = self.read_short();
+                    if !self.is_falsey() {
+                        self.ip += offset as usize;
+                    }
+                }
                 Opcode::Print => {
-                    println!("{}", self.stack.pop().unwrap());
+                    let msg = self.stack.pop().unwrap();
+                    self.config.stdout.write(&format!("{}", msg));
                 }
                 Opcode::Halt => {
                     break;
@@ -176,6 +229,14 @@ impl VM {
     }
 
     #[inline]
+    fn read_short(&mut self) -> u16 {
+        self.ip += 2;
+        let byte1 = self.chunk.code[self.ip - 2 as usize];
+        let byte2 = self.chunk.code[self.ip - 1 as usize];
+        u16::from_le_bytes([byte1, byte2])
+    }
+
+    #[inline]
     fn read_long(&mut self) -> u32 {
         self.ip += 4;
         let bytes = self.chunk.code[self.ip - 4 as usize..self.ip as usize]
@@ -190,20 +251,32 @@ impl VM {
         let index = self.read_long() as usize;
         self.chunk.constants[index].clone()
     }
+
+    #[inline]
+    fn is_falsey(&mut self) -> bool {
+        match self.stack.peek() {
+            Some(Value::Nil)
+            | Some(Value::Boolean(false)) => true,
+            _ => false,
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    fn test_vm(chunk: Chunk) -> VM {
+        let config = RadishConfig::new();
+        let mut vm = VM::new(&config);
+        vm.interpret(chunk);
+        vm
+    }
+
     #[test]
     fn test_halt_opcode() {
         let code = vec![Opcode::Halt as u8];
-        let mut vm = VM::new(Chunk {
-            code,
-            constants: vec![],
-        });
-        vm.run();
+        let vm = test_vm(Chunk::new(code, vec![]));
         assert_eq!(vm.ip, 1);
     }
 
@@ -211,8 +284,7 @@ mod tests {
     fn test_constant_opcode() {
         let code = vec![Opcode::LoadConst as u8, 0, Opcode::Halt as u8];
         let constants = vec![Value::Number(123.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Number(123.0)));
     }
 
@@ -225,8 +297,7 @@ mod tests {
             Opcode::Halt as u8,
         ];
         let constants = vec![Value::Number(2.0), Value::Number(3.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Number(5.0)));
     }
 
@@ -239,8 +310,7 @@ mod tests {
             Opcode::Halt as u8,
         ];
         let constants = vec![Value::Number(3.0), Value::Number(2.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Number(1.0)));
     }
 
@@ -253,8 +323,7 @@ mod tests {
             Opcode::Halt as u8,
         ];
         let constants = vec![Value::Number(2.0), Value::Number(5.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Number(10.0)));
     }
 
@@ -267,8 +336,7 @@ mod tests {
             Opcode::Halt as u8,
         ];
         let constants = vec![Value::Number(4.0), Value::Number(2.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Number(2.0)));
     }
     
@@ -281,8 +349,7 @@ mod tests {
             Opcode::Halt as u8,            
         ];
         let constants = vec![Value::Number(4.0), Value::Number(5.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
     }
 
@@ -295,8 +362,7 @@ mod tests {
             Opcode::Halt as u8,            
         ];
         let constants = vec![Value::Number(4.0), Value::Number(5.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
     }
 
@@ -309,8 +375,7 @@ mod tests {
             Opcode::Halt as u8,            
         ];
         let constants = vec![Value::Number(6.0), Value::Number(5.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
     }
 
@@ -323,8 +388,7 @@ mod tests {
             Opcode::Halt as u8,            
         ];
         let constants = vec![Value::Number(8.0), Value::Number(5.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
     }
 
@@ -337,8 +401,7 @@ mod tests {
             Opcode::Halt as u8,            
         ];
         let constants = vec![Value::Number(5.0), Value::Number(5.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
     }
 
@@ -351,8 +414,7 @@ mod tests {
             Opcode::Halt as u8,            
         ];
         let constants = vec![Value::Number(9.0), Value::Number(5.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
     }
 
@@ -377,8 +439,7 @@ mod tests {
             Value::Number(4.0),
             Value::Number(5.0),
         ];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Number(9.0)));
     }
 
@@ -390,8 +451,7 @@ mod tests {
             Opcode::Halt as u8
         ];
         let constants = vec![Value::Number(2.0)];
-        let mut vm = VM::new(Chunk { code, constants });
-        vm.run();
+        let mut vm = test_vm(Chunk::new(code, constants));
         assert_eq!(vm.stack.peek(), Some(Value::Number(-2.0)));
     }
 
@@ -402,32 +462,28 @@ mod tests {
             Opcode::Not as u8,
             Opcode::Halt as u8
         ];
-        let mut vm = VM::new(Chunk { code, constants: vec![] });
-        vm.run();
+        let mut vm = test_vm(Chunk::new( code, vec![]));
         assert_eq!(vm.stack.peek(), Some(Value::from(false)));
     }
 
     #[test]
     fn test_true_opcode() {
         let code = vec!(Opcode::True as u8, Opcode::Halt as u8);
-        let mut vm = VM::new(Chunk { code, constants: vec!() });
-        vm.run();
+        let mut vm = test_vm(Chunk::new( code, vec![]));
         assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
     }
 
     #[test]
     fn test_false_opcode() {
         let code = vec!(Opcode::False as u8, Opcode::Halt as u8);
-        let mut vm = VM::new(Chunk { code, constants: vec!() });
-        vm.run();
+        let mut vm = test_vm(Chunk::new( code, vec![]));
         assert_eq!(vm.stack.peek(), Some(Value::Boolean(false)));
     }
 
     #[test]
     fn test_nil_opcode() {
         let code = vec![Opcode::Nil as u8, Opcode::Halt as u8];
-        let mut vm = VM::new(Chunk { code, constants: vec![] });
-        vm.run();
+        let mut vm = test_vm(Chunk::new( code, vec![]));
         assert_eq!(vm.stack.peek(), Some(Value::Nil));
     }
 
@@ -441,12 +497,11 @@ mod tests {
 
         let constants = vec![Value::from("a"), Value::from(23.0)];
 
-        let mut vm = VM::new(Chunk {code, constants});
-        vm.run();
+        let vm = test_vm(Chunk::new(code, constants));
 
         println!("{:?}", vm.stack);
         println!("{:?}", vm.globals);
-        assert_eq!(vm.globals.get("a"), Some(&Value::from(23.0)));
+        assert_eq!(vm.globals.get("\"a\""), Some(&Value::from(23.0)));
     }
     /*
     #[test]

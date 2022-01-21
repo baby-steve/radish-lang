@@ -1,46 +1,14 @@
-use std::{collections::HashMap, fmt};
+use std::fmt;
 
 use crate::{
-    common::span::Span,
-    compiler::{ast::*, visitor::Visitor},
+    compiler::{
+        ast::*,
+        table::{Symbol, SymbolTable},
+        visitor::Visitor,
+    },
 };
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct SemanticError {
-    pub error: String,
-    pub span: Span,
-}
-
-impl fmt::Display for SemanticError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let message = format!("{}", self.error);
-
-        write!(f, "Semantic Error: {}\n{}", &message, self.span)
-    }
-}
-
-#[derive(Debug, PartialEq, Copy, Clone, Eq, Hash)]
-pub struct Symbol {
-    pub location: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct SymbolTable {
-    pub symbols: HashMap<String, Symbol>,
-}
-
-impl SymbolTable {
-    pub fn new() -> Self {
-        SymbolTable {
-            symbols: HashMap::new(),
-        }
-    }
-
-    pub fn add_symbol(&mut self, key: &str, value: Symbol) -> Option<Symbol> {
-        self.symbols.insert(key.to_string(), value)
-    }
-}
-
+#[derive(Debug)]
 pub struct SemanticAnalyzer {
     pub scopes: Vec<SymbolTable>,
 }
@@ -48,21 +16,24 @@ pub struct SemanticAnalyzer {
 impl SemanticAnalyzer {
     pub fn new() -> Self {
         SemanticAnalyzer {
-            scopes: vec![SymbolTable::new()],
+            scopes: vec![SymbolTable::new(0)],
         }
     }
 
     pub fn analyze(&mut self, ast: &AST) {
         for node in &ast.items {
-            self.visit(&node)
+            self.statement(&node);
         }
+        
+        println!("{}", self.scopes[self.scopes.len() - 1]);
     }
 
     fn enter_scope(&mut self) {
-        self.scopes.push(SymbolTable::new());
+        self.scopes.push(SymbolTable::new(self.scopes.len()));
     }
 
     fn exit_scope(&mut self) {
+        println!("{}", self.scopes[self.scopes.len() - 1]);
         self.scopes.pop();
     }
 
@@ -89,26 +60,27 @@ impl SemanticAnalyzer {
 }
 
 impl Visitor for SemanticAnalyzer {
-    fn block(&mut self, block: &BlockStmt) {
+    fn block(&mut self, body: &Vec<Stmt>) {
         self.enter_scope();
-        for node in &block.body {
-            self.visit(node);
+
+        for node in body {
+            self.statement(&node);
         }
 
         self.exit_scope();
     }
 
-    fn var_declaration(&mut self, decl: &VarDeclaration) {
-        if let Some(expr) = &decl.init {
-            self.visit(&expr);
+    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) {
+        if let Some(expr) = &init {
+            self.expression(&expr);
         }
 
-        match self.add_symbol(&decl.id.name, Symbol { location: 0 }) {
+        match self.add_symbol(&id.name, Symbol { location: 0 }) {
             Some(old_value) => {
                 if self.scopes.len() > 1 {
                     panic!(
                         "Identifier '{}' has already been declared in this scope. First declaration at {}", 
-                        &decl.id.name, old_value.location
+                        &id.name, old_value.location
                     );
                 }
             }
@@ -116,15 +88,24 @@ impl Visitor for SemanticAnalyzer {
         }
     }
 
-    fn assignment(&mut self, stmt: &Assignment) {
-        self.visit(&stmt.expr);
-
-        self.identifier(&stmt.id);
+    fn assignment(&mut self, id: &Ident, _: &OpAssignment, expr: &Expr) {
+        self.expression(&expr);
+        self.identifier(&id);
     }
 
     fn identifier(&mut self, id: &Ident) {
         if self.resolve_local(&id.name) == None {
             panic!("identifier '{}' not found.", &id.name);
         }
+    }
+}
+
+impl fmt::Display for SemanticAnalyzer {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for scope in &self.scopes {
+            writeln!(f, "{}", scope)?;
+        };
+
+        Ok(())
     }
 }

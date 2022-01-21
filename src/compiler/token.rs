@@ -51,6 +51,10 @@ pub enum TokenType {
     Var,
     // print (only temporary)
     Print,
+    // and
+    And,
+    // or
+    Or,
 
     // number
     Number(f64),
@@ -93,6 +97,8 @@ impl fmt::Display for TokenType {
             Nil => write!(f, "Nil"),
             Var => write!(f, "Var"),
             Print => write!(f, "Print"),
+            And => write!(f, "And"),
+            Or => write!(f, "Or"),
             Number(_) => write!(f, "Number"),
             Ident(_) => write!(f, "Ident"),
             Comment(_, _) => write!(f, "Comment"),
@@ -140,6 +146,8 @@ impl Token {
             Nil => "nil",
             Var => "var",
             Print => "print",
+            And => "and",
+            Or => "or",
 
             Eof => "<Eof>",
 
@@ -185,6 +193,8 @@ impl Token {
             "nil" => TokenType::Nil,
             "var" => TokenType::Var,
             "print" => TokenType::Print,
+            "and" => TokenType::And,
+            "or" => TokenType::Or,
             "<Eof>" => TokenType::Eof,
 
             _ => return None,
