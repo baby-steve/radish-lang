@@ -22,8 +22,9 @@ impl SemanticAnalyzer {
 
     pub fn analyze(&mut self, ast: &AST) {
         for node in &ast.items {
-            self.visit(&node)
+            self.statement(&node);
         }
+        
         println!("{}", self.scopes[self.scopes.len() - 1]);
     }
 
@@ -59,26 +60,27 @@ impl SemanticAnalyzer {
 }
 
 impl Visitor for SemanticAnalyzer {
-    fn block(&mut self, block: &BlockStmt) {
+    fn block(&mut self, body: &Vec<Stmt>) {
         self.enter_scope();
-        for node in &block.body {
-            self.visit(node);
+
+        for node in body {
+            self.statement(&node);
         }
 
         self.exit_scope();
     }
 
-    fn var_declaration(&mut self, decl: &VarDeclaration) {
-        if let Some(expr) = &decl.init {
-            self.visit(&expr);
+    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) {
+        if let Some(expr) = &init {
+            self.expression(&expr);
         }
 
-        match self.add_symbol(&decl.id.name, Symbol { location: 0 }) {
+        match self.add_symbol(&id.name, Symbol { location: 0 }) {
             Some(old_value) => {
                 if self.scopes.len() > 1 {
                     panic!(
                         "Identifier '{}' has already been declared in this scope. First declaration at {}", 
-                        &decl.id.name, old_value.location
+                        &id.name, old_value.location
                     );
                 }
             }
@@ -86,10 +88,9 @@ impl Visitor for SemanticAnalyzer {
         }
     }
 
-    fn assignment(&mut self, stmt: &Assignment) {
-        self.visit(&stmt.expr);
-
-        self.identifier(&stmt.id);
+    fn assignment(&mut self, id: &Ident, _: &OpAssignment, expr: &Expr) {
+        self.expression(&expr);
+        self.identifier(&id);
     }
 
     fn identifier(&mut self, id: &Ident) {

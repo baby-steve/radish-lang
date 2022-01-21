@@ -8,71 +8,61 @@ pub trait Visitor {
         }
     }
 
-    fn block(&mut self, block: &BlockStmt) {
-        for node in &block.body {
-            self.visit(&node);
+    fn block(&mut self, body: &Vec<Stmt>) {
+        for node in body {
+            self.statement(&node);
         }
     }
 
     fn statement(&mut self, stmt: &Stmt) {
         match stmt {
-            Stmt::BlockStmt(block, _) => self.block(&block),
-            Stmt::ExpressionStmt(expr, _) => self.expression_stmt(&expr),
-            Stmt::VarDeclaration(decl, _) => self.var_declaration(&decl),
-            Stmt::Assignment(stmt, _) => self.assignment(&stmt),
+            Stmt::BlockStmt(body, _) => self.block(&body),
+            Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
+            Stmt::VarDeclaration(id, init, _) => self.var_declaration(&id, &init),
+            Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
 
-    fn expression_stmt(&mut self, stmt: &ExpressionStmt) {
-        self.visit(&stmt.expr);
-    }
-
-    fn var_declaration(&mut self, decl: &VarDeclaration) {
-        match &decl.init {
-            Some(expr) => self.visit(&expr),
+    fn var_declaration(&mut self, _: &Ident, init: &Option<Expr>) {
+        match &init {
+            Some(expr) => self.expression(&expr),
             None => return,
         }
     }
 
-    fn print(&mut self, expr: &ASTNode) {
-        self.visit(&expr);
+    fn expression_stmt(&mut self, expr: &Expr) {
+        self.expression(&expr);
     }
 
-    fn assignment(&mut self, stmt: &Assignment) {
-        self.visit(&stmt.expr);
+    fn print(&mut self, expr: &Expr) {
+        self.expression(&expr);
+    }
+
+    fn assignment(&mut self, _: &Ident, _: &OpAssignment, expr: &Expr) {
+        self.expression(&expr);
     }
 
     fn expression(&mut self, expr: &Expr) {
         match expr {
-            Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
-            Expr::ParenExpr(expr, _) => self.grouping(expr),
-            Expr::UnaryExpr(arg, _) => self.unary(arg),
-            Expr::Identifier(id) => self.identifier(id),
-            Expr::Literal(lit, _) => self.literal(lit),
+            Expr::BinaryExpr(expr, _) => self.binary_expression(&expr),
+            Expr::ParenExpr(expr, _) => self.expression(&expr),
+            Expr::UnaryExpr(op, arg, _) => self.unary(&arg, &op),
+            Expr::Identifier(id) => self.identifier(&id),
+            Expr::Number(num, _) => self.number(&num),
+            Expr::String(string, _) => self.string(&string),
+            Expr::Bool(val, _) => self.boolean(&val),
+            Expr::Nil(_) => self.nil(),
         }
-    }
-
-    fn grouping(&mut self, expr: &ParenExpr) {
-        self.visit(&expr.expr);
     }
 
     fn binary_expression(&mut self, expr: &BinaryExpr) {
-        self.visit(&expr.left);
-        self.visit(&expr.right);
+        self.expression(&expr.left);
+        self.expression(&expr.right);
     }
 
-    fn unary(&mut self, node: &UnaryExpr) {
-        self.visit(&node.arg);
-    }
-
-    fn literal(&mut self, node: &Literal) {
-        match node {
-            Literal::Number(val) => self.number(val),
-            Literal::Bool(val) => self.boolean(val),
-            Literal::String(val) => self.string(val),
-            Literal::Nil => self.nil(),
-        }
+    fn unary(&mut self, arg: &Expr, _: &Op) {
+        self.expression(&arg);
     }
 
     fn identifier(&mut self, _: &Ident) {}

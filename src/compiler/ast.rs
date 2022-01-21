@@ -1,18 +1,12 @@
 use crate::common::span::Span;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Ident {
-    pub name: String,
-    pub pos: Span,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct AST {
-    pub items: Vec<ASTNode>,
+    pub items: Vec<Stmt>,
 }
 
 impl AST {
-    pub fn new(items: Vec<ASTNode>) -> AST {
+    pub fn new(items: Vec<Stmt>) -> AST {
         AST { items }
     }
 }
@@ -46,55 +40,40 @@ impl ASTNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    BlockStmt(Box<BlockStmt>, Span),
-    ExpressionStmt(Box<ExpressionStmt>, Span),
-    VarDeclaration(Box<VarDeclaration>, Span),
-    Assignment(Box<Assignment>, Span),
-    PrintStmt(Box<ASTNode>, Span),
+    // <expr>*
+    BlockStmt(Box<Vec<Stmt>>, Span),
+    // <expr>
+    ExpressionStmt(Box<Expr>),
+    // 'var' <id> '=' <expr>
+    VarDeclaration(Ident, Option<Expr>, Span),
+    // <id> <op> <expr>
+    Assignment(Ident, OpAssignment, Expr, Span),
+    // 'print' <expr>
+    PrintStmt(Expr, Span),
 }
 
 impl Stmt {
     pub fn position(&self) -> Span {
         match self {
-            Self::VarDeclaration(_, pos)
+            Self::VarDeclaration(_, _, pos)
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
-            | Self::Assignment(_, pos)
-            | Self::ExpressionStmt(_, pos) => pos.clone(),
+            | Self::Assignment(_, _, _, pos) => pos.clone(),
+            Self::ExpressionStmt(expr) => expr.position(),
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct BlockStmt {
-    pub body: Vec<ASTNode>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ExpressionStmt {
-    pub expr: ASTNode,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct VarDeclaration {
-    pub id: Ident,
-    pub init: Option<ASTNode>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Assignment {
-    pub id: Ident,
-    pub op: OpAssignment,
-    pub expr: ASTNode,
-}
-
-#[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     BinaryExpr(Box<BinaryExpr>, Span),
-    ParenExpr(Box<ParenExpr>, Span),
-    UnaryExpr(Box<UnaryExpr>, Span),
+    ParenExpr(Box<Expr>, Span),
+    UnaryExpr(Op, Box<Expr>, Span),
     Identifier(Ident),
-    Literal(Literal, Span),
+    Number(f64, Span),
+    Bool(bool, Span),
+    String(String, Span),
+    Nil(Span),
 }
 
 impl Expr {
@@ -102,8 +81,11 @@ impl Expr {
         match self {
             Self::BinaryExpr(_, pos) 
             | Self::ParenExpr(_, pos)
-            | Self::UnaryExpr(_, pos)
-            | Self::Literal(_, pos) => pos.clone(),
+            | Self::UnaryExpr(_, _, pos)
+            | Self::Number(_, pos)
+            | Self::Bool(_, pos)
+            | Self::String(_, pos)
+            | Self::Nil(pos) => pos.clone(),
             
             Self::Identifier(id) => id.pos.clone(),
         }
@@ -119,28 +101,21 @@ impl Expr {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BinaryExpr {
-    pub left: ASTNode,
+    pub left: Expr,
     pub op: Op,
-    pub right: ASTNode,
+    pub right: Expr,
+}
+
+impl BinaryExpr {
+    pub fn new(op: Op, l: Expr, r: Expr) -> BinaryExpr {
+        BinaryExpr { op, left: l, right: r }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct ParenExpr {
-    pub expr: ASTNode,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct UnaryExpr {
-    pub op: Op,
-    pub arg: ASTNode,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Literal {
-    Number(f64),
-    Bool(bool),
-    String(String),
-    Nil
+pub struct Ident {
+    pub name: String,
+    pub pos: Span,
 }
 
 #[derive(Debug, Clone, PartialEq)]
