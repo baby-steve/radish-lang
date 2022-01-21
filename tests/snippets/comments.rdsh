@@ -1,11 +1,11 @@
-// this is a comment
+// Test comments (like this one).
 
-// and so is this
-// as is this
+// and this one.
+// and also this one.
 
-// 1 + 2 - 3
+// 1 + 2 - 4
 
 1 + // why's this here?
 2
 
-// this is also a comment
+// one last comment

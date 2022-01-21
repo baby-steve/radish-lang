@@ -1,5 +1,7 @@
-1234
-true
-false
-nil
-"Hello, World!"
+// Test radish literals.
+
+print 1234 // expect: 1234
+print true // expect: true
+print false // expect: false
+print nil // expect: nil
+print "Hello, World!" // expect: "Hello, World!"

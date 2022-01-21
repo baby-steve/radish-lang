@@ -1,0 +1,8 @@
+// Test blocks.
+
+{} // empty block
+
+{
+    1 + 2
+    print 23 // expect: 23
+}

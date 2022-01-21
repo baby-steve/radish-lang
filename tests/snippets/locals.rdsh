@@ -1,0 +1,31 @@
+// Test local variables
+
+var a = 45
+{
+    var a = 23
+    {
+        var a = 1
+        print a // expect: 1
+    }
+    print a // expect: 23
+
+    var d
+    {
+        var d = "Okay"
+    }
+    print d // expect: nil
+}
+print a // expect: 45
+
+{
+    var a
+    var b = a
+    var c = 56
+    print c // expect: 56
+}
+
+var a
+{
+    a = 45
+}
+print a // expect: 45
