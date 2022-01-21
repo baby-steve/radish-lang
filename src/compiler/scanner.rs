@@ -168,6 +168,8 @@ impl Scanner {
             "nil" => TokenType::Nil,
             "var" => TokenType::Var,
             "print" => TokenType::Print,
+            "and" => TokenType::And,
+            "or" => TokenType::Or,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -401,6 +403,17 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Print);
         assert_eq!(token.syntax(), "print");
+    }
+
+    #[test]
+    fn test_and_or_token() {
+        let mut scanner = new_test_scanner("and or");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::And);
+        assert_eq!(token.syntax(), "and");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Or);
+        assert_eq!(token.syntax(), "or");
     }
 
     #[test]

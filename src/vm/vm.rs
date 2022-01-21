@@ -193,6 +193,18 @@ impl VM {
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a != b));
                 }
+                Opcode::JumpIfFalse => {
+                    let offset = self.read_short();
+                    if self.is_falsey() {
+                        self.ip += offset as usize;
+                    }
+                }
+                Opcode::JumpIfTrue => {
+                    let offset = self.read_short();
+                    if !self.is_falsey() {
+                        self.ip += offset as usize;
+                    }
+                }
                 Opcode::Print => {
                     let msg = self.stack.pop().unwrap();
                     self.config.stdout.write(&format!("{}", msg));
@@ -217,6 +229,14 @@ impl VM {
     }
 
     #[inline]
+    fn read_short(&mut self) -> u16 {
+        self.ip += 2;
+        let byte1 = self.chunk.code[self.ip - 2 as usize];
+        let byte2 = self.chunk.code[self.ip - 1 as usize];
+        u16::from_le_bytes([byte1, byte2])
+    }
+
+    #[inline]
     fn read_long(&mut self) -> u32 {
         self.ip += 4;
         let bytes = self.chunk.code[self.ip - 4 as usize..self.ip as usize]
@@ -230,6 +250,15 @@ impl VM {
     fn read_constant_long(&mut self) -> Value {
         let index = self.read_long() as usize;
         self.chunk.constants[index].clone()
+    }
+
+    #[inline]
+    fn is_falsey(&mut self) -> bool {
+        match self.stack.peek() {
+            Some(Value::Nil)
+            | Some(Value::Boolean(false)) => true,
+            _ => false,
+        }
     }
 }
 

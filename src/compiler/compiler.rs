@@ -48,6 +48,32 @@ impl Compiler {
         self.emit_byte(Opcode::Halt as u8);
     }
 
+    /// emit the given bytecode instruction and write a placeholder 
+    /// for the jump offset.
+    fn emit_jump(&mut self, instruction: Opcode) -> usize {
+        self.emit_byte(instruction as u8);
+        self.emit_byte(0xff);
+        self.emit_byte(0xff);
+        self.chunk.code.len() - 2
+    }
+
+    /// Go back into the bytecode stream and replace the operand
+    /// at the given location with the calculated jump offset.
+    fn patch_jump(&mut self, offset: usize) {
+        let jump = self.chunk.code.len() - offset - 2;
+
+        if jump > u16::MAX.into() {
+            // should probably test this and also make better error message.
+            // also should implement u32 jump.
+            panic!("To much code to jump over.");
+        }
+
+        let bytes = (jump as u16).to_le_bytes();
+
+        self.chunk.code[offset] = bytes[0];
+        self.chunk.code[offset + 1] = bytes[1];
+    }
+
     /// add a constant to the chunk's constant array. Returns the
     /// constant's index in the constant array as a u32.
     fn make_constant(&mut self, value: Value) -> u32 {
@@ -237,6 +263,23 @@ impl Visitor for Compiler {
             Op::NotEqual => self.emit_byte(Opcode::NotEqual as u8),
             _ => unreachable!("{:?} is not a binary operator.", &expr.op),
         }
+    }
+
+    fn logical_expr(&mut self, expr: &BinaryExpr) {
+        self.expression(&expr.left);
+
+        let op = match &expr.op {
+            Op::And => Opcode::JumpIfFalse,
+            Op::Or => Opcode::JumpIfTrue,
+            _ => unreachable!("Invalid logical operator."),
+        };
+
+        let end_jump = self.emit_jump(op);
+        self.emit_byte(Opcode::Pop as u8);
+
+        self.expression(&expr.right);
+
+        self.patch_jump(end_jump);
     }
 
     fn unary(&mut self, arg: &Expr, op: &Op) {

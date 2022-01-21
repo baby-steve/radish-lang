@@ -32,8 +32,8 @@ impl From<Expr> for ASTNode {
 impl ASTNode {
     pub fn position(&self) -> Span {
         match self {
-            Self::Expr(expr) => expr.position(), 
-            Self::Stmt(stmt) => stmt.position(), 
+            Self::Expr(expr) => expr.position(),
+            Self::Stmt(stmt) => stmt.position(),
         }
     }
 }
@@ -69,6 +69,7 @@ pub enum Expr {
     BinaryExpr(Box<BinaryExpr>, Span),
     ParenExpr(Box<Expr>, Span),
     UnaryExpr(Op, Box<Expr>, Span),
+    LogicalExpr(Box<BinaryExpr>, Span),
     Identifier(Ident),
     Number(f64, Span),
     Bool(bool, Span),
@@ -79,14 +80,14 @@ pub enum Expr {
 impl Expr {
     pub fn position(&self) -> Span {
         match self {
-            Self::BinaryExpr(_, pos) 
+            Self::BinaryExpr(_, pos)
             | Self::ParenExpr(_, pos)
             | Self::UnaryExpr(_, _, pos)
+            | Self::LogicalExpr(_, pos)
             | Self::Number(_, pos)
             | Self::Bool(_, pos)
             | Self::String(_, pos)
             | Self::Nil(pos) => pos.clone(),
-            
             Self::Identifier(id) => id.pos.clone(),
         }
     }
@@ -108,7 +109,11 @@ pub struct BinaryExpr {
 
 impl BinaryExpr {
     pub fn new(op: Op, l: Expr, r: Expr) -> BinaryExpr {
-        BinaryExpr { op, left: l, right: r }
+        BinaryExpr {
+            op,
+            left: l,
+            right: r,
+        }
     }
 }
 
@@ -131,6 +136,8 @@ pub enum Op {
     GreaterThanEquals,
     EqualsTo,
     NotEqual,
+    And,
+    Or,
 }
 
 #[derive(Debug, Clone, PartialEq)]

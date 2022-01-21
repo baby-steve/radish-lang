@@ -14,17 +14,17 @@ impl<'a> Disassembler<'a> {
         println!("Disassembling {}...", self.name);       
         let mut offset = 0;
 
-        println!("==== Code ====");
+        println!("==== Code ====================");
         while offset < self.chunk.code.len() {
             offset = self.disassemble_instruction(offset);
         }
 
-        println!("==== Constants ====");
+        println!("==== Constants ===============");
         for con in &self.chunk.constants {
             print!("[ {} ]", con);
         }
 
-        print!("\n");
+        print!("\n\n");
     }
 
     fn disassemble_instruction(&self, offset: usize) -> usize {
@@ -59,6 +59,10 @@ impl<'a> Disassembler<'a> {
             Opcode::NotEqual => self.simple_instruction("NotEqual", offset),
             Opcode::Negate => self.simple_instruction("Negate", offset),
             Opcode::Not => self.simple_instruction("Not", offset),
+
+            Opcode::JumpIfTrue => self.jump_instruction("JumpIfTrue", 1, offset),
+            Opcode::JumpIfFalse => self.jump_instruction("JumpIfFalse", 1, offset),
+
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Halt => self.simple_instruction("Halt", offset),
         }
@@ -99,9 +103,23 @@ impl<'a> Disassembler<'a> {
         offset + 5
     }
 
+    fn jump_instruction(&self, name: &str, sign: usize, offset: usize) -> usize {
+        self.write_instruction(name, offset);
+
+        let byte1 = self.chunk.code[offset + 1];
+        let byte2 = self.chunk.code[offset + 2];
+        
+        let jump = u16::from_le_bytes([byte1, byte2]);
+        let i_padding = " ".repeat(self.chunk.constants.len().to_string().len() - jump.to_string().len());
+
+        print!("{}{} -> {}\n", i_padding, offset, offset + 3 + sign * jump as usize);
+
+        offset + 3
+    }
+
     fn write_instruction(&self, name: &str, offset: usize) {
         let padding = " ".repeat(self.chunk.code.len().to_string().len() - offset.to_string().len());
-        print!("{}{}: {:<14}", padding, offset, name);
+        print!("{}{}: {:<20}", padding, offset, name);
     } 
 
     fn write_value(&self, index: usize) {

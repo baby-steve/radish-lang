@@ -48,6 +48,7 @@ pub trait Visitor {
             Expr::BinaryExpr(expr, _) => self.binary_expression(&expr),
             Expr::ParenExpr(expr, _) => self.expression(&expr),
             Expr::UnaryExpr(op, arg, _) => self.unary(&arg, &op),
+            Expr::LogicalExpr(expr, _) => self.logical_expr(&expr),
             Expr::Identifier(id) => self.identifier(&id),
             Expr::Number(num, _) => self.number(&num),
             Expr::String(string, _) => self.string(&string),
@@ -57,6 +58,11 @@ pub trait Visitor {
     }
 
     fn binary_expression(&mut self, expr: &BinaryExpr) {
+        self.expression(&expr.left);
+        self.expression(&expr.right);
+    }
+
+    fn logical_expr(&mut self, expr: &BinaryExpr) {
         self.expression(&expr.left);
         self.expression(&expr.right);
     }

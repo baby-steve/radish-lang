@@ -232,7 +232,47 @@ impl Parser {
     }
 
     fn expression(&mut self) -> Result<Expr, ParserError> {
-        self.parse_boolean_factor()
+        self.parse_boolean_expression()
+    }
+
+    fn parse_boolean_expression(&mut self) -> Result<Expr, ParserError> {
+        let mut node = self.parse_boolean_term()?;
+
+        loop {
+            match self.current.as_ref().unwrap().token_type {
+                TokenType::Or => {
+                    self.consume(TokenType::Or);
+
+                    let right = self.parse_boolean_term()?;
+
+                    let span = Span::combine(&node.position(), &right.position());
+                    node = Expr::LogicalExpr(Box::new(BinaryExpr::new(Op::Or, node, right)), span)
+                }
+                _ => break,
+            }
+        }
+
+        Ok(node)
+    }
+
+    fn parse_boolean_term(&mut self) -> Result<Expr, ParserError> {
+        let mut node = self.parse_boolean_factor()?;
+
+        loop {
+            match self.current.as_ref().unwrap().token_type {
+                TokenType::And => {
+                    self.consume(TokenType::And);
+
+                    let right = self.parse_boolean_factor()?;
+
+                    let span = Span::combine(&node.position(), &right.position());
+                    node = Expr::LogicalExpr(Box::new(BinaryExpr::new(Op::And, node, right)), span)
+                }
+                _ => break,
+            }
+        }
+
+        Ok(node)
     }
 
     fn parse_boolean_factor(&mut self) -> Result<Expr, ParserError> {
