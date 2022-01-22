@@ -62,6 +62,7 @@ impl<'a> Disassembler<'a> {
 
             Opcode::JumpIfTrue => self.jump_instruction("JumpIfTrue", 1, offset),
             Opcode::JumpIfFalse => self.jump_instruction("JumpIfFalse", 1, offset),
+            Opcode::Jump => self.jump_instruction("Jump", 1, offset),
 
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Halt => self.simple_instruction("Halt", offset),

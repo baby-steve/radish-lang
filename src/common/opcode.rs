@@ -31,6 +31,7 @@ pub enum Opcode {
 
     JumpIfFalse,
     JumpIfTrue,
+    Jump,
 
     Print,
     Halt,
