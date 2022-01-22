@@ -7,3 +7,15 @@ while i < 10 loop
 endloop
 
 print i // expect: 10
+
+i = 0
+
+while i < 10 loop
+    if i == 5 then
+        break
+    end
+
+    i = i + 1
+endloop
+
+print i // expect: 5

@@ -5,8 +5,19 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Local {
-    pub name: String,
-    pub depth: usize,
+    name: String,
+    depth: usize,
+}
+
+struct Loop {
+    loop_start: usize,
+    jump_placeholders: Vec<usize>,
+}
+
+impl Loop {
+    pub fn new(loop_start: usize) -> Loop {
+        Loop { loop_start, jump_placeholders: vec![] }
+    }
 }
 
 pub struct Compiler {
@@ -14,6 +25,7 @@ pub struct Compiler {
     pub scope_depth: usize,
     pub local_count: usize,
     pub locals: Vec<Local>,
+    loops: Vec<Loop>,
 }
 
 impl Compiler {
@@ -23,6 +35,7 @@ impl Compiler {
             scope_depth: 0,
             local_count: 0,
             locals: vec![],
+            loops: vec![],
         }
     }
 
@@ -185,6 +198,18 @@ impl Compiler {
         }
     }
 
+    fn enter_loop(&mut self, index: usize) {
+        self.loops.push(Loop::new(index));
+    }
+
+    fn leave_loop(&mut self) {
+        let last_loop = self.loops.pop().unwrap();
+
+        for jump_offset in last_loop.jump_placeholders {
+            self.patch_jump(jump_offset);
+        }
+    }
+
     /// Add a [`Local`] to the [`Compiler`]'s locals array.
     fn add_local(&mut self, name: &str) {
         let local = Local {
@@ -244,12 +269,17 @@ impl Visitor for Compiler {
 
     fn loop_statement(&mut self, body: &Stmt) {
         let loop_start = self.chunk.code.len();
+        self.enter_loop(loop_start);
+
         self.statement(&body);
         self.emit_loop(loop_start);
+        
+        self.leave_loop();
     }
 
     fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
         let loop_start = self.chunk.code.len();
+        self.enter_loop(loop_start);
 
         self.expression(&expr);
         let exit_jump = self.emit_jump(Opcode::JumpIfFalse);
@@ -260,7 +290,16 @@ impl Visitor for Compiler {
         self.emit_loop(loop_start);
 
         self.patch_jump(exit_jump);
+        self.leave_loop();
         self.emit_byte(Opcode::Pop as u8);
+    }
+
+    fn break_statement(&mut self) {
+        let exit_jump = self.emit_jump(Opcode::Jump);
+        self.emit_byte(Opcode::Pop as u8);
+
+        let index = &self.loops.len() - 1;
+        self.loops[index].jump_placeholders.push(exit_jump);
     }
 
     fn print(&mut self, expr: &Expr) {

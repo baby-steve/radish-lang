@@ -54,6 +54,8 @@ pub enum Stmt {
     LoopStmt(Box<Stmt>, Span),
     // while <expr> loop <block> endloop
     WhileStmt(Expr, Box<Stmt>, Span),
+    // break
+    Break(Span),
     // 'print' <expr>
     PrintStmt(Expr, Span),
 }
@@ -67,7 +69,8 @@ impl Stmt {
             | Self::Assignment(_, _, _, pos) 
             | Self::IfStmt(_, _, _, pos)
             | Self::LoopStmt(_, pos)
-            | Self::WhileStmt(_, _, pos) => pos.clone(),
+            | Self::WhileStmt(_, _, pos)
+            | Self::Break(pos) => pos.clone(),
             Self::ExpressionStmt(expr) => expr.position(),
         }
     }

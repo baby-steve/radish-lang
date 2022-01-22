@@ -11,12 +11,15 @@ use crate::{
 #[derive(Debug)]
 pub struct SemanticAnalyzer {
     pub scopes: Vec<SymbolTable>,
+    /// Flag set to true if the analyzer is currently in a loop.
+    in_loop: bool,
 }
 
 impl SemanticAnalyzer {
     pub fn new() -> Self {
         SemanticAnalyzer {
             scopes: vec![SymbolTable::new(0)],
+            in_loop: false,
         }
     }
 
@@ -96,6 +99,32 @@ impl Visitor for SemanticAnalyzer {
     fn identifier(&mut self, id: &Ident) {
         if self.resolve_local(&id.name) == None {
             panic!("identifier '{}' not found.", &id.name);
+        }
+    }
+
+    fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
+        self.expression(&expr);
+
+        self.in_loop = true;
+
+        self.statement(&body);
+
+        self.in_loop = false;
+    }
+
+    fn loop_statement(&mut self, body: &Stmt) {
+        self.in_loop = true;
+
+        self.statement(&body);
+
+        self.in_loop = false;
+    }
+
+    fn break_statement(&mut self) {
+        // check if break is outside of a loop.
+        if !self.in_loop {
+            // Todo: make this an error, don't just panic.
+            panic!("Break statement outside a loop");
         }
     }
 }

@@ -25,6 +25,7 @@ pub trait Visitor {
             }
             Stmt::LoopStmt(body, _) => self.loop_statement(&body),
             Stmt::WhileStmt(expr, body, _) => self.while_statement(expr, body),
+            Stmt::Break(_) => self.break_statement(),
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
@@ -56,6 +57,8 @@ pub trait Visitor {
         self.expression(&expr);
         self.statement(&body);
     }
+
+    fn break_statement(&mut self) {}
 
     fn print(&mut self, expr: &Expr) {
         self.expression(&expr);
