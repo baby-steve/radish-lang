@@ -206,12 +206,23 @@ impl Visitor for Compiler {
         self.leave_scope();
     }
 
-    fn if_statement(&mut self, expr: &Expr, body: &Stmt) {
+    fn if_statement(&mut self, expr: &Expr, body: &Stmt, else_branch: &Option<Box<Stmt>>) {
         self.expression(&expr);
         let then_jump = self.emit_jump(Opcode::JumpIfFalse);
         self.emit_byte(Opcode::Pop as u8);
+        
         self.statement(&body);
+
+        let else_jump = self.emit_jump(Opcode::Jump);
+
         self.patch_jump(then_jump);
+        self.emit_byte(Opcode::Pop as u8);
+
+        if let Some(else_branch) = &else_branch {
+            self.statement(&else_branch);
+        }
+
+        self.patch_jump(else_jump);
     }
 
     fn print(&mut self, expr: &Expr) {

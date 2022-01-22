@@ -59,6 +59,8 @@ pub enum TokenType {
     If,
     // then
     Then,
+    // else
+    Else,
     // end
     End,
 
@@ -74,8 +76,135 @@ pub enum TokenType {
     Error(Box<str>),
     // <Eof>
     Eof,
+    // <empty>
+    Empty,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token {
+    pub token_type: TokenType,
+    pub span: Span,
+}
+
+impl Token {
+    pub fn new(token_type: TokenType, span: Span) -> Token {
+        Token { token_type, span }
+    }
+
+    pub fn empty() -> Token {
+        Token::new(TokenType::Empty, Span::empty())
+    }
+
+    fn literal_syntax(&self) -> &'static str {
+        use TokenType::*;
+
+        match self.token_type {
+            Plus => "+",
+            Minus => "-",
+            Star => "*",
+            Slash => "/",
+            Bang => "!",
+            Equals => "=",
+            LessThan => "<",
+            LessThanEquals => "<=",
+            GreaterThan => ">",
+            GreaterThanEquals => ">=",
+            EqualsTo => "==",
+            NotEqual => "!=",
+            Newline => "\\n",
+            LeftParen => "(",
+            RightParen => ")",
+            LeftBrace => "{",
+            RightBrace => "}",
+            True => "true",
+            False => "false",
+            Nil => "nil",
+            Var => "var",
+            Print => "print",
+            And => "and",
+            Or => "or",
+            If => "if",
+            Then => "then",
+            Else => "else",
+            End => "end",
+
+            Eof => "<Eof>",
+
+            _ => "ERROR",
+        }
+    }
+
+    pub fn syntax(&self) -> Cow<'static, str> {
+        use TokenType::*;
+
+        match &self.token_type {
+            Number(val) => val.to_string().into(),
+            Ident(id) => id.to_string().into(),
+            Comment(msg, _) => msg.to_string().into(),
+            String(val) => val.to_string().into(),
+            Error(err) => err.to_string().into(),
+
+            _ => self.literal_syntax().into(),
+        }
+    }
+
+    pub fn is_delimiter(&self) -> bool {
+        match &self.token_type {
+            TokenType::RightBrace
+            | TokenType::Else
+            | TokenType::End => true,
+            _ => false,
+        }
+    }
+
+    pub fn lookup_from_string(&self, syntax: &str) -> Option<TokenType> {
+        Some(match syntax {
+            "+" => TokenType::Plus,
+            "-" => TokenType::Minus,
+            "*" => TokenType::Star,
+            "/" => TokenType::Slash,
+            "!" => TokenType::Bang,
+            "=" => TokenType::Equals,
+            "<" => TokenType::LessThan,
+            "<=" => TokenType::LessThanEquals,
+            ">" => TokenType::GreaterThan,
+            ">=" => TokenType::GreaterThanEquals, 
+            "==" => TokenType::EqualsTo,
+            "!=" => TokenType::NotEqual,
+            "\\n" => TokenType::Newline,
+            "(" => TokenType::LeftParen,
+            ")" => TokenType::RightParen,
+            "{" => TokenType::LeftBrace,
+            "}" => TokenType::RightBrace,
+            "true" => TokenType::True,
+            "false" => TokenType::False,
+            "nil" => TokenType::Nil,
+            "var" => TokenType::Var,
+            "print" => TokenType::Print,
+            "and" => TokenType::And,
+            "or" => TokenType::Or,
+            "if" => TokenType::If,
+            "then" => TokenType::Then,
+            "else" => TokenType::Else,
+            "end" => TokenType::End,
+            "<Eof>" => TokenType::Eof,
+
+            _ => return None,
+        })
+    }
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Token {{type: {:?}, span: {:?}}}",
+            self.token_type, self.span
+        )
+    }
+}
+
+/*
 impl fmt::Display for TokenType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use TokenType::*;
@@ -116,113 +245,4 @@ impl fmt::Display for TokenType {
             Eof => write!(f, "Eof"),
         }
     }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Token {
-    pub token_type: TokenType,
-    pub span: Span,
-}
-
-impl Token {
-    pub fn new(token_type: TokenType, span: Span) -> Token {
-        Token { token_type, span }
-    }
-
-    fn literal_syntax(&self) -> &'static str {
-        use TokenType::*;
-
-        match self.token_type {
-            Plus => "+",
-            Minus => "-",
-            Star => "*",
-            Slash => "/",
-            Bang => "!",
-            Equals => "=",
-            LessThan => "<",
-            LessThanEquals => "<=",
-            GreaterThan => ">",
-            GreaterThanEquals => ">=",
-            EqualsTo => "==",
-            NotEqual => "!=",
-            Newline => "\\n",
-            LeftParen => "(",
-            RightParen => ")",
-            LeftBrace => "{",
-            RightBrace => "}",
-            True => "true",
-            False => "false",
-            Nil => "nil",
-            Var => "var",
-            Print => "print",
-            And => "and",
-            Or => "or",
-            If => "if",
-            Then => "then",
-            End => "end",
-
-            Eof => "<Eof>",
-
-            _ => "ERROR",
-        }
-    }
-
-    pub fn syntax(&self) -> Cow<'static, str> {
-        use TokenType::*;
-
-        match &self.token_type {
-            Number(val) => val.to_string().into(),
-            Ident(id) => id.to_string().into(),
-            Comment(msg, _) => msg.to_string().into(),
-            String(val) => val.to_string().into(),
-            Error(err) => err.to_string().into(),
-
-            _ => self.literal_syntax().into(),
-        }
-    }
-
-    pub fn lookup_from_string(&self, syntax: &str) -> Option<TokenType> {
-        Some(match syntax {
-            "+" => TokenType::Plus,
-            "-" => TokenType::Minus,
-            "*" => TokenType::Star,
-            "/" => TokenType::Slash,
-            "!" => TokenType::Bang,
-            "=" => TokenType::Equals,
-            "<" => TokenType::LessThan,
-            "<=" => TokenType::LessThanEquals,
-            ">" => TokenType::GreaterThan,
-            ">=" => TokenType::GreaterThanEquals, 
-            "==" => TokenType::EqualsTo,
-            "!=" => TokenType::NotEqual,
-            "\\n" => TokenType::Newline,
-            "(" => TokenType::LeftParen,
-            ")" => TokenType::RightParen,
-            "{" => TokenType::LeftBrace,
-            "}" => TokenType::RightBrace,
-            "true" => TokenType::True,
-            "false" => TokenType::False,
-            "nil" => TokenType::Nil,
-            "var" => TokenType::Var,
-            "print" => TokenType::Print,
-            "and" => TokenType::And,
-            "or" => TokenType::Or,
-            "if" => TokenType::If,
-            "then" => TokenType::Then,
-            "end" => TokenType::End,
-            "<Eof>" => TokenType::Eof,
-
-            _ => return None,
-        })
-    }
-}
-
-impl fmt::Display for Token {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Token {{type: {}, span: {}}}",
-            self.token_type, self.span
-        )
-    }
-}
+} */

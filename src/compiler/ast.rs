@@ -48,8 +48,8 @@ pub enum Stmt {
     VarDeclaration(Ident, Option<Expr>, Span),
     // <id> <op> <expr>
     Assignment(Ident, OpAssignment, Expr, Span),
-    // if <expr> <block>
-    IfStmt(Expr, Box<Stmt>, Span),
+    // if <expr> <block> <else>
+    IfStmt(Expr, Box<Stmt>, Option<Box<Stmt>>, Span),
     // 'print' <expr>
     PrintStmt(Expr, Span),
 }
@@ -61,7 +61,7 @@ impl Stmt {
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
             | Self::Assignment(_, _, _, pos) 
-            | Self::IfStmt(_, _, pos) => pos.clone(),
+            | Self::IfStmt(_, _, _, pos) => pos.clone(),
             Self::ExpressionStmt(expr) => expr.position(),
         }
     }

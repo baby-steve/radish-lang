@@ -20,7 +20,9 @@ pub trait Visitor {
             Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
             Stmt::VarDeclaration(id, init, _) => self.var_declaration(&id, &init),
             Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
-            Stmt::IfStmt(expr, body, _) => self.if_statement(expr, body),
+            Stmt::IfStmt(expr, body, else_branch, _) => {
+                self.if_statement(&expr, &body, &else_branch)
+            }
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
@@ -36,9 +38,12 @@ pub trait Visitor {
         self.expression(&expr);
     }
 
-    fn if_statement(&mut self, expr: &Expr, body: &Stmt) {
+    fn if_statement(&mut self, expr: &Expr, body: &Stmt, else_branch: &Option<Box<Stmt>>) {
         self.expression(&expr);
         self.statement(&body);
+        if let Some(else_branch) = &else_branch {
+            self.statement(&else_branch);
+        }
     }
 
     fn print(&mut self, expr: &Expr) {
