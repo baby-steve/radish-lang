@@ -1,0 +1,9 @@
+// Test while loops
+
+var i = 0
+
+while i < 10 loop
+    i = i + 1
+endloop
+
+print i // expect: 10

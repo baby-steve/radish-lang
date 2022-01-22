@@ -175,6 +175,7 @@ impl Scanner {
             "else" => TokenType::Else,
             "end" => TokenType::End,
             "loop" => TokenType::Loop,
+            "while" => TokenType::While,
             "endloop" => TokenType::EndLoop,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
@@ -453,6 +454,14 @@ mod tests {
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::EndLoop);
         assert_eq!(token.syntax(), "endloop");
+    }
+
+    #[test]
+    fn test_while_token() {
+        let mut scanner = new_test_scanner("while");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::While);
+        assert_eq!(token.syntax(), "while");
     }
 
     #[test]

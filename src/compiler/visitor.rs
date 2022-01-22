@@ -24,6 +24,7 @@ pub trait Visitor {
                 self.if_statement(&expr, &body, &else_branch)
             }
             Stmt::LoopStmt(body, _) => self.loop_statement(&body),
+            Stmt::WhileStmt(expr, body, _) => self.while_statement(expr, body),
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
@@ -48,6 +49,11 @@ pub trait Visitor {
     }
 
     fn loop_statement(&mut self, body: &Stmt) {
+        self.statement(&body);
+    }
+
+    fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
+        self.expression(&expr);
         self.statement(&body);
     }
 

@@ -136,6 +136,8 @@ impl Parser {
             TokenType::If => self.parse_if_statement(),
             // "loop" ...
             TokenType::Loop => self.parse_loop_statement(),
+            // "while" ...
+            TokenType::While => self.parse_while_statement(),
             // "print" ...
             TokenType::Print => self.parse_print_statement(),
             // id ...
@@ -226,6 +228,27 @@ impl Parser {
         self.consume(TokenType::EndLoop);
 
         Ok(Stmt::LoopStmt(loop_body, Span::combine(&start, &self.current.span)))
+    }
+
+    fn parse_while_statement(&mut self) -> Result<Stmt, ParserError> {
+        let start = self.current.span.clone();
+
+        // while ...
+        self.consume(TokenType::While);
+
+        // while <expr> ...
+        let condition = self.expression()?;
+
+        // while <expr> loop ...
+        self.consume(TokenType::Loop);
+
+        // while <expr> loop <body> ...
+        let loop_body = Box::new(self.parse_block()?);
+
+        // while <expr> loop <body> endloop
+        self.consume(TokenType::EndLoop);
+
+        Ok(Stmt::WhileStmt(condition, loop_body, Span::combine(&start, &self.current.span)))
     }
 
     fn parse_print_statement(&mut self) -> Result<Stmt, ParserError> {

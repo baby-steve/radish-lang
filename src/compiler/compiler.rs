@@ -248,6 +248,21 @@ impl Visitor for Compiler {
         self.emit_loop(loop_start);
     }
 
+    fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
+        let loop_start = self.chunk.code.len();
+
+        self.expression(&expr);
+        let exit_jump = self.emit_jump(Opcode::JumpIfFalse);
+        self.emit_byte(Opcode::Pop as u8);
+
+        self.statement(&body);
+
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        self.emit_byte(Opcode::Pop as u8);
+    }
+
     fn print(&mut self, expr: &Expr) {
         self.expression(&expr);
 

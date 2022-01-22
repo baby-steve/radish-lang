@@ -65,6 +65,8 @@ pub enum TokenType {
     End,
     // loop
     Loop,
+    // while
+    While,
     // endloop
     EndLoop,
 
@@ -132,6 +134,7 @@ impl Token {
             Else => "else",
             End => "end",
             Loop => "loop",
+            While => "while",
             EndLoop => "endloop",
 
             Eof => "<Eof>",
@@ -195,6 +198,7 @@ impl Token {
             "else" => TokenType::Else,
             "end" => TokenType::End,
             "loop" => TokenType::Loop,
+            "while" => TokenType::While,
             "endloop" => TokenType::EndLoop,
             "<Eof>" => TokenType::Eof,
 
