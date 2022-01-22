@@ -208,6 +208,9 @@ impl VM {
                 Opcode::Jump => {
                     self.ip += self.read_short() as usize;
                 }
+                Opcode::Loop => {
+                    self.ip -= self.read_short() as usize;
+                }
                 Opcode::Print => {
                     let msg = self.stack.pop().unwrap();
                     self.config.stdout.write(&format!("{}", msg));

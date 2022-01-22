@@ -63,6 +63,7 @@ impl<'a> Disassembler<'a> {
             Opcode::JumpIfTrue => self.jump_instruction("JumpIfTrue", 1, offset),
             Opcode::JumpIfFalse => self.jump_instruction("JumpIfFalse", 1, offset),
             Opcode::Jump => self.jump_instruction("Jump", 1, offset),
+            Opcode::Loop => self.jump_instruction("Loop", -1, offset),
 
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Halt => self.simple_instruction("Halt", offset),
@@ -104,7 +105,7 @@ impl<'a> Disassembler<'a> {
         offset + 5
     }
 
-    fn jump_instruction(&self, name: &str, sign: usize, offset: usize) -> usize {
+    fn jump_instruction(&self, name: &str, sign: i8, offset: usize) -> usize {
         self.write_instruction(name, offset);
 
         let byte1 = self.chunk.code[offset + 1];
@@ -113,7 +114,7 @@ impl<'a> Disassembler<'a> {
         let jump = u16::from_le_bytes([byte1, byte2]);
         let i_padding = " ".repeat(self.chunk.code.len().to_string().len() - jump.to_string().len());
 
-        print!("{}{} -> {}\n", i_padding, offset, offset + 3 + sign * jump as usize);
+        print!("{}{} -> {}\n", i_padding, offset, offset as i32 + 3 as i32 + sign as i32 * jump as i32);
 
         offset + 3
     }
