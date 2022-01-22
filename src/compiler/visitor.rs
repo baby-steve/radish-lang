@@ -23,6 +23,7 @@ pub trait Visitor {
             Stmt::IfStmt(expr, body, else_branch, _) => {
                 self.if_statement(&expr, &body, &else_branch)
             }
+            Stmt::LoopStmt(body, _) => self.loop_statement(&body),
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
@@ -44,6 +45,10 @@ pub trait Visitor {
         if let Some(else_branch) = &else_branch {
             self.statement(&else_branch);
         }
+    }
+
+    fn loop_statement(&mut self, body: &Stmt) {
+        self.statement(&body);
     }
 
     fn print(&mut self, expr: &Expr) {

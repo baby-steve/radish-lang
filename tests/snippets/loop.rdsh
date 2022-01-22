@@ -1,0 +1,6 @@
+// Test conditonless loops. 
+// These are pretty useless at the moment.
+
+// loop
+//     print "Hello" // expect: "Hello"
+// endloop

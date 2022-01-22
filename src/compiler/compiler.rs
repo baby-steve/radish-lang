@@ -74,6 +74,23 @@ impl Compiler {
         self.chunk.code[offset + 1] = bytes[1];
     }
 
+    /// Emit a loop instruction, which jumps backwards by
+    /// the given offset.
+    fn emit_loop(&mut self, loop_start: usize) {
+        self.emit_byte(Opcode::Loop as u8);
+
+        let offset = self.chunk.code.len() - loop_start + 2;
+        if offset > u16::MAX.into() {
+            // like jumps, I should probably test this and add better error message.
+            // should also implement offsets up to u32::MAX.
+            panic!("To much code to jump over.");
+        }
+
+        let bytes = (offset as u16).to_le_bytes();
+
+        self.emit_bytes(bytes[0], bytes[1]);
+    }
+
     /// add a constant to the chunk's constant array. Returns the
     /// constant's index in the constant array as a u32.
     fn make_constant(&mut self, value: Value) -> u32 {
@@ -223,6 +240,12 @@ impl Visitor for Compiler {
         }
 
         self.patch_jump(else_jump);
+    }
+
+    fn loop_statement(&mut self, body: &Stmt) {
+        let loop_start = self.chunk.code.len();
+        self.statement(&body);
+        self.emit_loop(loop_start);
     }
 
     fn print(&mut self, expr: &Expr) {

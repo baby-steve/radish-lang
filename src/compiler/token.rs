@@ -63,6 +63,10 @@ pub enum TokenType {
     Else,
     // end
     End,
+    // loop
+    Loop,
+    // endloop
+    EndLoop,
 
     // number
     Number(f64),
@@ -127,6 +131,8 @@ impl Token {
             Then => "then",
             Else => "else",
             End => "end",
+            Loop => "loop",
+            EndLoop => "endloop",
 
             Eof => "<Eof>",
 
@@ -152,6 +158,7 @@ impl Token {
         match &self.token_type {
             TokenType::RightBrace
             | TokenType::Else
+            | TokenType::EndLoop
             | TokenType::End => true,
             _ => false,
         }
@@ -187,6 +194,8 @@ impl Token {
             "then" => TokenType::Then,
             "else" => TokenType::Else,
             "end" => TokenType::End,
+            "loop" => TokenType::Loop,
+            "endloop" => TokenType::EndLoop,
             "<Eof>" => TokenType::Eof,
 
             _ => return None,

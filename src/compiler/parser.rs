@@ -134,6 +134,8 @@ impl Parser {
             TokenType::Var => self.parse_var_declaration(),
             // "if" ...
             TokenType::If => self.parse_if_statement(),
+            // "loop" ...
+            TokenType::Loop => self.parse_loop_statement(),
             // "print" ...
             TokenType::Print => self.parse_print_statement(),
             // id ...
@@ -203,14 +205,27 @@ impl Parser {
             panic!("Mismatched delimiter.");
         };
 
-        dbg!(&alt);
-
         Ok(Stmt::IfStmt(
             expr,
             block,
             alt,
             Span::combine(&start, &self.current.span),
         ))
+    }
+
+    fn parse_loop_statement(&mut self) -> Result<Stmt, ParserError> {
+        let start = self.current.span.clone();
+
+        // loop ...
+        self.consume(TokenType::Loop);
+
+        // loop <body> ...
+        let loop_body = Box::new(self.parse_block()?);
+
+        // loop <body> endloop
+        self.consume(TokenType::EndLoop);
+
+        Ok(Stmt::LoopStmt(loop_body, Span::combine(&start, &self.current.span)))
     }
 
     fn parse_print_statement(&mut self) -> Result<Stmt, ParserError> {
