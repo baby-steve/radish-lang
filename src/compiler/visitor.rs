@@ -20,6 +20,11 @@ pub trait Visitor {
             Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
             Stmt::VarDeclaration(id, init, _) => self.var_declaration(&id, &init),
             Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
+            Stmt::IfStmt(expr, body, alt, _) => self.if_statement(&expr, &body, &alt),
+            Stmt::LoopStmt(body, _) => self.loop_statement(&body),
+            Stmt::WhileStmt(expr, body, _) => self.while_statement(expr, body),
+            Stmt::Break(_) => self.break_statement(),
+            Stmt::Continue(_) => self.continue_statement(),
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
@@ -34,6 +39,27 @@ pub trait Visitor {
     fn expression_stmt(&mut self, expr: &Expr) {
         self.expression(&expr);
     }
+
+    fn if_statement(&mut self, expr: &Expr, body: &Stmt, else_branch: &Option<Box<Stmt>>) {
+        self.expression(&expr);
+        self.statement(&body);
+        if let Some(else_branch) = &else_branch {
+            self.statement(&else_branch);
+        }
+    }
+
+    fn loop_statement(&mut self, body: &Stmt) {
+        self.statement(&body);
+    }
+
+    fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
+        self.expression(&expr);
+        self.statement(&body);
+    }
+
+    fn break_statement(&mut self) {}
+
+    fn continue_statement(&mut self) {}
 
     fn print(&mut self, expr: &Expr) {
         self.expression(&expr);

@@ -55,6 +55,24 @@ pub enum TokenType {
     And,
     // or
     Or,
+    // if
+    If,
+    // then
+    Then,
+    // else
+    Else,
+    // end
+    End,
+    // loop
+    Loop,
+    // while
+    While,
+    // endloop
+    EndLoop,
+    // break
+    Break,
+    // continue
+    Continue,
 
     // number
     Number(f64),
@@ -68,45 +86,8 @@ pub enum TokenType {
     Error(Box<str>),
     // <Eof>
     Eof,
-}
-
-impl fmt::Display for TokenType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use TokenType::*;
-
-        match *self {
-            Plus => write!(f, "Plus"),
-            Slash => write!(f, "Slash"),
-            Star => write!(f, "Star"),
-            Minus => write!(f, "Minus"),
-            Bang => write!(f, "Bang"),
-            Equals => write!(f, "Equals"),
-            LessThan => write!(f, "LessThan"),
-            LessThanEquals => write!(f, "LessThanEquals"),
-            GreaterThan => write!(f, "GreaterThan"),
-            GreaterThanEquals => write!(f, "GreaterThanEquals"),
-            EqualsTo => write!(f, "EqualsTo"),
-            NotEqual => write!(f, "NotEqual"),
-            Newline => write!(f, "Newline"),
-            LeftParen => write!(f, "LeftParen"),
-            RightParen => write!(f, "RightParen"),
-            LeftBrace => write!(f, "LeftBrace"),
-            RightBrace => write!(f, "RightBrace"),
-            True => write!(f, "True"),
-            False => write!(f, "False"),
-            Nil => write!(f, "Nil"),
-            Var => write!(f, "Var"),
-            Print => write!(f, "Print"),
-            And => write!(f, "And"),
-            Or => write!(f, "Or"),
-            Number(_) => write!(f, "Number"),
-            Ident(_) => write!(f, "Ident"),
-            Comment(_, _) => write!(f, "Comment"),
-            String(_) => write!(f, "String"),
-            Error(_) => write!(f, "Error"),
-            Eof => write!(f, "Eof"),
-        }
-    }
+    // <empty>
+    Empty,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -118,6 +99,10 @@ pub struct Token {
 impl Token {
     pub fn new(token_type: TokenType, span: Span) -> Token {
         Token { token_type, span }
+    }
+
+    pub fn empty() -> Token {
+        Token::new(TokenType::Empty, Span::empty())
     }
 
     fn literal_syntax(&self) -> &'static str {
@@ -148,6 +133,15 @@ impl Token {
             Print => "print",
             And => "and",
             Or => "or",
+            If => "if",
+            Then => "then",
+            Else => "else",
+            End => "end",
+            Loop => "loop",
+            While => "while",
+            EndLoop => "endloop",
+            Break => "break",
+            Continue => "continue",
 
             Eof => "<Eof>",
 
@@ -166,6 +160,16 @@ impl Token {
             Error(err) => err.to_string().into(),
 
             _ => self.literal_syntax().into(),
+        }
+    }
+
+    pub fn is_delimiter(&self) -> bool {
+        match &self.token_type {
+            TokenType::RightBrace
+            | TokenType::Else
+            | TokenType::EndLoop
+            | TokenType::End => true,
+            _ => false,
         }
     }
 
@@ -195,6 +199,15 @@ impl Token {
             "print" => TokenType::Print,
             "and" => TokenType::And,
             "or" => TokenType::Or,
+            "if" => TokenType::If,
+            "then" => TokenType::Then,
+            "else" => TokenType::Else,
+            "end" => TokenType::End,
+            "loop" => TokenType::Loop,
+            "while" => TokenType::While,
+            "endloop" => TokenType::EndLoop,
+            "break" => TokenType::Break,
+            "continue" => TokenType::Continue,
             "<Eof>" => TokenType::Eof,
 
             _ => return None,
@@ -206,8 +219,51 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Token {{type: {}, span: {}}}",
+            "Token {{type: {:?}, span: {:?}}}",
             self.token_type, self.span
         )
     }
 }
+
+/*
+impl fmt::Display for TokenType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use TokenType::*;
+
+        match *self {
+            Plus => write!(f, "Plus"),
+            Slash => write!(f, "Slash"),
+            Star => write!(f, "Star"),
+            Minus => write!(f, "Minus"),
+            Bang => write!(f, "Bang"),
+            Equals => write!(f, "Equals"),
+            LessThan => write!(f, "LessThan"),
+            LessThanEquals => write!(f, "LessThanEquals"),
+            GreaterThan => write!(f, "GreaterThan"),
+            GreaterThanEquals => write!(f, "GreaterThanEquals"),
+            EqualsTo => write!(f, "EqualsTo"),
+            NotEqual => write!(f, "NotEqual"),
+            Newline => write!(f, "Newline"),
+            LeftParen => write!(f, "LeftParen"),
+            RightParen => write!(f, "RightParen"),
+            LeftBrace => write!(f, "LeftBrace"),
+            RightBrace => write!(f, "RightBrace"),
+            True => write!(f, "True"),
+            False => write!(f, "False"),
+            Nil => write!(f, "Nil"),
+            Var => write!(f, "Var"),
+            Print => write!(f, "Print"),
+            And => write!(f, "And"),
+            Or => write!(f, "Or"),
+            If => write!(f, "If"),
+            Then => write!(f, "Then"),
+            End => write!(f, "End"),
+            Number(_) => write!(f, "Number"),
+            Ident(_) => write!(f, "Ident"),
+            Comment(_, _) => write!(f, "Comment"),
+            String(_) => write!(f, "String"),
+            Error(_) => write!(f, "Error"),
+            Eof => write!(f, "Eof"),
+        }
+    }
+} */

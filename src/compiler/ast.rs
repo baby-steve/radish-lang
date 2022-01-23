@@ -48,6 +48,16 @@ pub enum Stmt {
     VarDeclaration(Ident, Option<Expr>, Span),
     // <id> <op> <expr>
     Assignment(Ident, OpAssignment, Expr, Span),
+    // if <expr> <block> <alternate> end
+    IfStmt(Expr, Box<Stmt>, Option<Box<Stmt>>, Span),
+    // loop <block> endloop
+    LoopStmt(Box<Stmt>, Span),
+    // while <expr> loop <block> endloop
+    WhileStmt(Expr, Box<Stmt>, Span),
+    // break
+    Break(Span),
+    // continue
+    Continue(Span),
     // 'print' <expr>
     PrintStmt(Expr, Span),
 }
@@ -58,7 +68,12 @@ impl Stmt {
             Self::VarDeclaration(_, _, pos)
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
-            | Self::Assignment(_, _, _, pos) => pos.clone(),
+            | Self::Assignment(_, _, _, pos) 
+            | Self::IfStmt(_, _, _, pos)
+            | Self::LoopStmt(_, pos)
+            | Self::WhileStmt(_, _, pos)
+            | Self::Continue(pos)
+            | Self::Break(pos) => pos.clone(),
             Self::ExpressionStmt(expr) => expr.position(),
         }
     }

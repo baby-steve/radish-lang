@@ -5,8 +5,19 @@ use crate::{
 
 #[derive(Debug)]
 pub struct Local {
-    pub name: String,
-    pub depth: usize,
+    name: String,
+    depth: usize,
+}
+
+struct Loop {
+    loop_start: usize,
+    jump_placeholders: Vec<usize>,
+}
+
+impl Loop {
+    pub fn new(loop_start: usize) -> Loop {
+        Loop { loop_start, jump_placeholders: vec![] }
+    }
 }
 
 pub struct Compiler {
@@ -14,6 +25,7 @@ pub struct Compiler {
     pub scope_depth: usize,
     pub local_count: usize,
     pub locals: Vec<Local>,
+    loops: Vec<Loop>,
 }
 
 impl Compiler {
@@ -23,6 +35,7 @@ impl Compiler {
             scope_depth: 0,
             local_count: 0,
             locals: vec![],
+            loops: vec![],
         }
     }
 
@@ -72,6 +85,23 @@ impl Compiler {
 
         self.chunk.code[offset] = bytes[0];
         self.chunk.code[offset + 1] = bytes[1];
+    }
+
+    /// Emit a loop instruction, which jumps backwards by
+    /// the given offset.
+    fn emit_loop(&mut self, loop_start: usize) {
+        self.emit_byte(Opcode::Loop as u8);
+
+        let offset = self.chunk.code.len() - loop_start + 2;
+        if offset > u16::MAX.into() {
+            // like jumps, I should probably test this and add better error message.
+            // should also implement offsets up to u32::MAX.
+            panic!("To much code to jump over.");
+        }
+
+        let bytes = (offset as u16).to_le_bytes();
+
+        self.emit_bytes(bytes[0], bytes[1]);
     }
 
     /// add a constant to the chunk's constant array. Returns the
@@ -168,6 +198,18 @@ impl Compiler {
         }
     }
 
+    fn enter_loop(&mut self, index: usize) {
+        self.loops.push(Loop::new(index));
+    }
+
+    fn leave_loop(&mut self) {
+        let last_loop = self.loops.pop().unwrap();
+
+        for jump_offset in last_loop.jump_placeholders {
+            self.patch_jump(jump_offset);
+        }
+    }
+
     /// Add a [`Local`] to the [`Compiler`]'s locals array.
     fn add_local(&mut self, name: &str) {
         let local = Local {
@@ -204,6 +246,66 @@ impl Visitor for Compiler {
         }
 
         self.leave_scope();
+    }
+
+    fn if_statement(&mut self, expr: &Expr, body: &Stmt, else_branch: &Option<Box<Stmt>>) {
+        self.expression(&expr);
+        let then_jump = self.emit_jump(Opcode::JumpIfFalse);
+        self.emit_byte(Opcode::Pop as u8);
+        
+        self.statement(&body);
+
+        let else_jump = self.emit_jump(Opcode::Jump);
+
+        self.patch_jump(then_jump);
+        self.emit_byte(Opcode::Pop as u8);
+
+        if let Some(else_branch) = &else_branch {
+            self.statement(&else_branch);
+        }
+
+        self.patch_jump(else_jump);
+    }
+
+    fn loop_statement(&mut self, body: &Stmt) {
+        let loop_start = self.chunk.code.len();
+        self.enter_loop(loop_start);
+
+        self.statement(&body);
+        self.emit_loop(loop_start);
+
+        self.leave_loop();
+    }
+
+    fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
+        let loop_start = self.chunk.code.len();
+        self.enter_loop(loop_start);
+
+        self.expression(&expr);
+        let exit_jump = self.emit_jump(Opcode::JumpIfFalse);
+        self.emit_byte(Opcode::Pop as u8);
+
+        self.statement(&body);
+
+        self.emit_loop(loop_start);
+
+        self.patch_jump(exit_jump);
+        self.leave_loop();
+        self.emit_byte(Opcode::Pop as u8);
+    }
+
+    fn break_statement(&mut self) {
+        let exit_jump = self.emit_jump(Opcode::Jump);
+        self.emit_byte(Opcode::Pop as u8);
+
+        let index = &self.loops.len() - 1;
+        self.loops[index].jump_placeholders.push(exit_jump);
+    }
+
+    fn continue_statement(&mut self) {
+        let loop_start = self.loops.last().unwrap().loop_start;
+
+        self.emit_loop(loop_start);
     }
 
     fn print(&mut self, expr: &Expr) {

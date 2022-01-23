@@ -1,3 +1,4 @@
+use std::mem;
 use std::rc::Rc;
 
 use crate::compiler::{
@@ -7,16 +8,13 @@ use crate::compiler::{
     token::{Token, TokenType},
 };
 
-use crate::common::{
-    source::Source,
-    span::Span,
-};
+use crate::common::{source::Source, span::Span};
 
 pub struct Parser {
     source: Rc<Source>,
     scanner: Scanner,
-    previous: Option<Token>,
-    current: Option<Token>,
+    previous: Token,
+    current: Token,
 }
 
 impl Parser {
@@ -24,8 +22,8 @@ impl Parser {
         Parser {
             source: Rc::clone(&source),
             scanner: Scanner::new(source),
-            previous: None,
-            current: None,
+            previous: Token::empty(),
+            current: Token::empty(),
         }
     }
     pub fn parse(&mut self) -> Result<AST, ParserError> {
@@ -45,13 +43,12 @@ impl Parser {
     }
 
     fn advance(&mut self) {
-        self.previous = self.current.clone();
-
-        self.current = Some(self.scanner.scan_token());
+        self.previous = mem::replace(&mut self.current, self.scanner.scan_token());
     }
 
     fn check(&self, token_type: &TokenType) -> bool {
-        self.current.as_ref().unwrap().token_type == *token_type
+        // self.scanner.scan_token().token_type == *token_type
+        self.current.token_type == *token_type
     }
 
     fn match_token(&mut self, token_type: &TokenType) -> bool {
@@ -66,10 +63,10 @@ impl Parser {
     fn consume(&mut self, token_type: TokenType) {
         if !self.match_token(&token_type) {
             unreachable!(
-                "Unexpected token '{}', expected '{}' at {:?}.",
-                self.current.as_ref().unwrap().syntax(),
+                "Unexpected token '{}', expected '{:?}' at {:?}.",
+                self.current.syntax(),
                 token_type,
-                self.current.as_ref().unwrap().span,
+                self.current.span,
             );
         }
     }
@@ -78,7 +75,7 @@ impl Parser {
         let mut items = vec![];
 
         loop {
-            match self.current.as_ref().unwrap().token_type {
+            match self.current.token_type {
                 // <Eof>
                 TokenType::Eof => {
                     self.advance();
@@ -96,22 +93,13 @@ impl Parser {
         }
     }
 
-    fn parse_block(&mut self, end: &str) -> Result<Stmt, ParserError> {
+    /// Parse everything up to, but not including, a delimiter.
+    fn parse_block(&mut self) -> Result<Stmt, ParserError> {
         let mut body = vec![];
-        let start_span = Span::from(&self.previous.as_ref().unwrap().span);
+        let start_span = Span::from(&self.previous.span);
 
-        while self.current.as_ref().unwrap().syntax() != end {
-            let current = self.current.as_ref().unwrap().clone();
-
-            match self.current.as_ref().unwrap().token_type {
-                // <Eof>
-                TokenType::Eof => {
-                    let msg = format!("found unexpected {}.", current.syntax());
-                    return Err(ParserError::new(
-                        SyntaxError::ExpectedError(ExpectedRightBrace(msg)),
-                        &current.span,
-                    ));
-                }
+        while !self.current.is_delimiter() {
+            match self.current.token_type {
                 // \n or //...
                 TokenType::Newline | TokenType::Comment(_, false) => {
                     // should single-line comments be parsed?
@@ -123,24 +111,38 @@ impl Parser {
             };
         }
 
-        self.advance();
+        // the delimiter
+        // self.advance();
+
         let node = Stmt::BlockStmt(
             Box::new(body),
-            Span::combine(&start_span, &self.current.as_ref().unwrap().span),
+            Span::combine(&start_span, &self.current.span),
         );
         return Ok(node);
     }
 
     fn parse_statement(&mut self) -> Result<Stmt, ParserError> {
-        match self.current.as_ref().unwrap().token_type {
+        match self.current.token_type {
             // "{" ...
             TokenType::LeftBrace => {
                 self.consume(TokenType::LeftBrace);
-                self.parse_block("}")
+                let block = self.parse_block();
+                self.consume(TokenType::RightBrace);
+                block
             }
-            // "var" ...
+            // var ...
             TokenType::Var => self.parse_var_declaration(),
-            // "print" ...
+            // if ...
+            TokenType::If => self.parse_if_statement(),
+            // loop ...
+            TokenType::Loop => self.parse_loop_statement(),
+            // while ...
+            TokenType::While => self.parse_while_statement(),
+            // break ...
+            TokenType::Break => self.parse_break_statement(),
+            // continue
+            TokenType::Continue => self.parse_continue_statement(),
+            // print ...
             TokenType::Print => self.parse_print_statement(),
             // id ...
             TokenType::Ident(_) => self.parse_assignment_statement(),
@@ -151,14 +153,14 @@ impl Parser {
 
     fn parse_var_declaration(&mut self) -> Result<Stmt, ParserError> {
         // var ...
-        let start = Span::from(&self.current.as_ref().unwrap().span);
+        let start = Span::from(&self.current.span);
 
         self.consume(TokenType::Var);
 
         // var id ...
         let id = self.parse_identifier()?;
 
-        let current = self.current.as_ref().unwrap();
+        let current = &self.current;
 
         let (init, span) = match current.token_type {
             TokenType::Equals => {
@@ -173,8 +175,102 @@ impl Parser {
         Ok(Stmt::VarDeclaration(id, init, span))
     }
 
+    fn parse_if_statement(&mut self) -> Result<Stmt, ParserError> {
+        // if ...
+        let start = Span::from(&self.current.span);
+        self.consume(TokenType::If);
+
+        // if <expr> ...
+        let expr = self.expression()?;
+
+        // if <expr> then ...analysis
+        self.consume(TokenType::Then);
+
+        // if <expr> then <block> ...
+        let block = Box::new(self.parse_block()?);
+
+        let alt = if self.current.token_type == TokenType::Else {
+            // if <expr> then <block> else ...
+            self.consume(TokenType::Else);
+
+            if self.current.token_type == TokenType::If {
+                // if <expr> then <block> else if ...
+                Some(Box::new(self.parse_if_statement()?))
+            } else {
+                // if <expr> then <block> else <block> end
+                let alternate = Some(Box::new(self.parse_block()?));
+                self.consume(TokenType::End);
+                alternate
+            }
+        } else if self.current.token_type == TokenType::End {
+            // if <expr> then <block> end
+            self.consume(TokenType::End);
+            None
+        } else {
+            // Todo: this should be an actual error.
+            panic!("Mismatched delimiter.");
+        };
+
+        Ok(Stmt::IfStmt(
+            expr,
+            block,
+            alt,
+            Span::combine(&start, &self.current.span),
+        ))
+    }
+
+    fn parse_loop_statement(&mut self) -> Result<Stmt, ParserError> {
+        let start = self.current.span.clone();
+
+        // loop ...
+        self.consume(TokenType::Loop);
+
+        // loop <body> ...
+        let loop_body = Box::new(self.parse_block()?);
+
+        // loop <body> endloop
+        self.consume(TokenType::EndLoop);
+
+        Ok(Stmt::LoopStmt(loop_body, Span::combine(&start, &self.current.span)))
+    }
+
+    fn parse_while_statement(&mut self) -> Result<Stmt, ParserError> {
+        let start = self.current.span.clone();
+
+        // while ...
+        self.consume(TokenType::While);
+
+        // while <expr> ...
+        let condition = self.expression()?;
+
+        // while <expr> loop ...
+        self.consume(TokenType::Loop);
+
+        // while <expr> loop <body> ...
+        let loop_body = Box::new(self.parse_block()?);
+
+        // while <expr> loop <body> endloop
+        self.consume(TokenType::EndLoop);
+
+        Ok(Stmt::WhileStmt(condition, loop_body, Span::combine(&start, &self.current.span)))
+    }
+
+    fn parse_break_statement(&mut self) -> Result<Stmt, ParserError> {
+        // Todo: should be able to break to a label.
+        self.consume(TokenType::Break);
+
+        Ok(Stmt::Break(Span::from(&self.previous.span)))
+    }
+
+    fn parse_continue_statement(&mut self) -> Result<Stmt, ParserError> {
+        // Todo: should be able to continue to a label.
+        self.consume(TokenType::Continue);
+
+        Ok(Stmt::Continue(Span::from(&self.previous.span)))
+    }
+
     fn parse_print_statement(&mut self) -> Result<Stmt, ParserError> {
-        let start = self.current.as_ref().unwrap().clone().span;
+        let start = self.current.clone().span;
 
         self.consume(TokenType::Print);
 
@@ -182,10 +278,7 @@ impl Parser {
         let expr = self.expression()?;
         let end = &expr.position();
 
-        Ok(Stmt::PrintStmt(
-            expr,
-            Span::combine(&start, end),
-        ))
+        Ok(Stmt::PrintStmt(expr, Span::combine(&start, end)))
     }
 
     fn parse_expression_statement(&mut self) -> Result<Stmt, ParserError> {
@@ -195,7 +288,7 @@ impl Parser {
     fn parse_assignment_statement(&mut self) -> Result<Stmt, ParserError> {
         let node = self.expression()?;
 
-        match self.current.as_ref().unwrap().token_type {
+        match self.current.token_type {
             // expr = ...
             TokenType::Equals => {
                 self.consume(TokenType::Equals);
@@ -239,7 +332,7 @@ impl Parser {
         let mut node = self.parse_boolean_term()?;
 
         loop {
-            match self.current.as_ref().unwrap().token_type {
+            match self.current.token_type {
                 TokenType::Or => {
                     self.consume(TokenType::Or);
 
@@ -259,7 +352,7 @@ impl Parser {
         let mut node = self.parse_boolean_factor()?;
 
         loop {
-            match self.current.as_ref().unwrap().token_type {
+            match self.current.token_type {
                 TokenType::And => {
                     self.consume(TokenType::And);
 
@@ -279,7 +372,7 @@ impl Parser {
         let mut node = self.parse_sum()?;
 
         loop {
-            match self.current.as_ref().unwrap().token_type {
+            match self.current.token_type {
                 // expr < ...
                 TokenType::LessThan => {
                     self.consume(TokenType::LessThan);
@@ -297,7 +390,8 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::LessThan, node, right)), span)
+                    node =
+                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::LessThan, node, right)), span)
                 }
                 // expr <= ...
                 TokenType::LessThanEquals => {
@@ -316,7 +410,10 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::LessThanEquals, node, right)), span)
+                    node = Expr::BinaryExpr(
+                        Box::new(BinaryExpr::new(Op::LessThanEquals, node, right)),
+                        span,
+                    )
                 }
                 // expr > ...
                 TokenType::GreaterThan => {
@@ -335,7 +432,10 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::GreaterThan, node, right)), span)
+                    node = Expr::BinaryExpr(
+                        Box::new(BinaryExpr::new(Op::GreaterThan, node, right)),
+                        span,
+                    )
                 }
                 // expr >= ...
                 TokenType::GreaterThanEquals => {
@@ -354,7 +454,10 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::GreaterThanEquals, node, right)), span)
+                    node = Expr::BinaryExpr(
+                        Box::new(BinaryExpr::new(Op::GreaterThanEquals, node, right)),
+                        span,
+                    )
                 }
                 // expr == ...
                 TokenType::EqualsTo => {
@@ -373,7 +476,8 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::EqualsTo, node, right)), span)
+                    node =
+                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::EqualsTo, node, right)), span)
                 }
                 // expr != ...
                 TokenType::NotEqual => {
@@ -392,7 +496,8 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::NotEqual, node, right)), span)
+                    node =
+                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::NotEqual, node, right)), span)
                 }
                 _ => break,
             }
@@ -406,7 +511,7 @@ impl Parser {
         let mut node = self.parse_term()?;
 
         loop {
-            match self.current.as_ref().unwrap().token_type {
+            match self.current.token_type {
                 // expr + ...
                 TokenType::Plus => {
                     self.consume(TokenType::Plus);
@@ -444,7 +549,8 @@ impl Parser {
 
                     let span = Span::combine(&node.position(), &right.position());
 
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Subtract, node, right)), span)
+                    node =
+                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Subtract, node, right)), span)
                 }
                 _ => break,
             }
@@ -458,7 +564,7 @@ impl Parser {
         let mut node = self.parse_factor()?;
 
         loop {
-            match self.current.as_ref().unwrap().token_type {
+            match self.current.token_type {
                 // expr * ...
                 TokenType::Star => {
                     self.consume(TokenType::Star);
@@ -476,7 +582,8 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Multiply, node, right)), span)
+                    node =
+                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Multiply, node, right)), span)
                 }
                 // expr / ...
                 TokenType::Slash => {
@@ -495,7 +602,8 @@ impl Parser {
                     };
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Divide, node, right)), span)
+                    node =
+                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Divide, node, right)), span)
                 }
                 _ => break,
             };
@@ -506,7 +614,7 @@ impl Parser {
 
     fn parse_factor(&mut self) -> Result<Expr, ParserError> {
         loop {
-            let current = self.current.as_ref().unwrap().clone();
+            let current = self.current.clone();
 
             match current.token_type {
                 // <number>
@@ -605,7 +713,7 @@ impl Parser {
     }
 
     fn parse_identifier(&mut self) -> Result<Ident, ParserError> {
-        let token = self.current.as_ref().unwrap().clone();
+        let token = self.current.clone();
 
         match token.token_type {
             // id
@@ -629,7 +737,7 @@ impl Parser {
     }
 
     fn parse_paren(&mut self) -> Result<Expr, ParserError> {
-        let start = self.current.as_ref().unwrap().span.clone();
+        let start = self.current.span.clone();
 
         // ( ...
         self.consume(TokenType::LeftParen);
@@ -646,7 +754,7 @@ impl Parser {
 
         // ( expr <error>
         if !self.match_token(&TokenType::RightParen) {
-            let token = self.current.as_ref().unwrap();
+            let token = &self.current;
 
             if token.token_type == TokenType::Eof {
                 return Err(ParserError::new(
