@@ -71,6 +71,8 @@ pub enum TokenType {
     EndLoop,
     // break
     Break,
+    // continue
+    Continue,
 
     // number
     Number(f64),
@@ -139,6 +141,7 @@ impl Token {
             While => "while",
             EndLoop => "endloop",
             Break => "break",
+            Continue => "continue",
 
             Eof => "<Eof>",
 
@@ -204,6 +207,7 @@ impl Token {
             "while" => TokenType::While,
             "endloop" => TokenType::EndLoop,
             "break" => TokenType::Break,
+            "continue" => TokenType::Continue,
             "<Eof>" => TokenType::Eof,
 
             _ => return None,

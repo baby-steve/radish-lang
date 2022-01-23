@@ -273,7 +273,7 @@ impl Visitor for Compiler {
 
         self.statement(&body);
         self.emit_loop(loop_start);
-        
+
         self.leave_loop();
     }
 
@@ -300,6 +300,12 @@ impl Visitor for Compiler {
 
         let index = &self.loops.len() - 1;
         self.loops[index].jump_placeholders.push(exit_jump);
+    }
+
+    fn continue_statement(&mut self) {
+        let loop_start = self.loops.last().unwrap().loop_start;
+
+        self.emit_loop(loop_start);
     }
 
     fn print(&mut self, expr: &Expr) {

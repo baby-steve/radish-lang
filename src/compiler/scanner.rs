@@ -178,6 +178,7 @@ impl Scanner {
             "while" => TokenType::While,
             "endloop" => TokenType::EndLoop,
             "break" => TokenType::Break,
+            "continue" => TokenType::Continue,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -467,10 +468,13 @@ mod tests {
 
     #[test]
     fn test_break_continue_token() {
-        let mut scanner = new_test_scanner("break");
+        let mut scanner = new_test_scanner("break continue");
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Break);
         assert_eq!(token.syntax(), "break");
+        let token = scanner.scan_token();
+        assert_eq!(token.token_type, TokenType::Continue);
+        assert_eq!(token.syntax(), "continue");
     }
 
     #[test]

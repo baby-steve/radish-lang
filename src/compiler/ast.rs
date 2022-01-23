@@ -56,6 +56,8 @@ pub enum Stmt {
     WhileStmt(Expr, Box<Stmt>, Span),
     // break
     Break(Span),
+    // continue
+    Continue(Span),
     // 'print' <expr>
     PrintStmt(Expr, Span),
 }
@@ -70,6 +72,7 @@ impl Stmt {
             | Self::IfStmt(_, _, _, pos)
             | Self::LoopStmt(_, pos)
             | Self::WhileStmt(_, _, pos)
+            | Self::Continue(pos)
             | Self::Break(pos) => pos.clone(),
             Self::ExpressionStmt(expr) => expr.position(),
         }

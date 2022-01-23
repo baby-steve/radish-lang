@@ -127,6 +127,14 @@ impl Visitor for SemanticAnalyzer {
             panic!("Break statement outside a loop");
         }
     }
+
+    fn continue_statement(&mut self) {
+        // check if continue is outside of a loop.
+        if !self.in_loop {
+            // Todo: make this an error, don't just panic.
+            panic!("Continue statement outside a loop");
+        }
+    }
 }
 
 impl fmt::Display for SemanticAnalyzer {

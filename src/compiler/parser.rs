@@ -140,6 +140,8 @@ impl Parser {
             TokenType::While => self.parse_while_statement(),
             // break ...
             TokenType::Break => self.parse_break_statement(),
+            // continue
+            TokenType::Continue => self.parse_continue_statement(),
             // print ...
             TokenType::Print => self.parse_print_statement(),
             // id ...
@@ -258,6 +260,13 @@ impl Parser {
         self.consume(TokenType::Break);
 
         Ok(Stmt::Break(Span::from(&self.previous.span)))
+    }
+
+    fn parse_continue_statement(&mut self) -> Result<Stmt, ParserError> {
+        // Todo: should be able to continue to a label.
+        self.consume(TokenType::Continue);
+
+        Ok(Stmt::Continue(Span::from(&self.previous.span)))
     }
 
     fn parse_print_statement(&mut self) -> Result<Stmt, ParserError> {

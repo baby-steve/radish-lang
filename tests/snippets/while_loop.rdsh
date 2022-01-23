@@ -19,3 +19,19 @@ while i < 10 loop
 endloop
 
 print i // expect: 5
+
+i = 0
+var c = 0
+
+while i < 10 loop
+    i = i + 1
+
+    if i == 5 then
+        c = c + 6
+        continue
+    end
+
+    c = c + 1
+endloop
+
+print c // expect: 15
