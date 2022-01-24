@@ -16,7 +16,10 @@ struct Loop {
 
 impl Loop {
     pub fn new(loop_start: usize) -> Loop {
-        Loop { loop_start, jump_placeholders: vec![] }
+        Loop {
+            loop_start,
+            jump_placeholders: vec![],
+        }
     }
 }
 
@@ -61,7 +64,7 @@ impl Compiler {
         self.emit_byte(Opcode::Halt as u8);
     }
 
-    /// emit the given bytecode instruction and write a placeholder 
+    /// emit the given bytecode instruction and write a placeholder
     /// for the jump offset.
     fn emit_jump(&mut self, instruction: Opcode) -> usize {
         self.emit_byte(instruction as u8);
@@ -252,7 +255,6 @@ impl Visitor for Compiler {
         self.expression(&expr);
         let then_jump = self.emit_jump(Opcode::JumpIfFalse);
         self.emit_byte(Opcode::Pop as u8);
-        
         self.statement(&body);
 
         let else_jump = self.emit_jump(Opcode::Jump);
@@ -325,7 +327,6 @@ impl Visitor for Compiler {
             self.add_local(&id.name);
         } else {
             let global = self.identifier_constant(&id.name);
-
             if let Some(expr) = &init {
                 self.expression(&expr);
             } else {
@@ -336,10 +337,26 @@ impl Visitor for Compiler {
         }
     }
 
-    fn assignment(&mut self, id: &Ident, _: &OpAssignment, expr: &Expr) {
-        self.expression(&expr);
+    fn assignment(&mut self, id: &Ident, op: &OpAssignment, expr: &Expr) {
+        match op {
+            OpAssignment::PlusEquals => {
+                dbg!(&id);
+                self.load_variable(&id.name);
+                self.expression(&expr);
+                self.emit_byte(Opcode::Add as u8);
+            }
+            OpAssignment::MinusEquals => {
+                self.load_variable(&id.name);
+                self.expression(&expr);
+                self.emit_byte(Opcode::Subtract as u8);
+            }
+            OpAssignment::Equals => {
+                self.expression(&expr);
+            }
+        };
 
         self.save_variable(&id.name);
+        self.emit_byte(Opcode::Pop as u8);
     }
 
     fn expression_stmt(&mut self, expr: &Expr) {

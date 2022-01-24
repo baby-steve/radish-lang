@@ -158,4 +158,6 @@ pub enum Op {
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpAssignment {
     Equals,
+    PlusEquals,
+    MinusEquals,
 }

@@ -23,8 +23,20 @@ impl Scanner {
         let c = self.advance();
 
         match c {
-            Some("+") => self.make_token(TokenType::Plus),
-            Some("-") => self.make_token(TokenType::Minus),
+            Some("+") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::PlusEquals)
+                } else {
+                    self.make_token(TokenType::Plus)
+                }
+            }
+            Some("-") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::MinusEquals)
+                } else {
+                    self.make_token(TokenType::Minus)
+                }
+            }
             Some("/") => {
                 if self.match_("/") {
                     self.single_line_comment()
@@ -270,6 +282,8 @@ mod tests {
             (">=", TokenType::GreaterThanEquals),
             ("==", TokenType::EqualsTo),
             ("!=", TokenType::NotEqual),
+            ("+=", TokenType::PlusEquals),
+            ("-=", TokenType::MinusEquals),
             ("(", TokenType::LeftParen),
             (")", TokenType::RightParen),
             ("{", TokenType::LeftBrace),

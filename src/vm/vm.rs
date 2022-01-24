@@ -10,6 +10,7 @@ use std::{
 use crate::{
     common::{
         chunk::Chunk,
+        disassembler::Disassembler,
         opcode::Opcode,
         value::Value,
     },
@@ -81,10 +82,14 @@ impl VM {
     fn run(&mut self) {
         loop {
 
-            //for slot in &self.stack.stack {
-            //    print!("[ {} ]", &slot);
-            //}
-            //print!("\n");
+            // let dis = Disassembler::new("script", &self.chunk);
+            // let offset = &self.ip;
+            // dis.disassemble_instruction(*offset);
+            // print!("    ");
+            // for slot in &self.stack.stack {
+            //     print!("[ {} ]", &slot);
+            // }
+            // print!("\n");
 
             match self.decode_opcode() {
                 Opcode::LoadConst => {

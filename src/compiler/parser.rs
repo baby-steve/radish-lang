@@ -231,7 +231,10 @@ impl Parser {
         // loop <body> endloop
         self.consume(TokenType::EndLoop);
 
-        Ok(Stmt::LoopStmt(loop_body, Span::combine(&start, &self.current.span)))
+        Ok(Stmt::LoopStmt(
+            loop_body,
+            Span::combine(&start, &self.current.span),
+        ))
     }
 
     fn parse_while_statement(&mut self) -> Result<Stmt, ParserError> {
@@ -252,7 +255,11 @@ impl Parser {
         // while <expr> loop <body> endloop
         self.consume(TokenType::EndLoop);
 
-        Ok(Stmt::WhileStmt(condition, loop_body, Span::combine(&start, &self.current.span)))
+        Ok(Stmt::WhileStmt(
+            condition,
+            loop_body,
+            Span::combine(&start, &self.current.span),
+        ))
     }
 
     fn parse_break_statement(&mut self) -> Result<Stmt, ParserError> {
@@ -288,40 +295,51 @@ impl Parser {
     fn parse_assignment_statement(&mut self) -> Result<Stmt, ParserError> {
         let node = self.expression()?;
 
-        match self.current.token_type {
+        let op = match self.current.token_type {
             // expr = ...
             TokenType::Equals => {
                 self.consume(TokenType::Equals);
-
-                let id = match node.clone() {
-                    Expr::Identifier(id) => id,
-                    _ => {
-                        return Err(ParserError::new(
-                            ExpectedError(ExpectedIdentifier("".to_string())),
-                            &node.position(),
-                        ))
-                    }
-                };
-
-                // id = ....
-                let right = match self.expression() {
-                    // id = expr
-                    Ok(expr) => expr,
-                    // id = <error>
-                    Err(err) => {
-                        return Err(self.make_error(
-                            err.clone(),
-                            ExpectedError(ExpectedExpression(err.error.to_string())),
-                        ))
-                    }
-                };
-
-                let span = Span::combine(&node.position(), &right.position());
-                Ok(Stmt::Assignment(id, OpAssignment::Equals, right, span))
+                OpAssignment::Equals
+            }
+            // expr += ...
+            TokenType::PlusEquals => {
+                self.consume(TokenType::PlusEquals);
+                OpAssignment::PlusEquals
+            }
+            // expr -= ...
+            TokenType::MinusEquals => {
+                self.consume(TokenType::MinusEquals);
+                OpAssignment::MinusEquals
             }
             // expr
-            _ => Ok(Stmt::ExpressionStmt(Box::new(node))),
-        }
+            _ => return Ok(Stmt::ExpressionStmt(Box::new(node))),
+        };
+
+        let id = match node {
+            Expr::Identifier(id) => id,
+            _ => {
+                return Err(ParserError::new(
+                    ExpectedError(ExpectedIdentifier("".to_string())),
+                    &node.position(),
+                ))
+            }
+        };
+
+        // id op ....
+        let right = match self.expression() {
+            // id op expr
+            Ok(expr) => expr,
+            // id op <error>
+            Err(err) => {
+                return Err(self.make_error(
+                    err.clone(),
+                    ExpectedError(ExpectedExpression(err.error.to_string())),
+                ))
+            }
+        };
+
+        let span = Span::combine(&id.pos, &right.position());
+        Ok(Stmt::Assignment(id, op, right, span))
     }
 
     fn expression(&mut self) -> Result<Expr, ParserError> {

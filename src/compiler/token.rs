@@ -31,6 +31,10 @@ pub enum TokenType {
     EqualsTo,
     // !=
     NotEqual,
+    // +=
+    PlusEquals,
+    // -=
+    MinusEquals,
     // \n
     Newline,
     // (
@@ -121,6 +125,8 @@ impl Token {
             GreaterThanEquals => ">=",
             EqualsTo => "==",
             NotEqual => "!=",
+            PlusEquals => "+=",
+            MinusEquals => "-=",
             Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
@@ -187,6 +193,8 @@ impl Token {
             ">=" => TokenType::GreaterThanEquals, 
             "==" => TokenType::EqualsTo,
             "!=" => TokenType::NotEqual,
+            "+=" => TokenType::PlusEquals,
+            "-=" => TokenType::MinusEquals,
             "\\n" => TokenType::Newline,
             "(" => TokenType::LeftParen,
             ")" => TokenType::RightParen,
