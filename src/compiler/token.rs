@@ -35,6 +35,10 @@ pub enum TokenType {
     PlusEquals,
     // -=
     MinusEquals,
+    // *=
+    MultiplyEquals,
+    // /=
+    DivideEquals,
     // \n
     Newline,
     // (
@@ -127,6 +131,8 @@ impl Token {
             NotEqual => "!=",
             PlusEquals => "+=",
             MinusEquals => "-=",
+            MultiplyEquals => "*=",
+            DivideEquals => "/=",
             Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
@@ -195,6 +201,8 @@ impl Token {
             "!=" => TokenType::NotEqual,
             "+=" => TokenType::PlusEquals,
             "-=" => TokenType::MinusEquals,
+            "*=" => TokenType::MultiplyEquals,
+            "/=" => TokenType::DivideEquals,
             "\\n" => TokenType::Newline,
             "(" => TokenType::LeftParen,
             ")" => TokenType::RightParen,

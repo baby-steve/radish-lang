@@ -340,7 +340,6 @@ impl Visitor for Compiler {
     fn assignment(&mut self, id: &Ident, op: &OpAssignment, expr: &Expr) {
         match op {
             OpAssignment::PlusEquals => {
-                dbg!(&id);
                 self.load_variable(&id.name);
                 self.expression(&expr);
                 self.emit_byte(Opcode::Add as u8);
@@ -349,6 +348,16 @@ impl Visitor for Compiler {
                 self.load_variable(&id.name);
                 self.expression(&expr);
                 self.emit_byte(Opcode::Subtract as u8);
+            }
+            OpAssignment::MultiplyEquals => {
+                self.load_variable(&id.name);
+                self.expression(&expr);
+                self.emit_byte(Opcode::Multiply as u8);
+            }
+            OpAssignment::DivideEquals => {
+                self.load_variable(&id.name);
+                self.expression(&expr);
+                self.emit_byte(Opcode::Divide as u8);
             }
             OpAssignment::Equals => {
                 self.expression(&expr);
@@ -420,7 +429,7 @@ impl Visitor for Compiler {
     }
 
     fn string(&mut self, val: &str) {
-        self.emit_constant(Value::String(val.to_string()));
+        self.emit_constant(Value::from(val));
     }
 
     fn boolean(&mut self, val: &bool) {

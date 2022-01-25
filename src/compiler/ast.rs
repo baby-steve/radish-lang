@@ -160,4 +160,6 @@ pub enum OpAssignment {
     Equals,
     PlusEquals,
     MinusEquals,
+    MultiplyEquals,
+    DivideEquals,
 }

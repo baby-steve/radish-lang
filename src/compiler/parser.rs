@@ -311,6 +311,16 @@ impl Parser {
                 self.consume(TokenType::MinusEquals);
                 OpAssignment::MinusEquals
             }
+            // expr *= ...
+            TokenType::MultiplyEquals => {
+                self.consume(TokenType::MultiplyEquals);
+                OpAssignment::MultiplyEquals
+            }
+            // expr /= ...
+            TokenType::DivideEquals => {
+                self.consume(TokenType::DivideEquals);
+                OpAssignment::DivideEquals
+            }
             // expr
             _ => return Ok(Stmt::ExpressionStmt(Box::new(node))),
         };

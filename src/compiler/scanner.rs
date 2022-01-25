@@ -40,11 +40,19 @@ impl Scanner {
             Some("/") => {
                 if self.match_("/") {
                     self.single_line_comment()
+                } else if self.match_("=") {
+                    self.make_token(TokenType::DivideEquals)
                 } else {
                     self.make_token(TokenType::Slash)
                 }
             }
-            Some("*") => self.make_token(TokenType::Star),
+            Some("*") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::MultiplyEquals)
+                } else {
+                    self.make_token(TokenType::Star)
+                }
+            }
             Some("!") => {
                 if self.match_("=") {
                     self.make_token(TokenType::NotEqual)
@@ -284,6 +292,8 @@ mod tests {
             ("!=", TokenType::NotEqual),
             ("+=", TokenType::PlusEquals),
             ("-=", TokenType::MinusEquals),
+            ("*=", TokenType::MultiplyEquals),
+            ("/=", TokenType::DivideEquals),
             ("(", TokenType::LeftParen),
             (")", TokenType::RightParen),
             ("{", TokenType::LeftBrace),

@@ -13,6 +13,12 @@ c += d // expect: 15
 var e = 12
 e -= 3 * 2 // expect: 6
 
+var f = 5
+f *= 10 // expect: 50
+
+var g = 10
+g /= 5 // expect: 2
+
 // Test with local variables.
 {
     var f = 7
@@ -21,14 +27,20 @@ e -= 3 * 2 // expect: 6
     var g = 14
     g -= 8 // expect: 6
 
-    var h = 19
-    var i = 11
-    h += 2 // expect: 21
-    h += i // expect: 32
+    var h = 5
+    h *= 10 // expect: 50
+
+    var i = 10
+    i /= 5 // expect: 2
+
+    var j = 19
+    var k = 11
+    j += 2 // expect: 21
+    k += i // expect: 32
 }
 
-var j = 0
-while j < 10 loop
-    j += 1
+var l = 0
+while l < 10 loop
+    l += 1
 endloop
-print j // expect: 10
+print l // expect: 10
