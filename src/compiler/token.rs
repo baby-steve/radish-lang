@@ -69,8 +69,8 @@ pub enum TokenType {
     Then,
     // else
     Else,
-    // end
-    End,
+    // endif
+    EndIf,
     // loop
     Loop,
     // while
@@ -148,7 +148,7 @@ impl Token {
             If => "if",
             Then => "then",
             Else => "else",
-            End => "end",
+            EndIf => "endif",
             Loop => "loop",
             While => "while",
             EndLoop => "endloop",
@@ -180,7 +180,7 @@ impl Token {
             TokenType::RightBrace
             | TokenType::Else
             | TokenType::EndLoop
-            | TokenType::End => true,
+            | TokenType::EndIf => true,
             _ => false,
         }
     }
@@ -218,7 +218,7 @@ impl Token {
             "if" => TokenType::If,
             "then" => TokenType::Then,
             "else" => TokenType::Else,
-            "end" => TokenType::End,
+            "endif" => TokenType::EndIf,
             "loop" => TokenType::Loop,
             "while" => TokenType::While,
             "endloop" => TokenType::EndLoop,

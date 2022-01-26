@@ -199,12 +199,12 @@ impl Parser {
             } else {
                 // if <expr> then <block> else <block> end
                 let alternate = Some(Box::new(self.parse_block()?));
-                self.consume(TokenType::End);
+                self.consume(TokenType::EndIf);
                 alternate
             }
-        } else if self.current.token_type == TokenType::End {
+        } else if self.current.token_type == TokenType::EndIf {
             // if <expr> then <block> end
-            self.consume(TokenType::End);
+            self.consume(TokenType::EndIf);
             None
         } else {
             // Todo: this should be an actual error.
