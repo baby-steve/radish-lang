@@ -145,6 +145,20 @@ impl Scanner {
         }
     }
 
+    fn current_token(&mut self) -> Option<&str> {
+        if self.remaining().is_empty() {
+            None
+        } else {
+            let source = &self.source.contents[self.previous..];
+            let mut end = 1;
+            while !source.is_char_boundary(end) {
+                end += 1;
+            }
+
+            Some(&source[0..end])
+        }
+    }
+
     fn skip_next(&mut self) {
         self.previous = self.current;
     }
@@ -159,6 +173,64 @@ impl Scanner {
     }
 
     fn number(&mut self) -> Token {
+        if self.current_token() == Some("0") {
+            match self.peek() {
+                Some("b") | Some("B") => {
+                    self.advance();
+
+                    while self.peek() != None && self.peek() == Some("0")
+                        || self.peek() == Some("1")
+                    {
+                        self.advance();
+                    }
+
+                    let string_value = &self.source.contents[self.previous + 2..self.current];
+
+                    // Todo: if the string fails to parse, should report an error.
+                    let parse_value = match isize::from_str_radix(string_value, 2) {
+                        Ok(val) => val,
+                        Err(err) => panic!("{}", err),
+                    };
+                    return self.make_token(TokenType::Number(parse_value as f64));
+                }
+                Some("o") | Some("O") => {
+                    self.advance();
+
+                    while self.peek() != None && is_digit(self.peek().unwrap()) {
+                        if !is_octal(self.advance().unwrap()) {
+                            panic!("Expected digits between 0 and 7");
+                        }
+                    }
+
+                    let string_value = &self.source.contents[self.previous + 2..self.current];
+
+                    // Todo: if the string fails to parse, should report an error.
+                    let parse_value = match isize::from_str_radix(string_value, 8) {
+                        Ok(val) => val,
+                        Err(err) => panic!("{}", err),
+                    };
+                    return self.make_token(TokenType::Number(parse_value as f64));
+                }
+                Some("x") | Some("X") => {
+                    self.advance();
+
+                    while self.peek() != None && is_hex(self.peek().unwrap()) {
+                        self.advance();
+                    }
+
+                    let string_value = &self.source.contents[self.previous + 2..self.current];
+
+                    // Todo: if the string fails to parse, should report an error.
+                    let parse_value = match isize::from_str_radix(string_value, 16) {
+                        Ok(val) => val,
+                        Err(err) => panic!("{}", err),
+                    };
+                    return self.make_token(TokenType::Number(parse_value as f64));
+                }
+                _ => {}
+            };
+        }
+
         while self.peek() != None && is_digit(self.peek().unwrap()) {
             self.advance();
         }
@@ -187,7 +259,10 @@ impl Scanner {
         let string_value = &self.source.contents[self.previous..self.current];
 
         // Todo: if the string fails to parse, should report an error.
-        let parse_value = string_value.parse::<f64>().unwrap();
+        let parse_value = match string_value.parse::<f64>() {
+            Ok(val) => val,
+            Err(err) => panic!("{}", err),
+        };
         self.make_token(TokenType::Number(parse_value))
     }
 
@@ -294,6 +369,23 @@ fn is_digit(string: &str) -> bool {
     string.as_bytes()[0].is_ascii_digit()
 }
 
+fn is_octal(string: &str) -> bool {
+    // Todo: isn't there a better way to do this?
+    matches!(string, "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7")
+}
+
+fn is_hex(string: &str) -> bool {
+    if is_digit(string)
+        || string
+            .bytes()
+            .all(|b| matches!(b, b'a'..=b'f' | b'A'..=b'F'))
+    {
+        true
+    } else {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -362,6 +454,10 @@ mod tests {
             ("23e-10", 23e-10, "0.0000000023"),
             ("23.45e5", 23.45e5, "2345000"),
             ("23E10", 23e10, "230000000000"),
+            ("0b101101", 45.0, "45"),
+            ("0o10", 8.0, "8"),
+            ("0x2f", 47.0, "47"),
+            ("0x2F", 47.0, "47"),
         ];
 
         for (val, num, syntax) in tests {
