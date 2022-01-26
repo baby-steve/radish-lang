@@ -163,7 +163,30 @@ impl Scanner {
             self.advance();
         }
 
+        // check if this is a floating point number.
+        if self.peek() == Some(".") {
+            self.advance();
+            while self.peek() != None && is_digit(self.peek().unwrap()) {
+                self.advance();
+            }
+        }
+
+        // check if it's in scientific notation.
+        if self.peek() == Some("e") || self.peek() == Some("E") {
+            self.advance();
+
+            if self.peek() == Some("-") || self.peek() == Some("+") {
+                self.advance();
+            }
+
+            while self.peek() != None && is_digit(self.peek().unwrap()) {
+                self.advance();
+            }
+        }
+
         let string_value = &self.source.contents[self.previous..self.current];
+
+        // Todo: if the string fails to parse, should report an error.
         let parse_value = string_value.parse::<f64>().unwrap();
         self.make_token(TokenType::Number(parse_value))
     }
@@ -329,15 +352,25 @@ mod tests {
 
     #[test]
     fn scan_number_token() {
-        let tests = vec![("12345", 12345.0)];
+        let tests = vec![
+            ("12345", 12345.0, "12345"),
+            ("23.45", 23.45, "23.45"),
+            ("34.", 34.0, "34"),
+            ("0.55", 0.55, "0.55"),
+            ("23e10", 23e10, "230000000000"),
+            ("23e+10", 23e10, "230000000000"),
+            ("23e-10", 23e-10, "0.0000000023"),
+            ("23.45e5", 23.45e5, "2345000"),
+            ("23E10", 23e10, "230000000000"),
+        ];
 
-        for (val, num) in tests {
+        for (val, num, syntax) in tests {
             let src = Source::source(val);
             let mut scanner = Scanner::new(src);
 
             let token = scanner.scan_token();
             assert_eq!(token.token_type, TokenType::Number(num));
-            assert_eq!(token.syntax(), val);
+            assert_eq!(token.syntax(), syntax);
         }
     }
 
