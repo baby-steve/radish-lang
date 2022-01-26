@@ -1,23 +1,24 @@
 use std::fmt;
 
 use crate::{
+    common::span::Span,
     compiler::{
         ast::*,
-        table::{Symbol, SymbolTable},
+        table::{Symbol, SymbolTable, SymbolKind},
         visitor::Visitor,
     },
 };
 
 #[derive(Debug)]
-pub struct SemanticAnalyzer {
+pub struct Analyzer {
     pub scopes: Vec<SymbolTable>,
     /// Flag set to true if the analyzer is currently in a loop.
     in_loop: bool,
 }
 
-impl SemanticAnalyzer {
+impl Analyzer {
     pub fn new() -> Self {
-        SemanticAnalyzer {
+        Analyzer {
             scopes: vec![SymbolTable::new(0)],
             in_loop: false,
         }
@@ -52,7 +53,7 @@ impl SemanticAnalyzer {
             let scope = &self.scopes[depth - 1];
             depth -= 1;
 
-            match scope.symbols.get(name) {
+            match scope.get_symbol(name) {
                 Some(val) => return Some(val),
                 None => continue,
             }
@@ -62,7 +63,7 @@ impl SemanticAnalyzer {
     }
 }
 
-impl Visitor for SemanticAnalyzer {
+impl Visitor for Analyzer {
     fn block(&mut self, body: &Vec<Stmt>) {
         self.enter_scope();
 
@@ -78,12 +79,12 @@ impl Visitor for SemanticAnalyzer {
             self.expression(&expr);
         }
 
-        match self.add_symbol(&id.name, Symbol { location: 0 }) {
+        match self.add_symbol(&id.name, Symbol::new(SymbolKind::Var, &id.pos)) {
             Some(old_value) => {
                 if self.scopes.len() > 1 {
                     panic!(
                         "Identifier '{}' has already been declared in this scope. First declaration at {}", 
-                        &id.name, old_value.location
+                        &id.name, old_value.1,
                     );
                 }
             }
@@ -137,7 +138,7 @@ impl Visitor for SemanticAnalyzer {
     }
 }
 
-impl fmt::Display for SemanticAnalyzer {
+impl fmt::Display for Analyzer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for scope in &self.scopes {
             writeln!(f, "{}", scope)?;

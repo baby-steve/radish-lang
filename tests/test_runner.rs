@@ -2,7 +2,7 @@
 
 use radish_lang::{
     common::source::Source,
-    compiler::{analysis::SemanticAnalyzer, compiler::Compiler, parser::Parser},
+    compiler::{analysis::Analyzer, compiler::Compiler, parser::Parser},
     vm::vm::{RadishConfig, RadishFile, VM},
 };
 
@@ -69,7 +69,7 @@ impl TestSnippet {
                 let config = RadishConfig::with_stdout(stdout.clone());
 
                 // Analysis
-                let mut semantic_analyzer = SemanticAnalyzer::new();
+                let mut semantic_analyzer = Analyzer::new();
                 semantic_analyzer.analyze(&res);
 
                 // Compile
