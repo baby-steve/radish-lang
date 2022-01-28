@@ -94,9 +94,8 @@ impl Parser {
     }
 
     /// Parse everything up to, but not including, a delimiter.
-    fn parse_block(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_block(&mut self) -> Result<Vec<Stmt>, ParserError> {
         let mut body = vec![];
-        let start_span = Span::from(&self.previous.span);
 
         while !self.current.is_delimiter() {
             match self.current.token_type {
@@ -111,24 +110,21 @@ impl Parser {
             };
         }
 
-        // the delimiter
-        // self.advance();
-
-        let node = Stmt::BlockStmt(
-            Box::new(body),
-            Span::combine(&start_span, &self.current.span),
-        );
-        return Ok(node);
+        return Ok(body);
     }
 
     fn parse_statement(&mut self) -> Result<Stmt, ParserError> {
         match self.current.token_type {
             // "{" ...
             TokenType::LeftBrace => {
+                let start = self.current.span.clone();
                 self.consume(TokenType::LeftBrace);
-                let block = self.parse_block();
+                let block = Box::new(self.parse_block()?);
                 self.consume(TokenType::RightBrace);
-                block
+                Ok(Stmt::BlockStmt(
+                    block,
+                    Span::combine(&start, &self.current.span),
+                ))
             }
             // fun ...
             TokenType::Fun => self.parse_fun_declaration(),
@@ -162,14 +158,8 @@ impl Parser {
         // fun id ...
         let id = self.parse_identifier()?;
 
-        // fun id '(' ...
-        self.consume(TokenType::LeftParen);
-
-        // fun id '(' <params> ...
-        // todo
-
         // fun id '(' <params> ')' ...
-        self.consume(TokenType::RightParen);
+        let params = self.parse_params()?;
 
         // fun id '(' <params> ')' '{' ...
         self.consume(TokenType::LeftBrace);
@@ -182,7 +172,7 @@ impl Parser {
 
         let span = Span::combine(&start, &self.current.span);
 
-        let function = Function { id, body };
+        let function = Function { id, params, body };
 
         Ok(Stmt::FunDeclaration(function, span))
     }
@@ -234,9 +224,12 @@ impl Parser {
                 Some(Box::new(self.parse_if_statement()?))
             } else {
                 // if <expr> then <block> else <block> end
-                let alternate = Some(Box::new(self.parse_block()?));
+                let alternate = Box::new(self.parse_block()?);
                 self.consume(TokenType::EndIf);
-                alternate
+                Some(Box::new(Stmt::BlockStmt(
+                    alternate,
+                    Span::combine(&start, &self.current.span),
+                )))
             }
         } else if self.current.token_type == TokenType::EndIf {
             // if <expr> then <block> end
@@ -625,7 +618,7 @@ impl Parser {
 
     fn parse_term(&mut self) -> Result<Expr, ParserError> {
         // expr ...
-        let mut node = self.parse_factor()?;
+        let mut node = self.parse_member()?;
 
         loop {
             match self.current.token_type {
@@ -633,7 +626,7 @@ impl Parser {
                 TokenType::Star => {
                     self.consume(TokenType::Star);
 
-                    let right = match self.parse_factor() {
+                    let right = match self.parse_member() {
                         // expr * expr
                         Ok(expr) => expr,
                         // expr * <error>
@@ -653,7 +646,7 @@ impl Parser {
                 TokenType::Slash => {
                     self.consume(TokenType::Slash);
 
-                    let right = match self.parse_factor() {
+                    let right = match self.parse_member() {
                         // expr / expr
                         Ok(expr) => expr,
                         // expr / <error>
@@ -671,6 +664,26 @@ impl Parser {
                 }
                 _ => break,
             };
+        }
+
+        Ok(node)
+    }
+
+    fn parse_member(&mut self) -> Result<Expr, ParserError> {
+        let mut node = self.parse_factor()?;
+
+        loop {
+            match &self.current.token_type {
+                // expr ( ...
+                TokenType::LeftParen => {
+                    let args = self.parse_arg_list()?;
+
+                    let span = Span::combine(&node.position(), &self.current.span);
+
+                    node = Expr::CallExpr(Box::new(node), args, span)
+                }
+                _ => break,
+            }
         }
 
         Ok(node)
@@ -798,6 +811,44 @@ impl Parser {
                 ))
             }
         }
+    }
+
+    fn parse_arg_list(&mut self) -> Result<Vec<Box<Expr>>, ParserError> {
+        self.consume(TokenType::LeftParen);
+
+        let mut args = vec![];
+
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                args.push(Box::new(self.expression()?));
+                if !self.match_token(&TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen);
+
+        Ok(args)
+    }
+
+    fn parse_params(&mut self) -> Result<Vec<Ident>, ParserError> {
+        self.consume(TokenType::LeftParen);
+
+        let mut args = vec![];
+
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                args.push(self.parse_identifier()?);
+                if !self.match_token(&TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen);
+
+        Ok(args)
     }
 
     fn parse_paren(&mut self) -> Result<Expr, ParserError> {

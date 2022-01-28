@@ -64,7 +64,7 @@ impl Analyzer {
             Some(old_value) => {
                 // Todo: this should return an Analysis error.
                 panic!(
-                    "Identifier '{}' has already been declared in this scope. first declaration at {}",
+                    "Identifier '{}' has already been declared in this scope. first declaration at {:?}",
                     &name, old_value.1,
                 );
             }
@@ -106,8 +106,7 @@ impl Analyzer {
         for node in &ast.items {
             match node {
                 Stmt::FunDeclaration(fun, _) => {
-                    self.add_symbol(&fun.id.name, Symbol::new(SymbolKind::Fun, &fun.id.pos))
-                        .unwrap();
+                    self.add_symbol(&fun.id.name, Symbol::from(fun)).unwrap();
                 }
                 _ => continue,
             }
@@ -128,11 +127,20 @@ impl Visitor for Analyzer {
 
     fn function_declaration(&mut self, fun: &Function) {
         if self.scopes.len() > 1 {
-            self.add_symbol(&fun.id.name, Symbol::new(SymbolKind::Fun, &fun.id.pos))
-                .unwrap();
+            self.add_symbol(&fun.id.name, Symbol::from(fun)).unwrap();
         }
 
-        self.statement(&fun.body);
+        self.enter_scope();
+
+        for param in &fun.params {
+            self.add_symbol(&param.name, Symbol::new(SymbolKind::Var, &param.pos)).unwrap();
+        }
+
+        for node in fun.body.iter() {
+            self.statement(&node);
+        }
+
+        self.exit_scope();
     }
 
     fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) {
@@ -158,6 +166,44 @@ impl Visitor for Analyzer {
         self.identifier(&id);
     }
 
+    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) {
+        if !callee.is_callable() {
+            panic!("Looks like you just tried to call something that wasn't callable.");
+        }
+
+        match callee {
+            Expr::Identifier(id) => {
+                if let Some(symbol) = self.resolve_symbol(&id.name) {
+                    if let SymbolKind::Fun { arg_count } = symbol.0 {
+                        if args.len() != arg_count {
+                            panic!(
+                                "The function '{}' takes {} argument{}, but got {}.",
+                                &id.name,
+                                &arg_count,
+                                if arg_count == 1 { "" } else { "s" },
+                                &args.len(),
+                            )
+                        }
+                    }
+                } else {
+                    // if its the global scope, then its an error.
+                    if self.scopes.len() == 1 {
+                        panic!("Could not find '{}' anywhere.", &id.name);
+                    }
+
+                    // if we're in a local scope, it could be declared
+                    // later in global scope.
+                    self.unresolved.insert(id.name.clone());
+                }
+            }
+            _ => unimplemented!("Can only call identifiers currently."),
+        };
+
+        for arg in args {
+            self.expression(&arg);
+        }
+    }
+
     fn identifier(&mut self, id: &Ident) {
         if self.resolve_symbol(&id.name) == None {
             // if its the global scope, then its an error.
@@ -171,20 +217,20 @@ impl Visitor for Analyzer {
         }
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
+    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) {
         self.expression(&expr);
 
         self.in_loop = true;
 
-        self.statement(&body);
+        self.block(&body);
 
         self.in_loop = false;
     }
 
-    fn loop_statement(&mut self, body: &Stmt) {
+    fn loop_statement(&mut self, body: &Vec<Stmt>) {
         self.in_loop = true;
 
-        self.statement(&body);
+        self.block(&body);
 
         self.in_loop = false;
     }

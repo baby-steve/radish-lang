@@ -49,6 +49,8 @@ pub enum TokenType {
     LeftBrace,
     // }
     RightBrace,
+    // ,
+    Comma,
     // true
     True,
     // false
@@ -140,6 +142,7 @@ impl Token {
             RightParen => ")",
             LeftBrace => "{",
             RightBrace => "}",
+            Comma => ",",
             True => "true",
             False => "false",
             Nil => "nil",
@@ -211,6 +214,7 @@ impl Token {
             ")" => TokenType::RightParen,
             "{" => TokenType::LeftBrace,
             "}" => TokenType::RightBrace,
+            "," => TokenType::Comma,
             "true" => TokenType::True,
             "false" => TokenType::False,
             "nil" => TokenType::Nil,

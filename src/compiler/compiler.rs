@@ -251,11 +251,11 @@ impl Visitor for Compiler {
         self.leave_scope();
     }
 
-    fn if_statement(&mut self, expr: &Expr, body: &Stmt, else_branch: &Option<Box<Stmt>>) {
+    fn if_statement(&mut self, expr: &Expr, body: &Vec<Stmt>, else_branch: &Option<Box<Stmt>>) {
         self.expression(&expr);
         let then_jump = self.emit_jump(Opcode::JumpIfFalse);
         self.emit_byte(Opcode::Pop as u8);
-        self.statement(&body);
+        self.block(&body);
 
         let else_jump = self.emit_jump(Opcode::Jump);
 
@@ -269,17 +269,17 @@ impl Visitor for Compiler {
         self.patch_jump(else_jump);
     }
 
-    fn loop_statement(&mut self, body: &Stmt) {
+    fn loop_statement(&mut self, body: &Vec<Stmt>) {
         let loop_start = self.chunk.code.len();
         self.enter_loop(loop_start);
 
-        self.statement(&body);
+        self.block(&body);
         self.emit_loop(loop_start);
 
         self.leave_loop();
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
+    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) {
         let loop_start = self.chunk.code.len();
         self.enter_loop(loop_start);
 
@@ -287,7 +287,7 @@ impl Visitor for Compiler {
         let exit_jump = self.emit_jump(Opcode::JumpIfFalse);
         self.emit_byte(Opcode::Pop as u8);
 
-        self.statement(&body);
+        self.block(&body);
 
         self.emit_loop(loop_start);
 

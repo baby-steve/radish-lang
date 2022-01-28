@@ -32,7 +32,7 @@ pub trait Visitor {
     }
 
     fn function_declaration(&mut self, fun: &Function) {
-        self.statement(&fun.body);
+        self.block(&fun.body);
     }
 
     fn var_declaration(&mut self, _: &Ident, init: &Option<Expr>) {
@@ -46,21 +46,21 @@ pub trait Visitor {
         self.expression(&expr);
     }
 
-    fn if_statement(&mut self, expr: &Expr, body: &Stmt, else_branch: &Option<Box<Stmt>>) {
+    fn if_statement(&mut self, expr: &Expr, body: &Vec<Stmt>, else_branch: &Option<Box<Stmt>>) {
         self.expression(&expr);
-        self.statement(&body);
+        self.block(&body);
         if let Some(else_branch) = &else_branch {
             self.statement(&else_branch);
         }
     }
 
-    fn loop_statement(&mut self, body: &Stmt) {
-        self.statement(&body);
+    fn loop_statement(&mut self, body: &Vec<Stmt>) {
+        self.block(&body);
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
+    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) {
         self.expression(&expr);
-        self.statement(&body);
+        self.block(&body);
     }
 
     fn break_statement(&mut self) {}
@@ -81,6 +81,7 @@ pub trait Visitor {
             Expr::ParenExpr(expr, _) => self.expression(&expr),
             Expr::UnaryExpr(op, arg, _) => self.unary(&arg, &op),
             Expr::LogicalExpr(expr, _) => self.logical_expr(&expr),
+            Expr::CallExpr(callee, args, _) => self.call_expr(&callee, &args),
             Expr::Identifier(id) => self.identifier(&id),
             Expr::Number(num, _) => self.number(&num),
             Expr::String(string, _) => self.string(&string),
@@ -102,6 +103,8 @@ pub trait Visitor {
     fn unary(&mut self, arg: &Expr, _: &Op) {
         self.expression(&arg);
     }
+
+    fn call_expr(&mut self, _: &Expr, _: &Vec<Box<Expr>>) {}
 
     fn identifier(&mut self, _: &Ident) {}
     fn number(&mut self, _: &f64) {}
