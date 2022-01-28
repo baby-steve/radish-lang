@@ -1,5 +1,6 @@
 use crate::compiler::ast::*;
 
+// Todo: should only have defaults for some of these.
 pub trait Visitor {
     fn visit(&mut self, node: &ASTNode) {
         match node {
@@ -18,6 +19,7 @@ pub trait Visitor {
         match stmt {
             Stmt::BlockStmt(body, _) => self.block(&body),
             Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
+            Stmt::FunDeclaration(fun, _) => self.function_declaration(fun),
             Stmt::VarDeclaration(id, init, _) => self.var_declaration(&id, &init),
             Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
             Stmt::IfStmt(expr, body, alt, _) => self.if_statement(&expr, &body, &alt),
@@ -27,6 +29,10 @@ pub trait Visitor {
             Stmt::Continue(_) => self.continue_statement(),
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
+    }
+
+    fn function_declaration(&mut self, fun: &Function) {
+        self.statement(&fun.body);
     }
 
     fn var_declaration(&mut self, _: &Ident, init: &Option<Expr>) {

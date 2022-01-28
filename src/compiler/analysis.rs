@@ -1,17 +1,18 @@
+use std::collections::HashSet;
 use std::fmt;
 
-use crate::{
-    common::span::Span,
-    compiler::{
-        ast::*,
-        table::{Symbol, SymbolTable, SymbolKind},
-        visitor::Visitor,
-    },
+use crate::compiler::{
+    ast::*,
+    table::{Symbol, SymbolKind, SymbolTable},
+    visitor::Visitor,
 };
 
 #[derive(Debug)]
 pub struct Analyzer {
+    /// Chain of enclosing scopes.
     pub scopes: Vec<SymbolTable>,
+    /// Keep track of variables that where referenced before assignment
+    pub unresolved: HashSet<String>,
     /// Flag set to true if the analyzer is currently in a loop.
     in_loop: bool,
 }
@@ -20,16 +21,29 @@ impl Analyzer {
     pub fn new() -> Self {
         Analyzer {
             scopes: vec![SymbolTable::new(0)],
+            unresolved: HashSet::new(),
             in_loop: false,
         }
     }
 
     pub fn analyze(&mut self, ast: &AST) {
+        self.register_functions(&ast);
+
+        println!("{}", self.scopes[self.scopes.len() - 1]);
+
         for node in &ast.items {
             self.statement(&node);
         }
-        
+
         println!("{}", self.scopes[self.scopes.len() - 1]);
+
+        if !self.unresolved.is_empty() {
+            for err in self.unresolved.iter() {
+                println!("found undefined variable '{}'.", err);
+            }
+
+            panic!("Aborting due to the incorrectness of the given program");
+        }
     }
 
     fn enter_scope(&mut self) {
@@ -41,12 +55,26 @@ impl Analyzer {
         self.scopes.pop();
     }
 
-    fn add_symbol(&mut self, name: &str, sym: Symbol) -> Option<Symbol> {
+    /// Add a symbol to the current scope. If the symbol is already in
+    /// this scope returns an error (for now just panics).
+    fn add_symbol(&mut self, name: &str, sym: Symbol) -> Result<(), String> {
         let last = self.scopes.len() - 1;
-        self.scopes[last].add_symbol(name, sym)
+
+        match self.scopes[last].add_symbol(name, sym) {
+            Some(old_value) => {
+                // Todo: this should return an Analysis error.
+                panic!(
+                    "Identifier '{}' has already been declared in this scope. first declaration at {}",
+                    &name, old_value.1,
+                );
+            }
+            None => Ok(()),
+        }
     }
 
-    fn resolve_local(&mut self, name: &str) -> Option<&Symbol> {
+    /// Resolve a symbol by recursively checking each enclosing scope.
+    /// If the symbol isn't found then returns None.
+    fn try_resolve(&mut self, name: &str) -> Option<&Symbol> {
         let mut depth = self.scopes.len();
 
         while depth > 0 {
@@ -61,6 +89,30 @@ impl Analyzer {
 
         None
     }
+
+    fn resolve_symbol(&mut self, name: &str) -> Option<&Symbol> {
+        if let Some(symbol) = self.try_resolve(name) {
+            return Some(symbol);
+        }
+
+        None
+    }
+
+    // Todo: give this a better name.
+    // Note: should this be done by the parser?
+    /// Add all functions declared in the global scope to
+    /// the current symbol table.
+    fn register_functions(&mut self, ast: &AST) {
+        for node in &ast.items {
+            match node {
+                Stmt::FunDeclaration(fun, _) => {
+                    self.add_symbol(&fun.id.name, Symbol::new(SymbolKind::Fun, &fun.id.pos))
+                        .unwrap();
+                }
+                _ => continue,
+            }
+        }
+    }
 }
 
 impl Visitor for Analyzer {
@@ -74,22 +126,31 @@ impl Visitor for Analyzer {
         self.exit_scope();
     }
 
+    fn function_declaration(&mut self, fun: &Function) {
+        if self.scopes.len() > 1 {
+            self.add_symbol(&fun.id.name, Symbol::new(SymbolKind::Fun, &fun.id.pos))
+                .unwrap();
+        }
+
+        self.statement(&fun.body);
+    }
+
     fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) {
         if let Some(expr) = &init {
             self.expression(&expr);
         }
 
-        match self.add_symbol(&id.name, Symbol::new(SymbolKind::Var, &id.pos)) {
-            Some(old_value) => {
-                if self.scopes.len() > 1 {
-                    panic!(
-                        "Identifier '{}' has already been declared in this scope. First declaration at {}", 
-                        &id.name, old_value.1,
-                    );
+        if self.scopes.len() == 1 {
+            match self.unresolved.get(&id.name) {
+                Some(_) => {
+                    self.unresolved.remove(&id.name);
                 }
-            }
-            None => return,
+                None => {}
+            };
         }
+
+        self.add_symbol(&id.name, Symbol::new(SymbolKind::Var, &id.pos))
+            .unwrap();
     }
 
     fn assignment(&mut self, id: &Ident, _: &OpAssignment, expr: &Expr) {
@@ -98,8 +159,15 @@ impl Visitor for Analyzer {
     }
 
     fn identifier(&mut self, id: &Ident) {
-        if self.resolve_local(&id.name) == None {
-            panic!("identifier '{}' not found.", &id.name);
+        if self.resolve_symbol(&id.name) == None {
+            // if its the global scope, then its an error.
+            if self.scopes.len() == 1 {
+                panic!("Could not find '{}' anywhere.", &id.name);
+            }
+
+            // if we're in a local scope, it could be declared
+            // later in global scope.
+            self.unresolved.insert(id.name.clone());
         }
     }
 
@@ -142,7 +210,7 @@ impl fmt::Display for Analyzer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for scope in &self.scopes {
             writeln!(f, "{}", scope)?;
-        };
+        }
 
         Ok(())
     }

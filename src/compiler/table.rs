@@ -1,9 +1,10 @@
-use std::{collections::HashMap, fmt};
 use crate::common::span::Span;
+use std::{collections::HashMap, fmt};
 
 #[derive(Debug, PartialEq, Copy, Clone, Eq, Hash)]
 pub enum SymbolKind {
     Var,
+    Fun,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -17,13 +18,20 @@ impl Symbol {
 
 impl fmt::Display for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Symbol<type=\"{:?}\", pos={:?}>", self.0, self.1)
+        let contents = &self.1.source.contents;
+        let start = self.1.start;
+        let (start_line, start_col) = Span::get_line_index(&contents, start).unwrap();
+        write!(
+            f,
+            "Symbol<type=\"{:?}\", pos=({},{})>",
+            self.0, start_line, start_col
+        )
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct SymbolTable {
-    symbols: HashMap<String,Symbol>,
+    symbols: HashMap<String, Symbol>,
     depth: usize,
 }
 
