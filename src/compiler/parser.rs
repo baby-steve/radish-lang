@@ -130,6 +130,8 @@ impl Parser {
                 self.consume(TokenType::RightBrace);
                 block
             }
+            // fun ...
+            TokenType::Fun => self.parse_fun_declaration(),
             // var ...
             TokenType::Var => self.parse_var_declaration(),
             // if ...
@@ -149,6 +151,40 @@ impl Parser {
             // expr ...
             _ => self.parse_expression_statement(),
         }
+    }
+
+    fn parse_fun_declaration(&mut self) -> Result<Stmt, ParserError> {
+        let start = self.current.span.clone();
+
+        // fun ...
+        self.consume(TokenType::Fun);
+
+        // fun id ...
+        let id = self.parse_identifier()?;
+
+        // fun id '(' ...
+        self.consume(TokenType::LeftParen);
+
+        // fun id '(' <params> ...
+        // todo
+
+        // fun id '(' <params> ')' ...
+        self.consume(TokenType::RightParen);
+
+        // fun id '(' <params> ')' '{' ...
+        self.consume(TokenType::LeftBrace);
+
+        // fun id '(' <params> ')' '{' <body> ...
+        let body = Box::new(self.parse_block()?);
+
+        // fun id '(' <params> ')' '{' <body> '}'
+        self.consume(TokenType::RightBrace);
+
+        let span = Span::combine(&start, &self.current.span);
+
+        let function = Function { id, body };
+
+        Ok(Stmt::FunDeclaration(function, span))
     }
 
     fn parse_var_declaration(&mut self) -> Result<Stmt, ParserError> {
@@ -183,7 +219,7 @@ impl Parser {
         // if <expr> ...
         let expr = self.expression()?;
 
-        // if <expr> then ...analysis
+        // if <expr> then ...
         self.consume(TokenType::Then);
 
         // if <expr> then <block> ...

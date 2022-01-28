@@ -294,6 +294,7 @@ impl Scanner {
             "endloop" => TokenType::EndLoop,
             "break" => TokenType::Break,
             "continue" => TokenType::Continue,
+            "fun" => TokenType::Fun,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -429,6 +430,7 @@ mod tests {
             ("endloop", TokenType::EndLoop),
             ("break", TokenType::Break),
             ("continue", TokenType::Continue),
+            ("fun", TokenType::Fun),
         ];
 
         for (src, token_type) in tests {

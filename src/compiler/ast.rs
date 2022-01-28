@@ -44,6 +44,8 @@ pub enum Stmt {
     BlockStmt(Box<Vec<Stmt>>, Span),
     // <expr>
     ExpressionStmt(Box<Expr>),
+    // <Function>
+    FunDeclaration(Function, Span),
     // 'var' <id> '=' <expr>
     VarDeclaration(Ident, Option<Expr>, Span),
     // <id> <op> <expr>
@@ -66,6 +68,7 @@ impl Stmt {
     pub fn position(&self) -> Span {
         match self {
             Self::VarDeclaration(_, _, pos)
+            | Self::FunDeclaration(_, pos)
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
             | Self::Assignment(_, _, _, pos) 
@@ -130,6 +133,13 @@ impl BinaryExpr {
             right: r,
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Function {
+    pub id: Ident,
+    // params
+    pub body: Box<Stmt>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
