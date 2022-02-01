@@ -25,4 +25,12 @@ impl Stack {
             Some(self.stack[self.stack.len() - 1].clone())
         }
     }
+
+    pub fn peek_n(&mut self, index: usize) -> Option<Value> {
+        if self.stack.len() < index {
+            None
+        } else {
+            Some(self.stack[self.stack.len() - index].clone())
+        }
+    }
 }

@@ -2,7 +2,7 @@
 
 use radish_lang::{
     common::source::Source,
-    compiler::{analysis::SemanticAnalyzer, compiler::Compiler, parser::Parser},
+    compiler::{analysis::Analyzer, compiler::Compiler, parser::Parser},
     vm::vm::{RadishConfig, RadishFile, VM},
 };
 
@@ -58,6 +58,8 @@ impl TestSnippet {
     }
 
     pub fn run(&self) {
+        println!("testing {:?}...", &self.source.path);
+
         let result = Parser::new(Rc::clone(&self.source)).parse();
 
         match result {
@@ -69,15 +71,15 @@ impl TestSnippet {
                 let config = RadishConfig::with_stdout(stdout.clone());
 
                 // Analysis
-                let mut semantic_analyzer = SemanticAnalyzer::new();
-                semantic_analyzer.analyze(&res);
+                let mut semantic_analyzer = Analyzer::new();
+                let table = semantic_analyzer.analyze(&res);
 
                 // Compile
-                let mut compiler = Compiler::new();
-                compiler.run(&res);
+                let mut compiler = Compiler::new(&table);
+                let script = compiler.compile(&res);
 
                 // Run the VM
-                VM::new(&config).interpret(compiler.chunk);
+                VM::new(&config).interpret(script);
 
                 // Check each value printed by vm to their expected value.
                 for (i, value) in stdout.buffer.borrow().iter().enumerate() {

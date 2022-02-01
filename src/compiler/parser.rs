@@ -94,9 +94,8 @@ impl Parser {
     }
 
     /// Parse everything up to, but not including, a delimiter.
-    fn parse_block(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_block(&mut self) -> Result<Vec<Stmt>, ParserError> {
         let mut body = vec![];
-        let start_span = Span::from(&self.previous.span);
 
         while !self.current.is_delimiter() {
             match self.current.token_type {
@@ -111,25 +110,24 @@ impl Parser {
             };
         }
 
-        // the delimiter
-        // self.advance();
-
-        let node = Stmt::BlockStmt(
-            Box::new(body),
-            Span::combine(&start_span, &self.current.span),
-        );
-        return Ok(node);
+        return Ok(body);
     }
 
     fn parse_statement(&mut self) -> Result<Stmt, ParserError> {
         match self.current.token_type {
             // "{" ...
             TokenType::LeftBrace => {
+                let start = self.current.span.clone();
                 self.consume(TokenType::LeftBrace);
-                let block = self.parse_block();
+                let block = Box::new(self.parse_block()?);
                 self.consume(TokenType::RightBrace);
-                block
+                Ok(Stmt::BlockStmt(
+                    block,
+                    Span::combine(&start, &self.current.span),
+                ))
             }
+            // fun ...
+            TokenType::Fun => self.parse_fun_declaration(),
             // var ...
             TokenType::Var => self.parse_var_declaration(),
             // if ...
@@ -149,6 +147,34 @@ impl Parser {
             // expr ...
             _ => self.parse_expression_statement(),
         }
+    }
+
+    fn parse_fun_declaration(&mut self) -> Result<Stmt, ParserError> {
+        let start = self.current.span.clone();
+
+        // fun ...
+        self.consume(TokenType::Fun);
+
+        // fun id ...
+        let id = self.parse_identifier()?;
+
+        // fun id '(' <params> ')' ...
+        let params = self.parse_params()?;
+
+        // fun id '(' <params> ')' '{' ...
+        self.consume(TokenType::LeftBrace);
+
+        // fun id '(' <params> ')' '{' <body> ...
+        let body = Box::new(self.parse_block()?);
+
+        // fun id '(' <params> ')' '{' <body> '}'
+        self.consume(TokenType::RightBrace);
+
+        let span = Span::combine(&start, &self.current.span);
+
+        let function = Function { id, params, body };
+
+        Ok(Stmt::FunDeclaration(function, span))
     }
 
     fn parse_var_declaration(&mut self) -> Result<Stmt, ParserError> {
@@ -183,7 +209,7 @@ impl Parser {
         // if <expr> ...
         let expr = self.expression()?;
 
-        // if <expr> then ...analysis
+        // if <expr> then ...
         self.consume(TokenType::Then);
 
         // if <expr> then <block> ...
@@ -198,13 +224,16 @@ impl Parser {
                 Some(Box::new(self.parse_if_statement()?))
             } else {
                 // if <expr> then <block> else <block> end
-                let alternate = Some(Box::new(self.parse_block()?));
-                self.consume(TokenType::End);
-                alternate
+                let alternate = Box::new(self.parse_block()?);
+                self.consume(TokenType::EndIf);
+                Some(Box::new(Stmt::BlockStmt(
+                    alternate,
+                    Span::combine(&start, &self.current.span),
+                )))
             }
-        } else if self.current.token_type == TokenType::End {
+        } else if self.current.token_type == TokenType::EndIf {
             // if <expr> then <block> end
-            self.consume(TokenType::End);
+            self.consume(TokenType::EndIf);
             None
         } else {
             // Todo: this should be an actual error.
@@ -231,7 +260,10 @@ impl Parser {
         // loop <body> endloop
         self.consume(TokenType::EndLoop);
 
-        Ok(Stmt::LoopStmt(loop_body, Span::combine(&start, &self.current.span)))
+        Ok(Stmt::LoopStmt(
+            loop_body,
+            Span::combine(&start, &self.current.span),
+        ))
     }
 
     fn parse_while_statement(&mut self) -> Result<Stmt, ParserError> {
@@ -252,7 +284,11 @@ impl Parser {
         // while <expr> loop <body> endloop
         self.consume(TokenType::EndLoop);
 
-        Ok(Stmt::WhileStmt(condition, loop_body, Span::combine(&start, &self.current.span)))
+        Ok(Stmt::WhileStmt(
+            condition,
+            loop_body,
+            Span::combine(&start, &self.current.span),
+        ))
     }
 
     fn parse_break_statement(&mut self) -> Result<Stmt, ParserError> {
@@ -288,40 +324,61 @@ impl Parser {
     fn parse_assignment_statement(&mut self) -> Result<Stmt, ParserError> {
         let node = self.expression()?;
 
-        match self.current.token_type {
+        let op = match self.current.token_type {
             // expr = ...
             TokenType::Equals => {
                 self.consume(TokenType::Equals);
-
-                let id = match node.clone() {
-                    Expr::Identifier(id) => id,
-                    _ => {
-                        return Err(ParserError::new(
-                            ExpectedError(ExpectedIdentifier("".to_string())),
-                            &node.position(),
-                        ))
-                    }
-                };
-
-                // id = ....
-                let right = match self.expression() {
-                    // id = expr
-                    Ok(expr) => expr,
-                    // id = <error>
-                    Err(err) => {
-                        return Err(self.make_error(
-                            err.clone(),
-                            ExpectedError(ExpectedExpression(err.error.to_string())),
-                        ))
-                    }
-                };
-
-                let span = Span::combine(&node.position(), &right.position());
-                Ok(Stmt::Assignment(id, OpAssignment::Equals, right, span))
+                OpAssignment::Equals
+            }
+            // expr += ...
+            TokenType::PlusEquals => {
+                self.consume(TokenType::PlusEquals);
+                OpAssignment::PlusEquals
+            }
+            // expr -= ...
+            TokenType::MinusEquals => {
+                self.consume(TokenType::MinusEquals);
+                OpAssignment::MinusEquals
+            }
+            // expr *= ...
+            TokenType::MultiplyEquals => {
+                self.consume(TokenType::MultiplyEquals);
+                OpAssignment::MultiplyEquals
+            }
+            // expr /= ...
+            TokenType::DivideEquals => {
+                self.consume(TokenType::DivideEquals);
+                OpAssignment::DivideEquals
             }
             // expr
-            _ => Ok(Stmt::ExpressionStmt(Box::new(node))),
-        }
+            _ => return Ok(Stmt::ExpressionStmt(Box::new(node))),
+        };
+
+        let id = match node {
+            Expr::Identifier(id) => id,
+            _ => {
+                return Err(ParserError::new(
+                    ExpectedError(ExpectedIdentifier("".to_string())),
+                    &node.position(),
+                ))
+            }
+        };
+
+        // id op ....
+        let right = match self.expression() {
+            // id op expr
+            Ok(expr) => expr,
+            // id op <error>
+            Err(err) => {
+                return Err(self.make_error(
+                    err.clone(),
+                    ExpectedError(ExpectedExpression(err.error.to_string())),
+                ))
+            }
+        };
+
+        let span = Span::combine(&id.pos, &right.position());
+        Ok(Stmt::Assignment(id, op, right, span))
     }
 
     fn expression(&mut self) -> Result<Expr, ParserError> {
@@ -561,7 +618,7 @@ impl Parser {
 
     fn parse_term(&mut self) -> Result<Expr, ParserError> {
         // expr ...
-        let mut node = self.parse_factor()?;
+        let mut node = self.parse_member()?;
 
         loop {
             match self.current.token_type {
@@ -569,7 +626,7 @@ impl Parser {
                 TokenType::Star => {
                     self.consume(TokenType::Star);
 
-                    let right = match self.parse_factor() {
+                    let right = match self.parse_member() {
                         // expr * expr
                         Ok(expr) => expr,
                         // expr * <error>
@@ -589,7 +646,7 @@ impl Parser {
                 TokenType::Slash => {
                     self.consume(TokenType::Slash);
 
-                    let right = match self.parse_factor() {
+                    let right = match self.parse_member() {
                         // expr / expr
                         Ok(expr) => expr,
                         // expr / <error>
@@ -607,6 +664,26 @@ impl Parser {
                 }
                 _ => break,
             };
+        }
+
+        Ok(node)
+    }
+
+    fn parse_member(&mut self) -> Result<Expr, ParserError> {
+        let mut node = self.parse_factor()?;
+
+        loop {
+            match &self.current.token_type {
+                // expr ( ...
+                TokenType::LeftParen => {
+                    let args = self.parse_arg_list()?;
+
+                    let span = Span::combine(&node.position(), &self.current.span);
+
+                    node = Expr::CallExpr(Box::new(node), args, span)
+                }
+                _ => break,
+            }
         }
 
         Ok(node)
@@ -734,6 +811,44 @@ impl Parser {
                 ))
             }
         }
+    }
+
+    fn parse_arg_list(&mut self) -> Result<Vec<Box<Expr>>, ParserError> {
+        self.consume(TokenType::LeftParen);
+
+        let mut args = vec![];
+
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                args.push(Box::new(self.expression()?));
+                if !self.match_token(&TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen);
+
+        Ok(args)
+    }
+
+    fn parse_params(&mut self) -> Result<Vec<Ident>, ParserError> {
+        self.consume(TokenType::LeftParen);
+
+        let mut args = vec![];
+
+        if !self.check(&TokenType::RightParen) {
+            loop {
+                args.push(self.parse_identifier()?);
+                if !self.match_token(&TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        self.consume(TokenType::RightParen);
+
+        Ok(args)
     }
 
     fn parse_paren(&mut self) -> Result<Expr, ParserError> {

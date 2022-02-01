@@ -34,8 +34,10 @@ pub enum Opcode {
     Jump,
     Loop,
 
+    Call,
+
     Print,
-    Halt,
+    Return,
 }
 
 impl From<u8> for Opcode {

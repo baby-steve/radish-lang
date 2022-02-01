@@ -1,9 +1,9 @@
-use radish_lang::compiler::{
-    parser::Parser,
-    compiler::Compiler,
-};
+use radish_lang::common::disassembler::Disassembler;
 use radish_lang::common::source::Source;
-use radish_lang::vm::vm::VM;
+use radish_lang::compiler::{
+    analysis::Analyzer, compiler::Compiler, parser::Parser,
+};
+use radish_lang::vm::vm::{RadishConfig, VM};
 
 use std::path::PathBuf;
 
@@ -13,22 +13,43 @@ fn main() {
     // Temporary code to pipe everything together.
     // Eventually will create pipeline or api or something.
     let source = Source::new(
-        "var a = (20 + 4) - 10 >= 6 * 2 /\n (4 - \n 88) // this is a comment
-         var b = 23
-         b = b - 3
-         print b * 2",
+        "
+        fun main(a, b) {
+            var i = 0
+            while i < a loop
+                i += 1
+                if i == b then
+                    print \"a is equal to b\"
+                else
+                    print i
+                endif
+            endloop
+        }
+
+        main(13, 8)
+        ",
         &PathBuf::from("./test_file"),
     );
+
     let result = Parser::new(source.clone()).parse();
+    println!("{:#?}", result);
 
     match result {
         Ok(res) => {
-            let mut compiler = Compiler::new();
-            compiler.run(&res);
-            println!("{:?}", compiler.chunk.code);
-            let mut vm = VM::new(compiler.chunk);
-            vm.interpret();
-            println!("{:?}", vm.globals);
+            let config = RadishConfig::new();
+
+            let mut semantic_analyzer = Analyzer::new();
+            let sym_table = semantic_analyzer.analyze(&res);
+
+            let mut compiler = Compiler::new(&sym_table);
+            let script = compiler.compile(&res);
+
+            Disassembler::disassemble_chunk("script", &script.chunk);
+
+            let mut vm = VM::new(&config);
+            vm.interpret(script);
+
+            println!("\nOkay we done now.");
         }
         Err(err) => println!("{}", err),
     }

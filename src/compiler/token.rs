@@ -31,6 +31,14 @@ pub enum TokenType {
     EqualsTo,
     // !=
     NotEqual,
+    // +=
+    PlusEquals,
+    // -=
+    MinusEquals,
+    // *=
+    MultiplyEquals,
+    // /=
+    DivideEquals,
     // \n
     Newline,
     // (
@@ -41,6 +49,8 @@ pub enum TokenType {
     LeftBrace,
     // }
     RightBrace,
+    // ,
+    Comma,
     // true
     True,
     // false
@@ -61,8 +71,8 @@ pub enum TokenType {
     Then,
     // else
     Else,
-    // end
-    End,
+    // endif
+    EndIf,
     // loop
     Loop,
     // while
@@ -73,6 +83,8 @@ pub enum TokenType {
     Break,
     // continue
     Continue,
+    // fun
+    Fun,
 
     // number
     Number(f64),
@@ -121,11 +133,16 @@ impl Token {
             GreaterThanEquals => ">=",
             EqualsTo => "==",
             NotEqual => "!=",
+            PlusEquals => "+=",
+            MinusEquals => "-=",
+            MultiplyEquals => "*=",
+            DivideEquals => "/=",
             Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
             LeftBrace => "{",
             RightBrace => "}",
+            Comma => ",",
             True => "true",
             False => "false",
             Nil => "nil",
@@ -136,12 +153,13 @@ impl Token {
             If => "if",
             Then => "then",
             Else => "else",
-            End => "end",
+            EndIf => "endif",
             Loop => "loop",
             While => "while",
             EndLoop => "endloop",
             Break => "break",
             Continue => "continue",
+            Fun => "fun",
 
             Eof => "<Eof>",
 
@@ -168,7 +186,7 @@ impl Token {
             TokenType::RightBrace
             | TokenType::Else
             | TokenType::EndLoop
-            | TokenType::End => true,
+            | TokenType::EndIf => true,
             _ => false,
         }
     }
@@ -187,11 +205,16 @@ impl Token {
             ">=" => TokenType::GreaterThanEquals, 
             "==" => TokenType::EqualsTo,
             "!=" => TokenType::NotEqual,
+            "+=" => TokenType::PlusEquals,
+            "-=" => TokenType::MinusEquals,
+            "*=" => TokenType::MultiplyEquals,
+            "/=" => TokenType::DivideEquals,
             "\\n" => TokenType::Newline,
             "(" => TokenType::LeftParen,
             ")" => TokenType::RightParen,
             "{" => TokenType::LeftBrace,
             "}" => TokenType::RightBrace,
+            "," => TokenType::Comma,
             "true" => TokenType::True,
             "false" => TokenType::False,
             "nil" => TokenType::Nil,
@@ -202,12 +225,13 @@ impl Token {
             "if" => TokenType::If,
             "then" => TokenType::Then,
             "else" => TokenType::Else,
-            "end" => TokenType::End,
+            "endif" => TokenType::EndIf,
             "loop" => TokenType::Loop,
             "while" => TokenType::While,
             "endloop" => TokenType::EndLoop,
             "break" => TokenType::Break,
             "continue" => TokenType::Continue,
+            "fun" => TokenType::Fun,
             "<Eof>" => TokenType::Eof,
 
             _ => return None,

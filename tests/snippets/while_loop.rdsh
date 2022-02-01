@@ -13,7 +13,7 @@ i = 0
 while i < 10 loop
     if i == 5 then
         break
-    end
+    endif
 
     i = i + 1
 endloop
@@ -29,7 +29,7 @@ while i < 10 loop
     if i == 5 then
         c = c + 6
         continue
-    end
+    endif
 
     c = c + 1
 endloop

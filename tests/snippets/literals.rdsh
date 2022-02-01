@@ -1,6 +1,8 @@
 // Test radish literals.
 
 print 1234 // expect: 1234
+print 97.86 // expect: 97.86
+print 2.3e9 // expect: 2300000000
 print true // expect: true
 print false // expect: false
 print nil // expect: nil

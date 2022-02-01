@@ -24,8 +24,8 @@ print a // expect: 45
     print c // expect: 56
 }
 
-var a
+var b
 {
-    a = 45
+    b = 45
 }
-print a // expect: 45
+print b // expect: 45

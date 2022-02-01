@@ -1,34 +1,56 @@
+use crate::common::span::Span;
+use std::collections::HashSet;
 use std::fmt;
 
-use crate::{
-    compiler::{
-        ast::*,
-        table::{Symbol, SymbolTable},
-        visitor::Visitor,
-    },
+use crate::compiler::{
+    ast::*,
+    table::{Symbol, SymbolKind, SymbolTable},
+    visitor::Visitor,
 };
 
 #[derive(Debug)]
-pub struct SemanticAnalyzer {
+pub struct Analyzer {
+    /// Chain of enclosing scopes.
     pub scopes: Vec<SymbolTable>,
+    /// Keep track of variables that where referenced before assignment
+    pub unresolved: HashSet<String>,
     /// Flag set to true if the analyzer is currently in a loop.
     in_loop: bool,
 }
 
-impl SemanticAnalyzer {
+impl Analyzer {
     pub fn new() -> Self {
-        SemanticAnalyzer {
-            scopes: vec![SymbolTable::new(0)],
+        Analyzer::with_scope(SymbolTable::new(0))
+    }
+
+    pub fn with_scope(scope: SymbolTable) -> Analyzer {
+        Analyzer {
+            scopes: vec![scope],
+            unresolved: HashSet::new(),
             in_loop: false,
         }
     }
 
-    pub fn analyze(&mut self, ast: &AST) {
+    pub fn analyze(&mut self, ast: &AST) -> SymbolTable {
+        self.define_functions(&ast);
+
+        //println!("{}", self.scopes[self.scopes.len() - 1]);
+
         for node in &ast.items {
             self.statement(&node);
         }
-        
-        println!("{}", self.scopes[self.scopes.len() - 1]);
+
+        //println!("{}", self.scopes[self.scopes.len() - 1]);
+
+        if !self.unresolved.is_empty() {
+            for err in self.unresolved.iter() {
+                println!("found undefined variable '{}'.", err);
+            }
+
+            panic!("Aborting due to the incorrectness of the given program");
+        }
+
+        self.scopes.pop().unwrap()
     }
 
     fn enter_scope(&mut self) {
@@ -36,23 +58,28 @@ impl SemanticAnalyzer {
     }
 
     fn exit_scope(&mut self) {
-        println!("{}", self.scopes[self.scopes.len() - 1]);
+        //println!("{}", self.scopes[self.scopes.len() - 1]);
         self.scopes.pop();
     }
 
+    /// Add a symbol to the current scope. If the symbol is already in
+    /// this scope returns an error (for now just panics).
     fn add_symbol(&mut self, name: &str, sym: Symbol) -> Option<Symbol> {
         let last = self.scopes.len() - 1;
+
         self.scopes[last].add_symbol(name, sym)
     }
 
-    fn resolve_local(&mut self, name: &str) -> Option<&Symbol> {
+    /// Resolve a symbol by recursively checking each enclosing scope.
+    /// If the symbol isn't found then returns None.
+    fn try_resolve(&mut self, name: &str) -> Option<&Symbol> {
         let mut depth = self.scopes.len();
 
         while depth > 0 {
             let scope = &self.scopes[depth - 1];
             depth -= 1;
 
-            match scope.symbols.get(name) {
+            match scope.get_symbol(name) {
                 Some(val) => return Some(val),
                 None => continue,
             }
@@ -60,13 +87,72 @@ impl SemanticAnalyzer {
 
         None
     }
+
+    fn resolve_symbol(&mut self, name: &str) -> Option<&Symbol> {
+        if let Some(symbol) = self.try_resolve(name) {
+            return Some(symbol);
+        }
+
+        None
+    }
+
+    // Todo: give this a better name.
+    // Note: should this be done by the parser?
+    /// Add all functions declared in the global scope to
+    /// the current symbol table.
+    fn define_functions(&mut self, ast: &AST) {
+        for node in &ast.items {
+            match node {
+                Stmt::FunDeclaration(fun, _) => {
+                    self.add_symbol(&fun.id.name, Symbol::from(fun));
+                }
+                _ => continue,
+            }
+        }
+    }
 }
 
-impl Visitor for SemanticAnalyzer {
+impl Visitor for Analyzer {
     fn block(&mut self, body: &Vec<Stmt>) {
         self.enter_scope();
 
         for node in body {
+            self.statement(&node);
+        }
+
+        self.exit_scope();
+    }
+
+    fn function_declaration(&mut self, fun: &Function) {
+        if self.scopes.len() > 1 {
+            match self.add_symbol(&fun.id.name, Symbol::from(fun)) {
+                Some(old_value) => {
+                    // Todo: this should return an Analysis error.
+                    panic!(
+                            "Identifier '{}' has already been declared in this scope. first declaration at {:?}",
+                            &fun.id.name, old_value.1,
+                        );
+                }
+                None => {}
+            }
+        }
+
+        self.enter_scope();
+
+        for param in &fun.params {
+            match self.add_symbol(&param.name, Symbol::new(SymbolKind::Var, &param.pos)) {
+                Some(old_value) => {
+                    // Todo: this should return an Analysis error.
+                    panic!(
+                            "identifier '{}' has already been declared in this scope. first declaration at {:?}",
+                            &param.name, old_value.1,
+                        );
+                }
+                None => {}
+            }
+        }
+
+        for node in fun.body.iter() {
             self.statement(&node);
         }
 
@@ -78,16 +164,26 @@ impl Visitor for SemanticAnalyzer {
             self.expression(&expr);
         }
 
-        match self.add_symbol(&id.name, Symbol { location: 0 }) {
-            Some(old_value) => {
-                if self.scopes.len() > 1 {
-                    panic!(
-                        "Identifier '{}' has already been declared in this scope. First declaration at {}", 
-                        &id.name, old_value.location
-                    );
+        if self.scopes.len() == 1 {
+            match self.unresolved.get(&id.name) {
+                Some(_) => {
+                    self.unresolved.remove(&id.name);
                 }
+                None => {}
+            };
+        }
+
+        match self.add_symbol(&id.name, Symbol::new(SymbolKind::Var, &id.pos)) {
+            Some(_old_value) => {
+                // Todo: this should return an Analysis error.
+                let (start_line, _start_col) =
+                    Span::get_line_index(&id.pos.source.contents, id.pos.start).unwrap();
+                panic!(
+                        "Identifier '{}' has already been declared in this scope. first declaration on line {:?}",
+                        &id.name, start_line,
+                    );
             }
-            None => return,
+            None => {}
         }
     }
 
@@ -96,26 +192,71 @@ impl Visitor for SemanticAnalyzer {
         self.identifier(&id);
     }
 
-    fn identifier(&mut self, id: &Ident) {
-        if self.resolve_local(&id.name) == None {
-            panic!("identifier '{}' not found.", &id.name);
+    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) {
+        if !callee.is_callable() {
+            panic!("Looks like you just tried to call something that wasn't callable.");
+        }
+
+        match callee {
+            Expr::Identifier(id) => {
+                if let Some(symbol) = self.resolve_symbol(&id.name) {
+                    if let SymbolKind::Fun { arg_count } = symbol.0 {
+                        if args.len() != arg_count {
+                            panic!(
+                                "The function '{}' takes {} argument{}, but got {}.",
+                                &id.name,
+                                &arg_count,
+                                if arg_count == 1 { "" } else { "s" },
+                                &args.len(),
+                            )
+                        }
+                    }
+                } else {
+                    // if its the global scope, then its an error.
+                    if self.scopes.len() == 1 {
+                        panic!("Could not find '{}' anywhere.", &id.name);
+                    }
+
+                    // if we're in a local scope, it could be declared
+                    // later in global scope.
+                    self.unresolved.insert(id.name.clone());
+                }
+            }
+            _ => unimplemented!("Can only call identifiers currently."),
+        };
+
+        for arg in args {
+            self.expression(&arg);
         }
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Stmt) {
+    fn identifier(&mut self, id: &Ident) {
+        if self.resolve_symbol(&id.name) == None {
+            // if its the global scope, then its an error.
+            if self.scopes.len() == 1 {
+                panic!("Could not find '{}' anywhere.", &id.name);
+            }
+
+            // if we're in a local scope, it could be declared
+            // later in global scope.
+            self.unresolved.insert(id.name.clone());
+        }
+    }
+
+    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) {
         self.expression(&expr);
 
         self.in_loop = true;
 
-        self.statement(&body);
+        self.block(&body);
 
         self.in_loop = false;
     }
 
-    fn loop_statement(&mut self, body: &Stmt) {
+    fn loop_statement(&mut self, body: &Vec<Stmt>) {
         self.in_loop = true;
 
-        self.statement(&body);
+        self.block(&body);
 
         self.in_loop = false;
     }
@@ -137,11 +278,11 @@ impl Visitor for SemanticAnalyzer {
     }
 }
 
-impl fmt::Display for SemanticAnalyzer {
+impl fmt::Display for Analyzer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for scope in &self.scopes {
             writeln!(f, "{}", scope)?;
-        };
+        }
 
         Ok(())
     }

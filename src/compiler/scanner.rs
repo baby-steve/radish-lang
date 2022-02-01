@@ -23,16 +23,36 @@ impl Scanner {
         let c = self.advance();
 
         match c {
-            Some("+") => self.make_token(TokenType::Plus),
-            Some("-") => self.make_token(TokenType::Minus),
+            Some("+") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::PlusEquals)
+                } else {
+                    self.make_token(TokenType::Plus)
+                }
+            }
+            Some("-") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::MinusEquals)
+                } else {
+                    self.make_token(TokenType::Minus)
+                }
+            }
             Some("/") => {
                 if self.match_("/") {
                     self.single_line_comment()
+                } else if self.match_("=") {
+                    self.make_token(TokenType::DivideEquals)
                 } else {
                     self.make_token(TokenType::Slash)
                 }
             }
-            Some("*") => self.make_token(TokenType::Star),
+            Some("*") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::MultiplyEquals)
+                } else {
+                    self.make_token(TokenType::Star)
+                }
+            }
             Some("!") => {
                 if self.match_("=") {
                     self.make_token(TokenType::NotEqual)
@@ -66,6 +86,7 @@ impl Scanner {
             Some(")") => self.make_token(TokenType::RightParen),
             Some("{") => self.make_token(TokenType::LeftBrace),
             Some("}") => self.make_token(TokenType::RightBrace),
+            Some(",") => self.make_token(TokenType::Comma),
             Some("\"") => self.scan_string(),
             None => self.make_token(TokenType::Eof),
             _ if is_alpha(c.unwrap()) => self.identifier(),
@@ -125,6 +146,20 @@ impl Scanner {
         }
     }
 
+    fn current_token(&mut self) -> Option<&str> {
+        if self.remaining().is_empty() {
+            None
+        } else {
+            let source = &self.source.contents[self.previous..];
+            let mut end = 1;
+            while !source.is_char_boundary(end) {
+                end += 1;
+            }
+
+            Some(&source[0..end])
+        }
+    }
+
     fn skip_next(&mut self) {
         self.previous = self.current;
     }
@@ -139,12 +174,96 @@ impl Scanner {
     }
 
     fn number(&mut self) -> Token {
+        if self.current_token() == Some("0") {
+            match self.peek() {
+                Some("b") | Some("B") => {
+                    self.advance();
+
+                    while self.peek() != None && self.peek() == Some("0")
+                        || self.peek() == Some("1")
+                    {
+                        self.advance();
+                    }
+
+                    let string_value = &self.source.contents[self.previous + 2..self.current];
+
+                    // Todo: if the string fails to parse, should report an error.
+                    let parse_value = match isize::from_str_radix(string_value, 2) {
+                        Ok(val) => val,
+                        Err(err) => panic!("{}", err),
+                    };
+                    return self.make_token(TokenType::Number(parse_value as f64));
+                }
+                Some("o") | Some("O") => {
+                    self.advance();
+
+                    while self.peek() != None && is_digit(self.peek().unwrap()) {
+                        if !is_octal(self.advance().unwrap()) {
+                            panic!("Expected digits between 0 and 7");
+                        }
+                    }
+
+                    let string_value = &self.source.contents[self.previous + 2..self.current];
+
+                    // Todo: if the string fails to parse, should report an error.
+                    let parse_value = match isize::from_str_radix(string_value, 8) {
+                        Ok(val) => val,
+                        Err(err) => panic!("{}", err),
+                    };
+                    return self.make_token(TokenType::Number(parse_value as f64));
+                }
+                Some("x") | Some("X") => {
+                    self.advance();
+
+                    while self.peek() != None && is_hex(self.peek().unwrap()) {
+                        self.advance();
+                    }
+
+                    let string_value = &self.source.contents[self.previous + 2..self.current];
+
+                    // Todo: if the string fails to parse, should report an error.
+                    let parse_value = match isize::from_str_radix(string_value, 16) {
+                        Ok(val) => val,
+                        Err(err) => panic!("{}", err),
+                    };
+                    return self.make_token(TokenType::Number(parse_value as f64));
+                }
+                _ => {}
+            };
+        }
+
         while self.peek() != None && is_digit(self.peek().unwrap()) {
             self.advance();
         }
 
+        // check if this is a floating point number.
+        if self.peek() == Some(".") {
+            self.advance();
+            while self.peek() != None && is_digit(self.peek().unwrap()) {
+                self.advance();
+            }
+        }
+
+        // check if it's in scientific notation.
+        if self.peek() == Some("e") || self.peek() == Some("E") {
+            self.advance();
+
+            if self.peek() == Some("-") || self.peek() == Some("+") {
+                self.advance();
+            }
+
+            while self.peek() != None && is_digit(self.peek().unwrap()) {
+                self.advance();
+            }
+        }
+
         let string_value = &self.source.contents[self.previous..self.current];
-        let parse_value = string_value.parse::<f64>().unwrap();
+
+        // Todo: if the string fails to parse, should report an error.
+        let parse_value = match string_value.parse::<f64>() {
+            Ok(val) => val,
+            Err(err) => panic!("{}", err),
+        };
         self.make_token(TokenType::Number(parse_value))
     }
 
@@ -170,12 +289,13 @@ impl Scanner {
             "if" => TokenType::If,
             "then" => TokenType::Then,
             "else" => TokenType::Else,
-            "end" => TokenType::End,
+            "endif" => TokenType::EndIf,
             "loop" => TokenType::Loop,
             "while" => TokenType::While,
             "endloop" => TokenType::EndLoop,
             "break" => TokenType::Break,
             "continue" => TokenType::Continue,
+            "fun" => TokenType::Fun,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -251,6 +371,23 @@ fn is_digit(string: &str) -> bool {
     string.as_bytes()[0].is_ascii_digit()
 }
 
+fn is_octal(string: &str) -> bool {
+    // Todo: isn't there a better way to do this?
+    matches!(string, "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7")
+}
+
+fn is_hex(string: &str) -> bool {
+    if is_digit(string)
+        || string
+            .bytes()
+            .all(|b| matches!(b, b'a'..=b'f' | b'A'..=b'F'))
+    {
+        true
+    } else {
+        false
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -270,10 +407,15 @@ mod tests {
             (">=", TokenType::GreaterThanEquals),
             ("==", TokenType::EqualsTo),
             ("!=", TokenType::NotEqual),
+            ("+=", TokenType::PlusEquals),
+            ("-=", TokenType::MinusEquals),
+            ("*=", TokenType::MultiplyEquals),
+            ("/=", TokenType::DivideEquals),
             ("(", TokenType::LeftParen),
             (")", TokenType::RightParen),
             ("{", TokenType::LeftBrace),
             ("}", TokenType::RightBrace),
+            (",", TokenType::Comma),
             ("true", TokenType::True),
             ("false", TokenType::False),
             ("nil", TokenType::Nil),
@@ -284,12 +426,13 @@ mod tests {
             ("if", TokenType::If),
             ("then", TokenType::Then),
             ("else", TokenType::Else),
-            ("end", TokenType::End),
+            ("endif", TokenType::EndIf),
             ("loop", TokenType::Loop),
             ("while", TokenType::While),
             ("endloop", TokenType::EndLoop),
             ("break", TokenType::Break),
             ("continue", TokenType::Continue),
+            ("fun", TokenType::Fun),
         ];
 
         for (src, token_type) in tests {
@@ -305,15 +448,29 @@ mod tests {
 
     #[test]
     fn scan_number_token() {
-        let tests = vec![("12345", 12345.0)];
+        let tests = vec![
+            ("12345", 12345.0, "12345"),
+            ("23.45", 23.45, "23.45"),
+            ("34.", 34.0, "34"),
+            ("0.55", 0.55, "0.55"),
+            ("23e10", 23e10, "230000000000"),
+            ("23e+10", 23e10, "230000000000"),
+            ("23e-10", 23e-10, "0.0000000023"),
+            ("23.45e5", 23.45e5, "2345000"),
+            ("23E10", 23e10, "230000000000"),
+            ("0b101101", 45.0, "45"),
+            ("0o10", 8.0, "8"),
+            ("0x2f", 47.0, "47"),
+            ("0x2F", 47.0, "47"),
+        ];
 
-        for (val, num) in tests {
+        for (val, num, syntax) in tests {
             let src = Source::source(val);
             let mut scanner = Scanner::new(src);
 
             let token = scanner.scan_token();
             assert_eq!(token.token_type, TokenType::Number(num));
-            assert_eq!(token.syntax(), val);
+            assert_eq!(token.syntax(), syntax);
         }
     }
 

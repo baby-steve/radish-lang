@@ -1,0 +1,46 @@
+// Test assignment operators.
+
+var a = 2
+a += 4 // expect: 6
+
+var b = 5
+b -= 3 // expect: 2
+
+var c = 10
+var d = 5
+c += d // expect: 15
+
+var e = 12
+e -= 3 * 2 // expect: 6
+
+var f = 5
+f *= 10 // expect: 50
+
+var g = 10
+g /= 5 // expect: 2
+
+// Test with local variables.
+{
+    var f = 7
+    f += 1 // expect: 8
+
+    var g = 14
+    g -= 8 // expect: 6
+
+    var h = 5
+    h *= 10 // expect: 50
+
+    var i = 10
+    i /= 5 // expect: 2
+
+    var j = 19
+    var k = 11
+    j += 2 // expect: 21
+    k += i // expect: 32
+}
+
+var l = 0
+while l < 10 loop
+    l += 1
+endloop
+print l // expect: 10
