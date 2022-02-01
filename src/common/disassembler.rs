@@ -10,38 +10,40 @@ impl<'a> Disassembler<'a> {
         Disassembler { name, chunk }
     }
 
-    pub fn disassemble(&self) { 
-        println!("Disassembling {}...", self.name);       
+    pub fn disassemble_chunk(name: &str, chunk: &Chunk) { 
+        let dis = Disassembler::new(name, chunk);
+
+        println!("Disassembling \"{}\"...", dis.name);       
         let mut offset = 0;
 
         println!("==== Code ====================");
-        while offset < self.chunk.code.len() {
-            offset = self.disassemble_instruction(offset);
+        while offset < dis.chunk.code.len() {
+            offset = dis.disassemble_instruction(offset);
         }
 
         println!("==== Constants ===============");
-        for con in &self.chunk.constants {
+        for con in &dis.chunk.constants {
             print!("[ {} ]", con);
         }
 
         print!("\n\n");
     }
 
-    fn disassemble_instruction(&self, offset: usize) -> usize {
+    pub fn disassemble_instruction(&self, offset: usize) -> usize {
         use crate::common::opcode::Opcode;
 
         let byte = self.chunk.code[offset];
         match Opcode::from(byte) {
             Opcode::LoadConst => self.byte_instruction("LoadConst", offset),
-            Opcode::LoadConstLong => self.long_const_instruction("LoadConstLong", offset),
+            Opcode::LoadConstLong => self.long_const_instruction("LoadConstLong", offset, true),
             Opcode::Pop => self.simple_instruction("Pop", offset),
 
-            Opcode::DefGlobal => self.long_const_instruction("DefGlobal", offset),
-            Opcode::GetGlobal => self.long_const_instruction("GetGlobal", offset),
-            Opcode::SetGlobal => self.long_const_instruction("SetGlobal", offset),
+            Opcode::DefGlobal => self.long_const_instruction("DefGlobal", offset, true),
+            Opcode::GetGlobal => self.long_const_instruction("GetGlobal", offset, true),
+            Opcode::SetGlobal => self.long_const_instruction("SetGlobal", offset, true),
 
-            Opcode::GetLocal => self.long_const_instruction("GetLocal", offset),
-            Opcode::SetLocal => self.long_const_instruction("SetLocal", offset),
+            Opcode::GetLocal => self.long_const_instruction("GetLocal", offset, false),
+            Opcode::SetLocal => self.long_const_instruction("SetLocal", offset, false),
 
             Opcode::True => self.simple_instruction("True", offset),
             Opcode::False => self.simple_instruction("False", offset),
@@ -65,8 +67,10 @@ impl<'a> Disassembler<'a> {
             Opcode::Jump => self.jump_instruction("Jump", 1, offset),
             Opcode::Loop => self.jump_instruction("Loop", -1, offset),
 
+            Opcode::Call => self.byte_instruction("Call", offset),
+
             Opcode::Print => self.simple_instruction("Print", offset),
-            Opcode::Halt => self.simple_instruction("Halt", offset),
+            Opcode::Return => self.simple_instruction("Return", offset),
         }
     }
 
@@ -81,14 +85,14 @@ impl<'a> Disassembler<'a> {
         
         let index = &self.chunk.code[offset + 1];
         let i_padding = " ".repeat(self.chunk.constants.len().to_string().len() - index.to_string().len());
-        print!("{}{}", i_padding, index);
+        print!("{}{}", index, i_padding);
 
         self.write_value(*index as usize);
 
         offset + 2
     } 
 
-    fn long_const_instruction(&self, name: &str, offset: usize) -> usize {
+    fn long_const_instruction(&self, name: &str, offset: usize, has_value: bool) -> usize {
         use std::convert::TryInto;
         self.write_instruction(name, offset);
 
@@ -98,9 +102,13 @@ impl<'a> Disassembler<'a> {
         
         let index = u32::from_le_bytes(bytes);
         let i_padding = " ".repeat(self.chunk.constants.len().to_string().len() - index.to_string().len());
-        print!("{}{}", i_padding, index);
+        print!("{}{}", index, i_padding);
 
-        self.write_value(index as usize);
+        if has_value {
+            self.write_value(index as usize);
+        } else {
+            print!("\n");
+        }
 
         offset + 5
     }
@@ -125,6 +133,6 @@ impl<'a> Disassembler<'a> {
     } 
 
     fn write_value(&self, index: usize) {
-        println!(" ; {}", self.chunk.constants[index]);
+        println!(" ({})", self.chunk.constants[index]);
     }
 }
