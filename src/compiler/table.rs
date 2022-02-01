@@ -42,6 +42,7 @@ impl fmt::Display for Symbol {
 #[derive(Debug, Clone)]
 pub struct SymbolTable {
     symbols: HashMap<String, Symbol>,
+    identifiers: Vec<String>,
     depth: usize,
 }
 
@@ -49,6 +50,7 @@ impl SymbolTable {
     pub fn new(depth: usize) -> Self {
         SymbolTable {
             symbols: HashMap::new(),
+            identifiers: Vec::new(),
             depth,
         }
     }
@@ -59,6 +61,10 @@ impl SymbolTable {
 
     pub fn get_symbol(&self, key: &str) -> Option<&Symbol> {
         self.symbols.get(key)
+    }
+
+    pub fn all(&self) -> &HashMap<String, Symbol> {
+        &self.symbols
     }
 }
 

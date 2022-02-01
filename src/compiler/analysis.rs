@@ -1,3 +1,4 @@
+use crate::common::span::Span;
 use std::collections::HashSet;
 use std::fmt;
 
@@ -19,23 +20,27 @@ pub struct Analyzer {
 
 impl Analyzer {
     pub fn new() -> Self {
+        Analyzer::with_scope(SymbolTable::new(0))
+    }
+
+    pub fn with_scope(scope: SymbolTable) -> Analyzer {
         Analyzer {
-            scopes: vec![SymbolTable::new(0)],
+            scopes: vec![scope],
             unresolved: HashSet::new(),
             in_loop: false,
         }
     }
 
-    pub fn analyze(&mut self, ast: &AST) {
-        self.register_functions(&ast);
+    pub fn analyze(&mut self, ast: &AST) -> SymbolTable {
+        self.define_functions(&ast);
 
-        println!("{}", self.scopes[self.scopes.len() - 1]);
+        //println!("{}", self.scopes[self.scopes.len() - 1]);
 
         for node in &ast.items {
             self.statement(&node);
         }
 
-        println!("{}", self.scopes[self.scopes.len() - 1]);
+        //println!("{}", self.scopes[self.scopes.len() - 1]);
 
         if !self.unresolved.is_empty() {
             for err in self.unresolved.iter() {
@@ -44,6 +49,8 @@ impl Analyzer {
 
             panic!("Aborting due to the incorrectness of the given program");
         }
+
+        self.scopes.pop().unwrap()
     }
 
     fn enter_scope(&mut self) {
@@ -51,25 +58,16 @@ impl Analyzer {
     }
 
     fn exit_scope(&mut self) {
-        println!("{}", self.scopes[self.scopes.len() - 1]);
+        //println!("{}", self.scopes[self.scopes.len() - 1]);
         self.scopes.pop();
     }
 
     /// Add a symbol to the current scope. If the symbol is already in
     /// this scope returns an error (for now just panics).
-    fn add_symbol(&mut self, name: &str, sym: Symbol) -> Result<(), String> {
+    fn add_symbol(&mut self, name: &str, sym: Symbol) -> Option<Symbol> {
         let last = self.scopes.len() - 1;
 
-        match self.scopes[last].add_symbol(name, sym) {
-            Some(old_value) => {
-                // Todo: this should return an Analysis error.
-                panic!(
-                    "Identifier '{}' has already been declared in this scope. first declaration at {:?}",
-                    &name, old_value.1,
-                );
-            }
-            None => Ok(()),
-        }
+        self.scopes[last].add_symbol(name, sym)
     }
 
     /// Resolve a symbol by recursively checking each enclosing scope.
@@ -102,11 +100,11 @@ impl Analyzer {
     // Note: should this be done by the parser?
     /// Add all functions declared in the global scope to
     /// the current symbol table.
-    fn register_functions(&mut self, ast: &AST) {
+    fn define_functions(&mut self, ast: &AST) {
         for node in &ast.items {
             match node {
                 Stmt::FunDeclaration(fun, _) => {
-                    self.add_symbol(&fun.id.name, Symbol::from(fun)).unwrap();
+                    self.add_symbol(&fun.id.name, Symbol::from(fun));
                 }
                 _ => continue,
             }
@@ -127,13 +125,31 @@ impl Visitor for Analyzer {
 
     fn function_declaration(&mut self, fun: &Function) {
         if self.scopes.len() > 1 {
-            self.add_symbol(&fun.id.name, Symbol::from(fun)).unwrap();
+            match self.add_symbol(&fun.id.name, Symbol::from(fun)) {
+                Some(old_value) => {
+                    // Todo: this should return an Analysis error.
+                    panic!(
+                            "Identifier '{}' has already been declared in this scope. first declaration at {:?}",
+                            &fun.id.name, old_value.1,
+                        );
+                }
+                None => {}
+            }
         }
 
         self.enter_scope();
 
         for param in &fun.params {
-            self.add_symbol(&param.name, Symbol::new(SymbolKind::Var, &param.pos)).unwrap();
+            match self.add_symbol(&param.name, Symbol::new(SymbolKind::Var, &param.pos)) {
+                Some(old_value) => {
+                    // Todo: this should return an Analysis error.
+                    panic!(
+                            "identifier '{}' has already been declared in this scope. first declaration at {:?}",
+                            &param.name, old_value.1,
+                        );
+                }
+                None => {}
+            }
         }
 
         for node in fun.body.iter() {
@@ -157,8 +173,18 @@ impl Visitor for Analyzer {
             };
         }
 
-        self.add_symbol(&id.name, Symbol::new(SymbolKind::Var, &id.pos))
-            .unwrap();
+        match self.add_symbol(&id.name, Symbol::new(SymbolKind::Var, &id.pos)) {
+            Some(_old_value) => {
+                // Todo: this should return an Analysis error.
+                let (start_line, _start_col) =
+                    Span::get_line_index(&id.pos.source.contents, id.pos.start).unwrap();
+                panic!(
+                        "Identifier '{}' has already been declared in this scope. first declaration on line {:?}",
+                        &id.name, start_line,
+                    );
+            }
+            None => {}
+        }
     }
 
     fn assignment(&mut self, id: &Ident, _: &OpAssignment, expr: &Expr) {

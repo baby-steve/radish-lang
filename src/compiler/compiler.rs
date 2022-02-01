@@ -1,6 +1,9 @@
 use crate::{
-    common::{chunk::Chunk, opcode::Opcode, value::Value},
-    compiler::{ast::*, visitor::Visitor},
+    common::{
+        chunk::Chunk, disassembler::Disassembler, opcode::Opcode, value::Function as FunctionValue,
+        value::Value,
+    },
+    compiler::{ast::*, table::SymbolTable, visitor::Visitor},
 };
 
 #[derive(Debug)]
@@ -9,8 +12,12 @@ pub struct Local {
     depth: usize,
 }
 
+/// Track the state of a loop.
 struct Loop {
+    /// The start of the loop, used by `continue` statements.
     loop_start: usize,
+    /// Placeholders emitted by `break` statements within the loop, 
+    /// back patched once the loop is exited.
     jump_placeholders: Vec<usize>,
 }
 
@@ -23,45 +30,99 @@ impl Loop {
     }
 }
 
-pub struct Compiler {
-    pub chunk: Chunk,
-    pub scope_depth: usize,
-    pub local_count: usize,
-    pub locals: Vec<Local>,
-    loops: Vec<Loop>,
+#[derive(Debug, Copy, Clone)]
+enum FunctionType {
+    Function,
+    Script,
 }
 
-impl Compiler {
-    pub fn new() -> Self {
-        Compiler {
-            chunk: Chunk::default(),
-            scope_depth: 0,
-            local_count: 0,
-            locals: vec![],
-            loops: vec![],
+/// Track the state of the current `[Function]` being compiled.
+#[derive(Debug)]
+struct Frame {
+    pub function: FunctionValue,
+    pub function_type: FunctionType,
+}
+
+impl Frame {
+    /// Helper method for creating a frame with a function type.
+    pub fn function(fun: FunctionValue) -> Frame {
+        Frame {
+            function: fun,
+            function_type: FunctionType::Function,
         }
     }
 
-    pub fn run(&mut self, ast: &AST) {
+    /// Helper method for creating a frame with a script type.
+    pub fn script(script: FunctionValue) -> Frame {
+        Frame {
+            function: script,
+            function_type: FunctionType::Script,
+        }
+    }
+}
+
+pub struct Compiler<'a> {
+    scope_depth: usize,
+    locals: Vec<Local>,
+    loops: Vec<Loop>,
+    frame_count: usize,
+    frame: Vec<Frame>,
+    scope: &'a SymbolTable,
+}
+
+impl<'a> Compiler<'a> {
+    pub fn new(scope: &'a SymbolTable) -> Compiler<'a> {
+        Compiler {
+            scope_depth: 0,
+            locals: vec![],
+            loops: vec![],
+            frame_count: 0,
+            frame: vec![],
+            scope,
+        }
+    }
+
+    pub fn compile(&mut self, ast: &AST) -> FunctionValue {
+        let script = FunctionValue {
+            arity: 0,
+            chunk: Chunk::default(),
+            name: String::from("").into_boxed_str(),
+        };
+
+        let frame = Frame::script(script);
+
+        self.frame.push(frame);
+
+        self.add_local("");
+
+        self.define_functions(&ast);
+
         for node in &ast.items {
             self.statement(node);
         }
 
         self.emit_return();
+
+        self.frame.pop().unwrap().function
     }
 
+    /// Write a unsigned byte to the current `[Chunk]` being compiled.
     fn emit_byte(&mut self, byte: u8) {
         // should also emit the byte's location in source?
-        self.chunk.code.push(byte);
+        let chunk = &mut self.frame[self.frame_count].function.chunk;
+        chunk.code.push(byte);
     }
 
+    /// Write two unsigned bytes to the current `[Chunk]` being compiled.
     fn emit_bytes(&mut self, byte_1: u8, byte_2: u8) {
         self.emit_byte(byte_1);
         self.emit_byte(byte_2);
     }
 
+    /// Emit a return opcode with a `nil` return value.
     fn emit_return(&mut self) {
-        self.emit_byte(Opcode::Halt as u8);
+        self.emit_byte(Opcode::Nil as u8);
+        self.emit_byte(Opcode::Return as u8);
     }
 
     /// emit the given bytecode instruction and write a placeholder
@@ -70,24 +131,34 @@ impl Compiler {
         self.emit_byte(instruction as u8);
         self.emit_byte(0xff);
         self.emit_byte(0xff);
-        self.chunk.code.len() - 2
+        self.last_byte() - 2
+    }
+
+    /// Replace a byte at a given offset with the supplied byte.
+    fn replace_byte(&mut self, offset: usize, byte: u8) {
+        let chunk = &mut self.frame[self.frame_count].function.chunk;
+        chunk.code[offset] = byte;
+    }
+
+    /// Index of the last emitted byte.
+    fn last_byte(&mut self) -> usize {
+        self.frame[self.frame_count].function.chunk.code.len()
     }
 
     /// Go back into the bytecode stream and replace the operand
     /// at the given location with the calculated jump offset.
     fn patch_jump(&mut self, offset: usize) {
-        let jump = self.chunk.code.len() - offset - 2;
+        let jump = self.last_byte() - offset - 2;
 
         if jump > u16::MAX.into() {
             // should probably test this and also make better error message.
-            // also should implement u32 jump.
             panic!("To much code to jump over.");
         }
 
         let bytes = (jump as u16).to_le_bytes();
 
-        self.chunk.code[offset] = bytes[0];
-        self.chunk.code[offset + 1] = bytes[1];
+        self.replace_byte(offset, bytes[0]);
+        self.replace_byte(offset + 1, bytes[1]);
     }
 
     /// Emit a loop instruction, which jumps backwards by
@@ -95,10 +166,9 @@ impl Compiler {
     fn emit_loop(&mut self, loop_start: usize) {
         self.emit_byte(Opcode::Loop as u8);
 
-        let offset = self.chunk.code.len() - loop_start + 2;
+        let offset = self.last_byte() - loop_start + 2;
         if offset > u16::MAX.into() {
             // like jumps, I should probably test this and add better error message.
-            // should also implement offsets up to u32::MAX.
             panic!("To much code to jump over.");
         }
 
@@ -110,9 +180,11 @@ impl Compiler {
     /// add a constant to the chunk's constant array. Returns the
     /// constant's index in the constant array as a u32.
     fn make_constant(&mut self, value: Value) -> u32 {
-        self.chunk.add_constant(value) as u32
+        let chunk = &mut self.frame[self.frame_count].function.chunk;
+        chunk.add_constant(value) as u32
     }
 
+    /// Write a `[Value]` to the current chunk begin compiled.
     fn emit_constant(&mut self, value: Value) {
         let index = self.make_constant(value);
 
@@ -120,7 +192,6 @@ impl Compiler {
             self.emit_byte(Opcode::LoadConstLong as u8);
 
             let bytes = index.to_le_bytes();
-            println!("{:?}", bytes);
 
             for byte in bytes {
                 self.emit_byte(byte);
@@ -133,14 +204,32 @@ impl Compiler {
     /// Add a string to the constants array. Returns the identifier's index
     /// in the constant array as a [`u32`].
     fn identifier_constant(&mut self, name: &str) -> u32 {
-        self.chunk.add_identifier(name) as u32
+        let chunk = &mut self.frame[self.frame_count].function.chunk;
+        chunk.add_identifier(name) as u32
     }
 
-    fn define_variable(&mut self, global: u32) {
+    /// Define a variable.
+    fn define_variable(&mut self, name: &str) {
         if self.scope_depth > 0 {
-            return;
+            self.add_local(name);
+        } else {
+            let global = self.identifier_constant(name);
+            self.define_global(global);
         }
+    }
 
+    /// Add a [`Local`] to the [`Compiler`]'s locals array.
+    fn add_local(&mut self, name: &str) {
+        let local = Local {
+            name: name.to_string(),
+            depth: self.scope_depth,
+        };
+
+        self.locals.push(local);
+    }
+
+    /// Define a global variable.
+    fn define_global(&mut self, global: u32) {
         self.emit_byte(Opcode::DefGlobal as u8);
 
         for byte in global.to_le_bytes() {
@@ -148,18 +237,14 @@ impl Compiler {
         }
     }
 
+    /// Emit an `[Opcode]` to load the variable with the given name.
     fn load_variable(&mut self, name: &str) {
-        // try and resolve the name as local.
         let arg = match self.resolve_local(name) {
-            // if the result is Some(_) then it must be local.
             Some(index) => {
-                // emit a local get opcode and use the index returned from resolve_local.
                 self.emit_byte(Opcode::GetLocal as u8);
                 index as u32
             }
-            // if the result is None, then it must be a global.
             None => {
-                // emit a global get opcode and get its arg from identifier_constant.
                 self.emit_byte(Opcode::GetGlobal as u8);
                 self.identifier_constant(name)
             }
@@ -170,6 +255,8 @@ impl Compiler {
         }
     }
 
+    /// Emit an `[Opcode]` to save a value to the variable with the
+    /// given name.
     fn save_variable(&mut self, name: &str) {
         let arg = match self.resolve_local(name) {
             Some(index) => {
@@ -187,45 +274,11 @@ impl Compiler {
         }
     }
 
-    fn enter_scope(&mut self) {
-        self.scope_depth += 1
-    }
-
-    fn leave_scope(&mut self) {
-        self.scope_depth -= 1;
-
-        while self.local_count > 0 && self.locals[self.local_count - 1].depth > self.scope_depth {
-            self.emit_byte(Opcode::Pop as u8);
-            self.locals.pop();
-            self.local_count -= 1;
-        }
-    }
-
-    fn enter_loop(&mut self, index: usize) {
-        self.loops.push(Loop::new(index));
-    }
-
-    fn leave_loop(&mut self) {
-        let last_loop = self.loops.pop().unwrap();
-
-        for jump_offset in last_loop.jump_placeholders {
-            self.patch_jump(jump_offset);
-        }
-    }
-
-    /// Add a [`Local`] to the [`Compiler`]'s locals array.
-    fn add_local(&mut self, name: &str) {
-        let local = Local {
-            name: name.to_string(),
-            depth: self.scope_depth,
-        };
-        self.locals.push(local);
-        self.local_count += 1;
-    }
-
-    /// Resolve a local variable.
+    /// Resolve a local variable with the given name. Returns the variable's
+    /// index in the `[Local]` array if it's locally defined or None if it's a global.
     fn resolve_local(&mut self, name: &str) -> Option<usize> {
-        let mut index = self.local_count;
+        let mut index = self.locals.len();
+
         while index > 0 {
             let local = &self.locals[index - 1];
 
@@ -238,17 +291,101 @@ impl Compiler {
 
         None
     }
-}
 
-impl Visitor for Compiler {
-    fn block(&mut self, body: &Vec<Stmt>) {
+    /// Enter a new block level scope.
+    fn enter_scope(&mut self) {
+        self.scope_depth += 1
+    }
+
+    /// Leave the current scope, removing all locally declared variables.
+    fn leave_scope(&mut self) {
+        self.scope_depth -= 1;
+
+        while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth {
+            self.emit_byte(Opcode::Pop as u8);
+            self.locals.pop();
+        }
+    }
+
+    /// Enter a loop body.
+    fn enter_loop(&mut self, index: usize) {
+        self.loops.push(Loop::new(index));
+    }
+
+    /// Leave the current loop body, patching all jump offsets emitted by
+    /// break statements in the loop body.
+    fn leave_loop(&mut self) {
+        let last_loop = self.loops.pop().unwrap();
+
+        for jump_offset in last_loop.jump_placeholders {
+            self.patch_jump(jump_offset);
+        }
+    }
+
+    /// Enter a function body.
+    fn enter_function(&mut self, frame: Frame) {
+        self.frame.push(frame);
+        self.frame_count += 1;
         self.enter_scope();
+    }
 
-        for node in body {
-            self.statement(&node);
+    /// Leave the current function body.
+    fn leave_function(&mut self) -> Frame {
+        self.leave_scope();
+
+        self.emit_return();
+        self.frame_count -= 1;
+        self.frame.pop().unwrap()
+    }
+
+    /// Sort of foward declare all globally scoped functions.
+    fn define_functions(&mut self, ast: &AST) {
+        for node in &ast.items {
+            match node {
+                Stmt::FunDeclaration(fun, _) => {
+                    self.function(&fun);
+                }
+                _ => continue,
+            }
+        }
+    }
+
+    /// Compile a function declaration.
+    fn function(&mut self, fun: &Function) {
+        if fun.params.len() > u8::MAX.into() {
+            panic!("Cannot have more than 255 parameters");
         }
 
-        self.leave_scope();
+        let frame = FunctionValue {
+            arity: fun.params.len() as u8,
+            name: fun.id.name.clone().into_boxed_str(),
+            chunk: Chunk::default(),
+        };
+
+        self.enter_function(Frame::function(frame));
+        {
+            for param in &fun.params {
+                self.define_variable(&param.name);
+            }
+
+            for stmt in fun.body.iter() {
+                self.statement(stmt);
+            }
+        }
+
+        let frame = self.leave_function();
+
+        Disassembler::disassemble_chunk(&frame.function.name, &frame.function.chunk);
+        self.emit_constant(Value::from(frame.function));
+        self.define_variable(&fun.id.name);
+    }
+}
+
+impl Visitor for Compiler<'_> {
+    fn function_declaration(&mut self, fun: &Function) {
+        if self.scope_depth > 0 {
+            self.function(fun);
+        }
     }
 
     fn if_statement(&mut self, expr: &Expr, body: &Vec<Stmt>, else_branch: &Option<Box<Stmt>>) {
@@ -270,7 +407,7 @@ impl Visitor for Compiler {
     }
 
     fn loop_statement(&mut self, body: &Vec<Stmt>) {
-        let loop_start = self.chunk.code.len();
+        let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
         self.block(&body);
@@ -280,7 +417,7 @@ impl Visitor for Compiler {
     }
 
     fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) {
-        let loop_start = self.chunk.code.len();
+        let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
         self.expression(&expr);
@@ -294,6 +431,16 @@ impl Visitor for Compiler {
         self.patch_jump(exit_jump);
         self.leave_loop();
         self.emit_byte(Opcode::Pop as u8);
+    }
+
+    fn block(&mut self, body: &Vec<Stmt>) {
+        self.enter_scope();
+
+        for node in body {
+            self.statement(&node);
+        }
+
+        self.leave_scope();
     }
 
     fn break_statement(&mut self) {
@@ -327,13 +474,14 @@ impl Visitor for Compiler {
             self.add_local(&id.name);
         } else {
             let global = self.identifier_constant(&id.name);
+
             if let Some(expr) = &init {
                 self.expression(&expr);
             } else {
                 self.emit_byte(Opcode::Nil as u8);
             }
 
-            self.define_variable(global);
+            self.define_global(global);
         }
     }
 
@@ -365,7 +513,6 @@ impl Visitor for Compiler {
         };
 
         self.save_variable(&id.name);
-        self.emit_byte(Opcode::Pop as u8);
     }
 
     fn expression_stmt(&mut self, expr: &Expr) {
@@ -420,6 +567,20 @@ impl Visitor for Compiler {
         }
     }
 
+    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) {
+        if args.len() > u8::MAX.into() {
+            panic!("Cannot have more than 255 arguments.");
+        }
+
+        self.expression(&callee);
+
+        for arg in args.iter() {
+            self.expression(arg);
+        }
+
+        self.emit_bytes(Opcode::Call as u8, args.len() as u8);
+    }
+
     fn identifier(&mut self, id: &Ident) {
         self.load_variable(&id.name);
     }
@@ -443,7 +604,7 @@ impl Visitor for Compiler {
         self.emit_byte(Opcode::Nil as u8);
     }
 }
-
+/*
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -812,3 +973,4 @@ mod tests {
         );
     }
 }
+*/
