@@ -136,6 +136,8 @@ impl Parser {
             TokenType::Loop => self.parse_loop_statement(),
             // while ...
             TokenType::While => self.parse_while_statement(),
+            // return ...
+            TokenType::Return => self.parse_return_statement(),
             // break ...
             TokenType::Break => self.parse_break_statement(),
             // continue
@@ -295,14 +297,34 @@ impl Parser {
         // Todo: should be able to break to a label.
         self.consume(TokenType::Break);
 
-        Ok(Stmt::Break(Span::from(&self.previous.span)))
+        Ok(Stmt::BreakStmt(Span::from(&self.previous.span)))
     }
 
     fn parse_continue_statement(&mut self) -> Result<Stmt, ParserError> {
         // Todo: should be able to continue to a label.
         self.consume(TokenType::Continue);
 
-        Ok(Stmt::Continue(Span::from(&self.previous.span)))
+        Ok(Stmt::ContinueStmt(Span::from(&self.previous.span)))
+    }
+
+    fn parse_return_statement(&mut self) -> Result<Stmt, ParserError> {
+        let start = self.current.span.clone();
+
+        // return ...
+        self.consume(TokenType::Return);
+
+        let (return_val, span) = match self.current.token_type {
+            // return '\n'
+            TokenType::Newline => (None, start),
+            // return <expr>
+            _ => {
+                let val = self.expression()?;
+                let span = Span::combine(&start, &val.position());
+                (Some(val), span)
+            }
+        };
+
+        Ok(Stmt::ReturnStmt(return_val, span))
     }
 
     fn parse_print_statement(&mut self) -> Result<Stmt, ParserError> {

@@ -443,7 +443,26 @@ impl Visitor for Compiler<'_> {
         self.leave_scope();
     }
 
+    fn return_statement(&mut self, return_val: &Option<Expr>) {
+        if self.scope_depth == 0 {
+            panic!("Return statement outside of a function");
+        }
+
+        if let Some(expr) = return_val {
+            self.expression(expr);
+        } else {
+            self.emit_byte(Opcode::Nil as u8);
+        }
+
+        self.emit_byte(Opcode::Return as u8);
+    }
+
     fn break_statement(&mut self) {
+        if self.loops.len() == 0 {
+            // Todo: make this an error, don't just panic.
+            panic!("Break statement outside a loop");
+        }
+
         let exit_jump = self.emit_jump(Opcode::Jump);
         self.emit_byte(Opcode::Pop as u8);
 
@@ -452,6 +471,11 @@ impl Visitor for Compiler<'_> {
     }
 
     fn continue_statement(&mut self) {
+        if self.loops.len() == 0 {
+            // Todo: make this an error, don't just panic.
+            panic!("Continue statement outside a loop");
+        }
+
         let loop_start = self.loops.last().unwrap().loop_start;
 
         self.emit_loop(loop_start);
