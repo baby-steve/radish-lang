@@ -42,11 +42,11 @@ fn main() {
             let sym_table = semantic_analyzer.analyze(&res);
 
             let mut compiler = Compiler::new(&sym_table);
-            let script = compiler.compile(&res);
+            let (module, script) = compiler.compile(&res);
 
-            Disassembler::disassemble_chunk("script", &script.chunk);
+            Disassembler::disassemble_chunk("script", &script);
 
-            let mut vm = VM::new(&config);
+            let mut vm = VM::new(&config, module);
             vm.interpret(script);
 
             println!("\nOkay we done now.");
