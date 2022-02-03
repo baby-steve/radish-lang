@@ -76,10 +76,10 @@ impl TestSnippet {
 
                 // Compile
                 let mut compiler = Compiler::new(&table);
-                let script = compiler.compile(&res);
+                let (module, script) = compiler.compile(&res);
 
                 // Run the VM
-                VM::new(&config).interpret(script);
+                VM::new(&config, module).interpret(script);
 
                 // Check each value printed by vm to their expected value.
                 for (i, value) in stdout.buffer.borrow().iter().enumerate() {

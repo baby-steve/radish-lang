@@ -85,6 +85,8 @@ pub enum TokenType {
     Continue,
     // fun
     Fun,
+    // return
+    Return,
 
     // number
     Number(f64),
@@ -160,6 +162,7 @@ impl Token {
             Break => "break",
             Continue => "continue",
             Fun => "fun",
+            Return => "return",
 
             Eof => "<Eof>",
 
@@ -232,6 +235,7 @@ impl Token {
             "break" => TokenType::Break,
             "continue" => TokenType::Continue,
             "fun" => TokenType::Fun,
+            "return" => TokenType::Return,
             "<Eof>" => TokenType::Eof,
 
             _ => return None,

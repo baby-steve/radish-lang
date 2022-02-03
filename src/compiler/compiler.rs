@@ -1,10 +1,13 @@
 use crate::{
     common::{
         chunk::Chunk, disassembler::Disassembler, opcode::Opcode, value::Function as FunctionValue,
-        value::Value,
+        value::Module as ModuleValue, value::Value,
     },
     compiler::{ast::*, table::SymbolTable, visitor::Visitor},
 };
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Local {
@@ -16,7 +19,7 @@ pub struct Local {
 struct Loop {
     /// The start of the loop, used by `continue` statements.
     loop_start: usize,
-    /// Placeholders emitted by `break` statements within the loop, 
+    /// Placeholders emitted by `break` statements within the loop,
     /// back patched once the loop is exited.
     jump_placeholders: Vec<usize>,
 }
@@ -68,6 +71,8 @@ pub struct Compiler<'a> {
     frame_count: usize,
     frame: Vec<Frame>,
     scope: &'a SymbolTable,
+
+    module: Rc<RefCell<ModuleValue>>,
 }
 
 impl<'a> Compiler<'a> {
@@ -79,14 +84,16 @@ impl<'a> Compiler<'a> {
             frame_count: 0,
             frame: vec![],
             scope,
+            module: ModuleValue::new("test"),
         }
     }
 
-    pub fn compile(&mut self, ast: &AST) -> FunctionValue {
+    pub fn compile(&mut self, ast: &AST) -> (Rc<RefCell<ModuleValue>>, FunctionValue) {
         let script = FunctionValue {
             arity: 0,
             chunk: Chunk::default(),
             name: String::from("").into_boxed_str(),
+            module: Rc::downgrade(&self.module),
         };
 
         let frame = Frame::script(script);
@@ -95,7 +102,7 @@ impl<'a> Compiler<'a> {
 
         self.add_local("");
 
-        self.define_functions(&ast);
+        self.declare_globals(&ast);
 
         for node in &ast.items {
             self.statement(node);
@@ -103,7 +110,7 @@ impl<'a> Compiler<'a> {
 
         self.emit_return();
 
-        self.frame.pop().unwrap().function
+        (self.module.clone(), self.frame.pop().unwrap().function)
     }
 
     /// Write a unsigned byte to the current `[Chunk]` being compiled.
@@ -201,20 +208,13 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    /// Add a string to the constants array. Returns the identifier's index
-    /// in the constant array as a [`u32`].
-    fn identifier_constant(&mut self, name: &str) -> u32 {
-        let chunk = &mut self.frame[self.frame_count].function.chunk;
-        chunk.add_identifier(name) as u32
-    }
-
     /// Define a variable.
     fn define_variable(&mut self, name: &str) {
         if self.scope_depth > 0 {
             self.add_local(name);
         } else {
-            let global = self.identifier_constant(name);
-            self.define_global(global);
+            let index = self.module.borrow_mut().get_index(name).unwrap();
+            self.define_global(index as u32);
         }
     }
 
@@ -246,7 +246,8 @@ impl<'a> Compiler<'a> {
             }
             None => {
                 self.emit_byte(Opcode::GetGlobal as u8);
-                self.identifier_constant(name)
+                let index = self.module.borrow().get_index(name).unwrap();
+                index as u32
             }
         };
 
@@ -265,7 +266,10 @@ impl<'a> Compiler<'a> {
             }
             None => {
                 self.emit_byte(Opcode::SetGlobal as u8);
-                self.identifier_constant(name)
+                //self.identifier_constant(name)
+
+                let index = self.module.borrow().get_index(name).unwrap();
+                index as u32
             }
         };
 
@@ -339,18 +343,28 @@ impl<'a> Compiler<'a> {
     }
 
     /// Sort of foward declare all globally scoped functions.
-    fn define_functions(&mut self, ast: &AST) {
+    fn declare_globals(&mut self, ast: &AST) {
+        // add all global declarations to the module with a value of nil.
+        for (name, _) in self.scope.all().iter() {
+            self.module.borrow_mut().add_var(name.clone());
+        }
+
         for node in &ast.items {
             match node {
                 Stmt::FunDeclaration(fun, _) => {
+                    // get the function's location in the module's variables array.
+                    let index = self.module.borrow_mut().get_index(&fun.id.name).unwrap();
+                    // compile the functions body.
                     self.function(&fun);
+                    // set the location in the module's variable array to the function's body.
+                    self.define_global(index as u32);
                 }
                 _ => continue,
             }
         }
     }
 
-    /// Compile a function declaration.
+    /// Compile a function declaration, 
     fn function(&mut self, fun: &Function) {
         if fun.params.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 parameters");
@@ -360,6 +374,7 @@ impl<'a> Compiler<'a> {
             arity: fun.params.len() as u8,
             name: fun.id.name.clone().into_boxed_str(),
             chunk: Chunk::default(),
+            module: Rc::downgrade(&self.module),
         };
 
         self.enter_function(Frame::function(frame));
@@ -375,16 +390,18 @@ impl<'a> Compiler<'a> {
 
         let frame = self.leave_function();
 
-        Disassembler::disassemble_chunk(&frame.function.name, &frame.function.chunk);
+        Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
         self.emit_constant(Value::from(frame.function));
-        self.define_variable(&fun.id.name);
     }
 }
 
 impl Visitor for Compiler<'_> {
     fn function_declaration(&mut self, fun: &Function) {
+        // at this point all global functions have already been compiled,
+        // so only locally scoped functions have to be handled.
         if self.scope_depth > 0 {
             self.function(fun);
+            self.define_variable(&fun.id.name);
         }
     }
 
@@ -443,7 +460,26 @@ impl Visitor for Compiler<'_> {
         self.leave_scope();
     }
 
+    fn return_statement(&mut self, return_val: &Option<Expr>) {
+        if self.scope_depth == 0 {
+            panic!("Return statement outside of a function");
+        }
+
+        if let Some(expr) = return_val {
+            self.expression(expr);
+        } else {
+            self.emit_byte(Opcode::Nil as u8);
+        }
+
+        self.emit_byte(Opcode::Return as u8);
+    }
+
     fn break_statement(&mut self) {
+        if self.loops.len() == 0 {
+            // Todo: make this an error, don't just panic.
+            panic!("Break statement outside a loop");
+        }
+
         let exit_jump = self.emit_jump(Opcode::Jump);
         self.emit_byte(Opcode::Pop as u8);
 
@@ -452,6 +488,11 @@ impl Visitor for Compiler<'_> {
     }
 
     fn continue_statement(&mut self) {
+        if self.loops.len() == 0 {
+            // Todo: make this an error, don't just panic.
+            panic!("Continue statement outside a loop");
+        }
+
         let loop_start = self.loops.last().unwrap().loop_start;
 
         self.emit_loop(loop_start);
@@ -473,7 +514,7 @@ impl Visitor for Compiler<'_> {
 
             self.add_local(&id.name);
         } else {
-            let global = self.identifier_constant(&id.name);
+            let index = self.module.borrow_mut().get_index(&id.name).unwrap();
 
             if let Some(expr) = &init {
                 self.expression(&expr);
@@ -481,7 +522,7 @@ impl Visitor for Compiler<'_> {
                 self.emit_byte(Opcode::Nil as u8);
             }
 
-            self.define_global(global);
+            self.define_global(index as u32);
         }
     }
 

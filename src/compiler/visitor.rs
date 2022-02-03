@@ -19,14 +19,15 @@ pub trait Visitor {
         match stmt {
             Stmt::BlockStmt(body, _) => self.block(&body),
             Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
-            Stmt::FunDeclaration(fun, _) => self.function_declaration(fun),
+            Stmt::FunDeclaration(fun, _) => self.function_declaration(&fun),
             Stmt::VarDeclaration(id, init, _) => self.var_declaration(&id, &init),
             Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
             Stmt::IfStmt(expr, body, alt, _) => self.if_statement(&expr, &body, &alt),
             Stmt::LoopStmt(body, _) => self.loop_statement(&body),
-            Stmt::WhileStmt(expr, body, _) => self.while_statement(expr, body),
-            Stmt::Break(_) => self.break_statement(),
-            Stmt::Continue(_) => self.continue_statement(),
+            Stmt::WhileStmt(expr, body, _) => self.while_statement(&expr, &body),
+            Stmt::ReturnStmt(value, _) => self.return_statement(&value),
+            Stmt::BreakStmt(_) => self.break_statement(),
+            Stmt::ContinueStmt(_) => self.continue_statement(),
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
@@ -62,6 +63,8 @@ pub trait Visitor {
         self.expression(&expr);
         self.block(&body);
     }
+
+    fn return_statement(&mut self, return_val: &Option<Expr>) {}
 
     fn break_statement(&mut self) {}
 

@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     collections::{
         hash_map::Entry::{Occupied, Vacant},
         HashMap,
@@ -7,9 +8,12 @@ use std::{
     rc::Rc,
 };
 
+use std::time::Instant;
+
 use crate::{
     common::{
-        chunk::Chunk, disassembler::Disassembler, opcode::Opcode, value::Function, value::Value,
+        chunk::Chunk, disassembler::Disassembler, opcode::Opcode, value::Function, value::Module,
+        value::Value,
     },
     vm::stack::Stack,
 };
@@ -51,7 +55,7 @@ impl RadishConfig {
 }
 
 #[derive(Debug)]
-pub struct CallFrame /*<'a>*/ {
+pub struct CallFrame {
     /// Call frame's function.
     pub function: Rc<Function>,
     /// Track where we're at in the function's chunk.
@@ -61,40 +65,38 @@ pub struct CallFrame /*<'a>*/ {
 }
 
 #[derive(Debug)]
-pub struct VM /*<'a>*/ {
+pub struct VM {
     pub stack: Stack,
-    pub frames: Vec<CallFrame /*<'a>*/>,
+    pub frames: Vec<CallFrame>,
     pub frame_count: usize,
 
-    pub globals: HashMap<String, Value>,
     pub config: Rc<RadishConfig>,
+
+    pub last_module: Rc<RefCell<Module>>,
 }
 
-impl VM /*<'a>*/ {
-    pub fn new(config: &Rc<RadishConfig>) -> VM /*<'a>*/ {
+impl VM {
+    pub fn new(config: &Rc<RadishConfig>, module: Rc<RefCell<Module>>) -> VM {
         VM {
             stack: Stack::new(),
             frames: Vec::new(),
             frame_count: 0,
-            globals: HashMap::new(),
             config: Rc::clone(&config),
+            last_module: module,
         }
     }
 
     pub fn interpret(&mut self, script: Function) {
         let script = Rc::new(script);
 
-        // let frame = CallFrame {
-        //     function: Rc::clone(&script),
-        //     ip: 0,
-        //     offset: 0,
-        // };
-        // self.frames.push(frame);
-        
         self.stack.push(Value::Function(Rc::clone(&script)));
         self.call_function(script, 0);
 
+        let start = Instant::now();
         self.run();
+        let duration = start.elapsed();
+
+        println!("Time elapsed in run() is: {:?}", duration);
     }
 
     #[inline]
@@ -159,9 +161,7 @@ impl VM /*<'a>*/ {
 
     #[inline]
     fn call_function(&mut self, fun: Rc<Function>, arg_count: usize) {
-        println!("{:?}", self.stack.stack.len());
         let offset = self.stack.stack.len() - arg_count;
-        
         let frame = CallFrame {
             function: Rc::clone(&fun),
             ip: 0,
@@ -177,9 +177,9 @@ impl VM /*<'a>*/ {
             // Todo: store current frame in local variable
             // let frame = &mut self.frames[self.frame_count]
 
-            // let dis = Disassembler::new("script", &self.frames[self.frame_count - 1].function.chunk);
+            // let dis = Disassembler::new("script", &self.frames[self.frame_count - 1].function);
             // let offset = &self.frames[self.frame_count - 1].ip;
-            // 
+            //
             // dis.disassemble_instruction(*offset);
             // print!("    ");
             // for slot in &self.stack.stack {
@@ -211,31 +211,32 @@ impl VM /*<'a>*/ {
                     self.stack.pop();
                 }
                 Opcode::DefGlobal => {
-                    let name = self.read_constant_long();
-                    self.globals
-                        .insert(name.to_string(), self.stack.peek().unwrap());
+                    let index = self.read_long() as usize;
+                    self.last_module
+                        .borrow_mut()
+                        .set_var(index, self.stack.peek().unwrap());
+
                     self.stack.pop();
                 }
                 Opcode::GetGlobal => {
-                    let name = self.read_constant_long();
-                    match self.globals.get(&name.to_string()) {
-                        Some(value) => self.stack.push(value.clone()),
-                        None => panic!("Found an undefined global named '{}'.", name),
-                    }
+                    let index = self.read_long() as usize;
+                    let value = self.last_module.borrow().get_var(index).clone();
+
+                    self.stack.push(value);
                 }
                 Opcode::SetGlobal => {
-                    let name = self.read_constant_long();
-                    let entry = self.globals.entry(name.to_string());
-                    match entry {
-                        Occupied(mut val) => val.insert(self.stack.pop().unwrap()),
-                        Vacant(_) => panic!("Cannot assign to a undefined global variable"),
-                    };
+                    let index = self.read_long() as usize;
+
+                    self.last_module
+                        .borrow_mut()
+                        .set_var(index, self.stack.peek().unwrap());
                 }
                 Opcode::GetLocal => {
                     let slot_index =
                         self.read_long() as usize + self.frames[self.frame_count - 1].offset - 1;
-                        
-                    self.stack.push(self.stack.stack[slot_index as usize].clone());
+
+                    self.stack
+                        .push(self.stack.stack[slot_index as usize].clone());
                 }
                 Opcode::SetLocal => {
                     let slot_index =
@@ -323,16 +324,12 @@ impl VM /*<'a>*/ {
                     let arg_count = self.read_byte() as usize;
                     let callee = self.stack.peek_n(arg_count + 1).unwrap();
                     self.call_value(callee, arg_count);
-
-                    //self.frames.pop();
-                    //self.frame_count - 1 -= 1;
                 }
                 Opcode::Print => {
                     let msg = self.stack.pop().unwrap();
                     self.config.stdout.write(&format!("{}", msg));
                 }
                 Opcode::Return => {
-                    // println!("what???");
                     let result = self.stack.pop().unwrap();
 
                     if self.frame_count - 1 == 0 {

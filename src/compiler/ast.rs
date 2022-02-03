@@ -57,9 +57,11 @@ pub enum Stmt {
     // while <expr> loop <block> endloop
     WhileStmt(Expr, Box<Vec<Stmt>>, Span),
     // break
-    Break(Span),
+    BreakStmt(Span),
     // continue
-    Continue(Span),
+    ContinueStmt(Span),
+    // return <expr>?
+    ReturnStmt(Option<Expr>, Span),
     // 'print' <expr>
     PrintStmt(Expr, Span),
 }
@@ -75,8 +77,9 @@ impl Stmt {
             | Self::IfStmt(_, _, _, pos)
             | Self::LoopStmt(_, pos)
             | Self::WhileStmt(_, _, pos)
-            | Self::Continue(pos)
-            | Self::Break(pos) => pos.clone(),
+            | Self::ReturnStmt(_, pos)
+            | Self::ContinueStmt(pos)
+            | Self::BreakStmt(pos) => pos.clone(),
             Self::ExpressionStmt(expr) => expr.position(),
         }
     }

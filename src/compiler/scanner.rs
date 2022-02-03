@@ -296,6 +296,7 @@ impl Scanner {
             "break" => TokenType::Break,
             "continue" => TokenType::Continue,
             "fun" => TokenType::Fun,
+            "return" => TokenType::Return,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -433,6 +434,7 @@ mod tests {
             ("break", TokenType::Break),
             ("continue", TokenType::Continue),
             ("fun", TokenType::Fun),
+            ("return", TokenType::Return),
         ];
 
         for (src, token_type) in tests {
