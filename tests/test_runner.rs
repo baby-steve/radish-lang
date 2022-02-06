@@ -1,5 +1,6 @@
 //! Runs snippet tests.
 
+use radish_lang::compiler::table::SymbolTable;
 use radish_lang::{
     common::source::Source,
     compiler::{analysis::Analyzer, compiler::Compiler, parser::Parser},
@@ -49,7 +50,6 @@ impl TestSnippet {
                 expected.push(value);
             }
         }
-        //println!("{:?}", expected);
 
         TestSnippet {
             expected_values: expected,
@@ -63,23 +63,38 @@ impl TestSnippet {
         let result = Parser::new(Rc::clone(&self.source)).parse();
 
         match result {
-            Ok(res) => {
+            Ok(_) => {
                 // Capture all messages printed from the VM.
                 let stdout = RadishMockLogger::new();
 
                 // Configuartion with stdout
                 let config = RadishConfig::with_stdout(stdout.clone());
 
-                // Analysis
+                let scope = SymbolTable::new(0);
+                let mut parser = Parser::new(self.source.clone());
                 let mut semantic_analyzer = Analyzer::new();
-                let table = semantic_analyzer.analyze(&res);
+                let mut compiler = Compiler::new(&scope);
+                let mut vm = VM::new(&config);
 
-                // Compile
-                let mut compiler = Compiler::new(&table);
-                let (module, script) = compiler.compile(&res);
+                let ast = match parser.parse() {
+                    Ok(result) => {
+                        println!("{:#?}", result);
+                        result
+                    }
+                    Err(_) => panic!("error: could not parse"),
+                };
 
-                // Run the VM
-                VM::new(&config, module).interpret(script);
+                let table = match semantic_analyzer.analyze(&ast) {
+                    Ok(table) => table,
+                    Err(_) => panic!("error: could not compile"),
+                };
+
+                let (module, script) = match compiler.compile(&ast, &table) {
+                    Ok((module, script)) => (module, script),
+                    Err(_) => panic!("error: could not compile"),
+                };
+
+                vm.interpret(script, module);
 
                 // Check each value printed by vm to their expected value.
                 for (i, value) in stdout.buffer.borrow().iter().enumerate() {
@@ -92,7 +107,7 @@ impl TestSnippet {
                 }
             }
             Err(err) => {
-                println!("{}", err);
+                println!("{:?}", err);
                 panic!("Test failed.");
             }
         };

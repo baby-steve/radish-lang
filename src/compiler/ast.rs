@@ -1,4 +1,5 @@
 use crate::common::span::Span;
+use std::cmp::Ordering;
 
 #[derive(Debug, PartialEq)]
 pub struct AST {
@@ -156,10 +157,41 @@ pub struct Function {
     pub body: Box<Vec<Stmt>>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Ident {
     pub name: String,
     pub pos: Span,
+}
+
+
+impl PartialEq for Ident {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl PartialOrd for Ident {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Ident {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl Eq for Ident {}
+
+impl std::hash::Hash for Ident {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: std::hash::Hasher,
+    {
+        self.name.hash(state);
+        state.finish();
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

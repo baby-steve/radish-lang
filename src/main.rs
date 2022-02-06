@@ -1,7 +1,7 @@
 use radish_lang::common::disassembler::Disassembler;
 use radish_lang::common::source::Source;
 use radish_lang::compiler::{
-    analysis::Analyzer, compiler::Compiler, parser::Parser,
+    analysis::Analyzer, compiler::Compiler, parser::Parser, table::SymbolTable,
 };
 use radish_lang::vm::vm::{RadishConfig, VM};
 
@@ -31,26 +31,34 @@ fn main() {
         &PathBuf::from("./test_file"),
     );
 
-    let result = Parser::new(source.clone()).parse();
-    println!("{:#?}", result);
+    let config = RadishConfig::new();
+    let scope = SymbolTable::new(0);
+    let mut parser = Parser::new(source.clone());
+    let mut semantic_analyzer = Analyzer::new();
+    let mut compiler = Compiler::new(&scope);
+    let mut vm = VM::new(&config);
 
-    match result {
-        Ok(res) => {
-            let config = RadishConfig::new();
-
-            let mut semantic_analyzer = Analyzer::new();
-            let sym_table = semantic_analyzer.analyze(&res);
-
-            let mut compiler = Compiler::new(&sym_table);
-            let (module, script) = compiler.compile(&res);
-
-            Disassembler::disassemble_chunk("script", &script);
-
-            let mut vm = VM::new(&config, module);
-            vm.interpret(script);
-
-            println!("\nOkay we done now.");
+    let ast = match parser.parse() {
+        Ok(result) => {
+            println!("{:#?}", result);
+            result
         }
-        Err(err) => println!("{}", err),
-    }
+        Err(err) => panic!("error: could not parse"),
+    };
+
+    let table = match semantic_analyzer.analyze(&ast) {
+        Ok(table) => table,
+        Err(()) => panic!("error: could not compile"),
+    };
+
+    let (module, script) = match compiler.compile(&ast, &table) {
+        Ok((module, script)) => (module, script),
+        Err(_) => panic!("error: could not compile"),
+    };
+
+    Disassembler::disassemble_chunk("script", &script);
+
+    vm.interpret(script, module);
+
+    println!("\nOkay we done now.");
 }

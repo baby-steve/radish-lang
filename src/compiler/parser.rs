@@ -3,18 +3,20 @@ use std::rc::Rc;
 
 use crate::compiler::{
     ast::*,
-    error::{ExpectedError::*, ParserError, SyntaxError, SyntaxError::*, UnexpectedError::*},
+    error::{ParseError, ParseErrorKind},
     scanner::Scanner,
     token::{Token, TokenType},
 };
 
 use crate::common::{source::Source, span::Span};
+use crate::error::{AsDiagnostic, Diagnostic, Label, Item};
 
 pub struct Parser {
     source: Rc<Source>,
     scanner: Scanner,
     previous: Token,
     current: Token,
+    //diagnostics: Vec<Diagnostic>,
 }
 
 impl Parser {
@@ -24,21 +26,16 @@ impl Parser {
             scanner: Scanner::new(source),
             previous: Token::empty(),
             current: Token::empty(),
+            //diagnostics: Vec::new(),
         }
     }
-    pub fn parse(&mut self) -> Result<AST, ParserError> {
+
+    pub fn parse(&mut self) -> Result<AST, ParseError> {
         self.advance();
 
         match self.parse_body() {
             Ok(items) => Ok(AST::new(items)),
             Err(err) => Err(err),
-        }
-    }
-
-    fn make_error(&mut self, err: ParserError, target_err: SyntaxError) -> ParserError {
-        match err.error {
-            SyntaxError::ExpectedError(_) => err,
-            SyntaxError::UnexpectedError(_) => ParserError::new(target_err, &err.span),
         }
     }
 
@@ -71,7 +68,28 @@ impl Parser {
         }
     }
 
-    fn parse_body(&mut self) -> Result<Vec<Stmt>, ParserError> {
+    fn error(&mut self, err_kind: ParseErrorKind) -> ParseError {
+        ParseError::new(err_kind)
+    }
+
+    fn expect(&mut self, expected: TokenType) -> Result<(), ParseError> {
+        if !self.match_token(&expected) {
+            let actual = self.current.clone();
+
+            let err_kind = ParseErrorKind::Expected { 
+                expected: Item::new(&Span::empty(), expected.syntax()), 
+                actual: Item::new(&actual.span, actual.syntax()), 
+            };
+
+            let err = ParseError::new(err_kind);
+
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn parse_body(&mut self) -> Result<Vec<Stmt>, ParseError> {
         let mut items = vec![];
 
         loop {
@@ -94,7 +112,9 @@ impl Parser {
     }
 
     /// Parse everything up to, but not including, a delimiter.
-    fn parse_block(&mut self) -> Result<Vec<Stmt>, ParserError> {
+    fn parse_block(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let opening_delimiter = self.previous.clone();
+
         let mut body = vec![];
 
         while !self.current.is_delimiter() {
@@ -110,17 +130,38 @@ impl Parser {
             };
         }
 
-        return Ok(body);
+        let closing_delimiter = self.current.clone();
+
+        match (&opening_delimiter.token_type, &closing_delimiter.token_type) {
+            (TokenType::LeftBrace, TokenType::RightBrace)
+            | (TokenType::Then, TokenType::EndIf)
+            | (TokenType::Then, TokenType::Else)
+            | (TokenType::Else, TokenType::EndIf)
+            | (TokenType::Loop, TokenType::EndLoop)
+            | (TokenType::LeftParen, TokenType::RightParen) => return Ok(body),
+            _ => {
+                let err_kind = ParseErrorKind::MismatchedDelimiter {
+                    first: Item::new(&opening_delimiter.span, opening_delimiter.syntax()),
+                    second: Item::new(&closing_delimiter.span, closing_delimiter.syntax()),
+                };
+
+                let err = self.error(err_kind);
+
+                return Err(err);
+            }
+        }
     }
 
-    fn parse_statement(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_statement(&mut self) -> Result<Stmt, ParseError> {
         match self.current.token_type {
             // "{" ...
             TokenType::LeftBrace => {
                 let start = self.current.span.clone();
                 self.consume(TokenType::LeftBrace);
+
                 let block = Box::new(self.parse_block()?);
-                self.consume(TokenType::RightBrace);
+                self.expect(TokenType::RightBrace)?;
+
                 Ok(Stmt::BlockStmt(
                     block,
                     Span::combine(&start, &self.current.span),
@@ -151,7 +192,7 @@ impl Parser {
         }
     }
 
-    fn parse_fun_declaration(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_fun_declaration(&mut self) -> Result<Stmt, ParseError> {
         let start = self.current.span.clone();
 
         // fun ...
@@ -164,13 +205,13 @@ impl Parser {
         let params = self.parse_params()?;
 
         // fun id '(' <params> ')' '{' ...
-        self.consume(TokenType::LeftBrace);
+        self.expect(TokenType::LeftBrace)?;
 
         // fun id '(' <params> ')' '{' <body> ...
         let body = Box::new(self.parse_block()?);
 
         // fun id '(' <params> ')' '{' <body> '}'
-        self.consume(TokenType::RightBrace);
+        self.expect(TokenType::RightBrace)?;
 
         let span = Span::combine(&start, &self.current.span);
 
@@ -179,7 +220,7 @@ impl Parser {
         Ok(Stmt::FunDeclaration(function, span))
     }
 
-    fn parse_var_declaration(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_var_declaration(&mut self) -> Result<Stmt, ParseError> {
         // var ...
         let start = Span::from(&self.current.span);
 
@@ -193,7 +234,7 @@ impl Parser {
         let (init, span) = match current.token_type {
             TokenType::Equals => {
                 self.consume(TokenType::Equals);
-                let init = self.expression()?;
+                let init = self.parse_expression()?;
                 let span = Span::combine(&start, &init.position());
                 (Some(init), span)
             }
@@ -203,43 +244,38 @@ impl Parser {
         Ok(Stmt::VarDeclaration(id, init, span))
     }
 
-    fn parse_if_statement(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_if_statement(&mut self) -> Result<Stmt, ParseError> {
         // if ...
         let start = Span::from(&self.current.span);
         self.consume(TokenType::If);
 
         // if <expr> ...
-        let expr = self.expression()?;
+        let expr = self.parse_expression()?;
 
         // if <expr> then ...
-        self.consume(TokenType::Then);
+        self.expect(TokenType::Then)?;
 
         // if <expr> then <block> ...
         let block = Box::new(self.parse_block()?);
 
-        let alt = if self.current.token_type == TokenType::Else {
+        let alt = if self.match_token(&TokenType::Else) {
             // if <expr> then <block> else ...
-            self.consume(TokenType::Else);
-
-            if self.current.token_type == TokenType::If {
+            if self.check(&TokenType::If) {
                 // if <expr> then <block> else if ...
                 Some(Box::new(self.parse_if_statement()?))
             } else {
-                // if <expr> then <block> else <block> end
+                // if <expr> then <block> else <block> endif
                 let alternate = Box::new(self.parse_block()?);
-                self.consume(TokenType::EndIf);
+                self.expect(TokenType::EndIf)?;
                 Some(Box::new(Stmt::BlockStmt(
                     alternate,
                     Span::combine(&start, &self.current.span),
                 )))
             }
-        } else if self.current.token_type == TokenType::EndIf {
-            // if <expr> then <block> end
-            self.consume(TokenType::EndIf);
-            None
         } else {
-            // Todo: this should be an actual error.
-            panic!("Mismatched delimiter.");
+            // if <expr> then <block> endif
+            self.expect(TokenType::EndIf)?;
+            None
         };
 
         Ok(Stmt::IfStmt(
@@ -250,7 +286,7 @@ impl Parser {
         ))
     }
 
-    fn parse_loop_statement(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_loop_statement(&mut self) -> Result<Stmt, ParseError> {
         let start = self.current.span.clone();
 
         // loop ...
@@ -260,7 +296,7 @@ impl Parser {
         let loop_body = Box::new(self.parse_block()?);
 
         // loop <body> endloop
-        self.consume(TokenType::EndLoop);
+        self.expect(TokenType::EndLoop)?;
 
         Ok(Stmt::LoopStmt(
             loop_body,
@@ -268,23 +304,23 @@ impl Parser {
         ))
     }
 
-    fn parse_while_statement(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_while_statement(&mut self) -> Result<Stmt, ParseError> {
         let start = self.current.span.clone();
 
         // while ...
         self.consume(TokenType::While);
 
         // while <expr> ...
-        let condition = self.expression()?;
+        let condition = self.parse_expression()?;
 
         // while <expr> loop ...
-        self.consume(TokenType::Loop);
+        self.expect(TokenType::Loop)?;
 
         // while <expr> loop <body> ...
         let loop_body = Box::new(self.parse_block()?);
 
         // while <expr> loop <body> endloop
-        self.consume(TokenType::EndLoop);
+        self.expect(TokenType::EndLoop)?;
 
         Ok(Stmt::WhileStmt(
             condition,
@@ -293,21 +329,21 @@ impl Parser {
         ))
     }
 
-    fn parse_break_statement(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_break_statement(&mut self) -> Result<Stmt, ParseError> {
         // Todo: should be able to break to a label.
         self.consume(TokenType::Break);
 
         Ok(Stmt::BreakStmt(Span::from(&self.previous.span)))
     }
 
-    fn parse_continue_statement(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_continue_statement(&mut self) -> Result<Stmt, ParseError> {
         // Todo: should be able to continue to a label.
         self.consume(TokenType::Continue);
 
         Ok(Stmt::ContinueStmt(Span::from(&self.previous.span)))
     }
 
-    fn parse_return_statement(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_return_statement(&mut self) -> Result<Stmt, ParseError> {
         let start = self.current.span.clone();
 
         // return ...
@@ -318,7 +354,7 @@ impl Parser {
             TokenType::Newline => (None, start),
             // return <expr>
             _ => {
-                let val = self.expression()?;
+                let val = self.parse_expression()?;
                 let span = Span::combine(&start, &val.position());
                 (Some(val), span)
             }
@@ -327,24 +363,24 @@ impl Parser {
         Ok(Stmt::ReturnStmt(return_val, span))
     }
 
-    fn parse_print_statement(&mut self) -> Result<Stmt, ParserError> {
+    fn parse_print_statement(&mut self) -> Result<Stmt, ParseError> {
         let start = self.current.clone().span;
 
         self.consume(TokenType::Print);
 
         // "print" <expr>
-        let expr = self.expression()?;
+        let expr = self.parse_expression()?;
         let end = &expr.position();
 
         Ok(Stmt::PrintStmt(expr, Span::combine(&start, end)))
     }
 
-    fn parse_expression_statement(&mut self) -> Result<Stmt, ParserError> {
-        Ok(Stmt::ExpressionStmt(Box::new(self.expression()?)))
+    fn parse_expression_statement(&mut self) -> Result<Stmt, ParseError> {
+        Ok(Stmt::ExpressionStmt(Box::new(self.parse_expression()?)))
     }
 
-    fn parse_assignment_statement(&mut self) -> Result<Stmt, ParserError> {
-        let node = self.expression()?;
+    fn parse_assignment_statement(&mut self) -> Result<Stmt, ParseError> {
+        let node = self.parse_expression()?;
 
         let op = match self.current.token_type {
             // expr = ...
@@ -379,35 +415,43 @@ impl Parser {
         let id = match node {
             Expr::Identifier(id) => id,
             _ => {
-                return Err(ParserError::new(
-                    ExpectedError(ExpectedIdentifier("".to_string())),
-                    &node.position(),
-                ))
-            }
+                let err_kind = ParseErrorKind::ExpectedIdent {
+                    actual: Item::new(&self.current.span, self.current.syntax())
+                };
+                let err = ParseError::new(err_kind);
+                return Err(err);
+            },
         };
 
         // id op ....
-        let right = match self.expression() {
-            // id op expr
-            Ok(expr) => expr,
-            // id op <error>
-            Err(err) => {
-                return Err(self.make_error(
-                    err.clone(),
-                    ExpectedError(ExpectedExpression(err.error.to_string())),
-                ))
-            }
-        };
+        let right = self.parse_expression()?;
 
         let span = Span::combine(&id.pos, &right.position());
         Ok(Stmt::Assignment(id, op, right, span))
     }
 
-    fn expression(&mut self) -> Result<Expr, ParserError> {
-        self.parse_boolean_expression()
+    fn parse_expression(&mut self) -> Result<Expr, ParseError> {
+        match self.parse_boolean_expression() {
+            Ok(expr) => Ok(expr),
+            Err(err) => match err.kind {
+                ParseErrorKind::Unexpected { found } => {
+                    let err_kind = ParseErrorKind::ExpectedExpression { actual: found };
+                    let err = self.error(err_kind);
+                    return Err(err);
+                }
+                ParseErrorKind::UnexpectedEof { location } => {
+                    let err_kind = ParseErrorKind::ExpectedExpression {
+                        actual: Item::new(&location, "<eof>"),
+                    };
+                    let err = self.error(err_kind);
+                    return Err(err);
+                }
+                _ => return Err(err),
+            },
+        }
     }
 
-    fn parse_boolean_expression(&mut self) -> Result<Expr, ParserError> {
+    fn parse_boolean_expression(&mut self) -> Result<Expr, ParseError> {
         let mut node = self.parse_boolean_term()?;
 
         loop {
@@ -427,7 +471,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_boolean_term(&mut self) -> Result<Expr, ParserError> {
+    fn parse_boolean_term(&mut self) -> Result<Expr, ParseError> {
         let mut node = self.parse_boolean_factor()?;
 
         loop {
@@ -447,7 +491,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_boolean_factor(&mut self) -> Result<Expr, ParserError> {
+    fn parse_boolean_factor(&mut self) -> Result<Expr, ParseError> {
         let mut node = self.parse_sum()?;
 
         loop {
@@ -456,17 +500,7 @@ impl Parser {
                 TokenType::LessThan => {
                     self.consume(TokenType::LessThan);
 
-                    let right = match self.parse_sum() {
-                        // expr < expr
-                        Ok(expr) => expr,
-                        // expr < <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
+                    let right = self.parse_sum()?;
 
                     let span = Span::combine(&node.position(), &right.position());
                     node =
@@ -476,17 +510,7 @@ impl Parser {
                 TokenType::LessThanEquals => {
                     self.consume(TokenType::LessThanEquals);
 
-                    let right = match self.parse_sum() {
-                        // expr <= expr
-                        Ok(expr) => expr,
-                        // expr <= <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
+                    let right = self.parse_sum()?;
 
                     let span = Span::combine(&node.position(), &right.position());
                     node = Expr::BinaryExpr(
@@ -498,17 +522,7 @@ impl Parser {
                 TokenType::GreaterThan => {
                     self.consume(TokenType::GreaterThan);
 
-                    let right = match self.parse_sum() {
-                        // expr > expr
-                        Ok(expr) => expr,
-                        // expr > <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
+                    let right = self.parse_sum()?;
 
                     let span = Span::combine(&node.position(), &right.position());
                     node = Expr::BinaryExpr(
@@ -520,17 +534,7 @@ impl Parser {
                 TokenType::GreaterThanEquals => {
                     self.consume(TokenType::GreaterThanEquals);
 
-                    let right = match self.parse_sum() {
-                        // expr >= expr
-                        Ok(expr) => expr,
-                        // expr >= <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
+                    let right = self.parse_sum()?;
 
                     let span = Span::combine(&node.position(), &right.position());
                     node = Expr::BinaryExpr(
@@ -542,18 +546,7 @@ impl Parser {
                 TokenType::EqualsTo => {
                     self.consume(TokenType::EqualsTo);
 
-                    let right = match self.parse_sum() {
-                        // expr == expr
-                        Ok(expr) => expr,
-                        // expr == <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
-
+                    let right = self.parse_sum()?;
                     let span = Span::combine(&node.position(), &right.position());
                     node =
                         Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::EqualsTo, node, right)), span)
@@ -562,17 +555,7 @@ impl Parser {
                 TokenType::NotEqual => {
                     self.consume(TokenType::NotEqual);
 
-                    let right = match self.parse_sum() {
-                        // expr != expr
-                        Ok(expr) => expr,
-                        // expr != <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
+                    let right = self.parse_sum()?;
 
                     let span = Span::combine(&node.position(), &right.position());
                     node =
@@ -585,7 +568,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_sum(&mut self) -> Result<Expr, ParserError> {
+    fn parse_sum(&mut self) -> Result<Expr, ParseError> {
         // expr ...
         let mut node = self.parse_term()?;
 
@@ -595,17 +578,7 @@ impl Parser {
                 TokenType::Plus => {
                     self.consume(TokenType::Plus);
 
-                    let right = match self.parse_term() {
-                        // expr + expr
-                        Ok(expr) => expr,
-                        // expr + <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
+                    let right = self.parse_term()?;
 
                     let span = Span::combine(&node.position(), &right.position());
                     node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Add, node, right)), span)
@@ -614,17 +587,7 @@ impl Parser {
                 TokenType::Minus => {
                     self.consume(TokenType::Minus);
 
-                    let right = match self.parse_term() {
-                        // expr - expr
-                        Ok(expr) => expr,
-                        // expr - <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
+                    let right = self.parse_term()?;
 
                     let span = Span::combine(&node.position(), &right.position());
 
@@ -638,7 +601,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_term(&mut self) -> Result<Expr, ParserError> {
+    fn parse_term(&mut self) -> Result<Expr, ParseError> {
         // expr ...
         let mut node = self.parse_member()?;
 
@@ -648,17 +611,7 @@ impl Parser {
                 TokenType::Star => {
                     self.consume(TokenType::Star);
 
-                    let right = match self.parse_member() {
-                        // expr * expr
-                        Ok(expr) => expr,
-                        // expr * <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
+                    let right = self.parse_member()?;
 
                     let span = Span::combine(&node.position(), &right.position());
                     node =
@@ -668,17 +621,7 @@ impl Parser {
                 TokenType::Slash => {
                     self.consume(TokenType::Slash);
 
-                    let right = match self.parse_member() {
-                        // expr / expr
-                        Ok(expr) => expr,
-                        // expr / <error>
-                        Err(err) => {
-                            return Err(self.make_error(
-                                err.clone(),
-                                ExpectedError(ExpectedExpression(err.error.to_string())),
-                            ))
-                        }
-                    };
+                    let right = self.parse_member()?;
 
                     let span = Span::combine(&node.position(), &right.position());
                     node =
@@ -691,7 +634,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_member(&mut self) -> Result<Expr, ParserError> {
+    fn parse_member(&mut self) -> Result<Expr, ParseError> {
         let mut node = self.parse_factor()?;
 
         loop {
@@ -711,7 +654,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_factor(&mut self) -> Result<Expr, ParserError> {
+    fn parse_factor(&mut self) -> Result<Expr, ParseError> {
         loop {
             let current = self.current.clone();
 
@@ -784,11 +727,9 @@ impl Parser {
                 // <eof>
                 TokenType::Eof => {
                     // if an <eof> token is found here, it has to be an error.
-                    let span = &current.span;
-                    return Err(ParserError::new(
-                        UnexpectedError(UnexpectedEOF),
-                        &Span::new(Rc::clone(&self.source), span.start, span.end + 1),
-                    ));
+                    return Err(self.error(ParseErrorKind::UnexpectedEof {
+                        location: self.current.span.clone(),
+                    }));
                 }
                 // single-line comment
                 TokenType::Comment(_, false) => {
@@ -801,17 +742,24 @@ impl Parser {
                     continue;
                 }
                 // lexer error
+                TokenType::Error(err) => {
+                    let message = err.to_string();
+                    let err = self.error(ParseErrorKind::Custom { message });
+                    return Err(err);
+                }
                 _ => {
-                    return Err(ParserError::new(
-                        UnexpectedError(UnexpectedToken(current.syntax().to_string())),
-                        &current.span,
-                    ));
+                    let current = self.current.clone();
+                    let err_kind = ParseErrorKind::Unexpected { 
+                        found: Item::new(&current.span, current.syntax()) 
+                    };
+                    let err = self.error(err_kind);
+                    return Err(err);
                 }
             }
         }
     }
 
-    fn parse_identifier(&mut self) -> Result<Ident, ParserError> {
+    fn parse_identifier(&mut self) -> Result<Ident, ParseError> {
         let token = self.current.clone();
 
         match token.token_type {
@@ -826,36 +774,36 @@ impl Parser {
             }
             // <error>
             _ => {
-                let err = format!("found unexpected '{}'", token.syntax().to_string());
-                Err(ParserError::new(
-                    ExpectedError(ExpectedIdentifier(err)),
-                    &token.span,
-                ))
+                let err_kind = ParseErrorKind::ExpectedIdent {
+                    actual: Item::new(&self.current.span, token.syntax())
+                };
+                let err = ParseError::new(err_kind);
+                return Err(err);
             }
         }
     }
 
-    fn parse_arg_list(&mut self) -> Result<Vec<Box<Expr>>, ParserError> {
+    fn parse_arg_list(&mut self) -> Result<Vec<Box<Expr>>, ParseError> {
         self.consume(TokenType::LeftParen);
 
         let mut args = vec![];
 
         if !self.check(&TokenType::RightParen) {
             loop {
-                args.push(Box::new(self.expression()?));
+                args.push(Box::new(self.parse_expression()?));
                 if !self.match_token(&TokenType::Comma) {
                     break;
                 }
             }
         }
 
-        self.consume(TokenType::RightParen);
+        self.expect(TokenType::RightParen)?;
 
         Ok(args)
     }
 
-    fn parse_params(&mut self) -> Result<Vec<Ident>, ParserError> {
-        self.consume(TokenType::LeftParen);
+    fn parse_params(&mut self) -> Result<Vec<Ident>, ParseError> {
+        self.expect(TokenType::LeftParen)?;
 
         let mut args = vec![];
 
@@ -868,50 +816,21 @@ impl Parser {
             }
         }
 
-        self.consume(TokenType::RightParen);
+        self.expect(TokenType::RightParen)?;
 
         Ok(args)
     }
 
-    fn parse_paren(&mut self) -> Result<Expr, ParserError> {
+    fn parse_paren(&mut self) -> Result<Expr, ParseError> {
         let start = self.current.span.clone();
 
         // ( ...
         self.consume(TokenType::LeftParen);
 
-        let expr = match self.parse_sum() {
-            Ok(expr) => expr,
-            Err(err) => {
-                return Err(self.make_error(
-                    err.clone(),
-                    ExpectedError(ExpectedExpression(err.error.to_string())),
-                ))
-            }
-        };
+        let expr = self.parse_sum()?;
 
-        // ( expr <error>
-        if !self.match_token(&TokenType::RightParen) {
-            let token = &self.current;
-
-            if token.token_type == TokenType::Eof {
-                return Err(ParserError::new(
-                    ExpectedError(ExpectedRightParen(format!("found '<Eof>'."))),
-                    &Span::new(
-                        Rc::clone(&token.span.source),
-                        token.span.start,
-                        token.span.end + 1,
-                    ),
-                ));
-            }
-
-            return Err(ParserError::new(
-                ExpectedError(ExpectedRightParen(format!(
-                    "found unexpected token '{}'.",
-                    token.syntax()
-                ))),
-                &Span::from(&token.span),
-            ));
-        }
+        // ( expr )
+        self.expect(TokenType::RightParen)?;
 
         let span = Span::new(
             Rc::clone(&self.source),
@@ -1503,14 +1422,14 @@ mod tests {
         let mut parser = Parser::new(Source::source(""));
 
         // if the first error is Unexpected return the second error.
-        let first = ParserError::new(SyntaxError::UnexpectedError(UnexpectedEOF), &Span::empty());
+        let first = ParseError::new(SyntaxError::UnexpectedError(UnexpectedEOF), &Span::empty());
         let second = ExpectedError(ExpectedExpression(first.error.to_string()));
 
         let from = parser.make_error(first, second);
 
         assert_eq!(
             from,
-            ParserError::new(
+            ParseError::new(
                 ExpectedError(ExpectedExpression(
                     SyntaxError::UnexpectedError(UnexpectedEOF).to_string(),
                 )),
@@ -1519,7 +1438,7 @@ mod tests {
         );
 
         // If the first is expected, return the the first error.
-        let first = ParserError::new(
+        let first = ParseError::new(
             ExpectedError(ExpectedExpression("found error".to_string())),
             &Span::empty(),
         );
@@ -1529,14 +1448,14 @@ mod tests {
 
         assert_eq!(
             from,
-            ParserError::new(
+            ParseError::new(
                 ExpectedError(ExpectedExpression("found error".to_string())),
                 &Span::empty(),
             )
         );
 
         // if the both are expected, return the first error.
-        let first = ParserError::new(
+        let first = ParseError::new(
             ExpectedError(ExpectedExpression("found error".to_string())),
             &Span::empty(),
         );
@@ -1545,7 +1464,7 @@ mod tests {
 
         assert_eq!(
             from,
-            ParserError::new(
+            ParseError::new(
                 ExpectedError(ExpectedExpression("found error".to_string())),
                 &Span::empty(),
             )

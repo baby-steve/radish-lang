@@ -104,25 +104,11 @@ pub enum TokenType {
     Empty,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct Token {
-    pub token_type: TokenType,
-    pub span: Span,
-}
-
-impl Token {
-    pub fn new(token_type: TokenType, span: Span) -> Token {
-        Token { token_type, span }
-    }
-
-    pub fn empty() -> Token {
-        Token::new(TokenType::Empty, Span::empty())
-    }
-
+impl TokenType {
     fn literal_syntax(&self) -> &'static str {
         use TokenType::*;
 
-        match self.token_type {
+        match self {
             Plus => "+",
             Minus => "-",
             Star => "*",
@@ -173,7 +159,7 @@ impl Token {
     pub fn syntax(&self) -> Cow<'static, str> {
         use TokenType::*;
 
-        match &self.token_type {
+        match &self {
             Number(val) => val.to_string().into(),
             Ident(id) => id.to_string().into(),
             Comment(msg, _) => msg.to_string().into(),
@@ -183,13 +169,34 @@ impl Token {
             _ => self.literal_syntax().into(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token {
+    pub token_type: TokenType,
+    pub span: Span,
+}
+
+impl Token {
+    pub fn new(token_type: TokenType, span: Span) -> Token {
+        Token { token_type, span }
+    }
+
+    pub fn empty() -> Token {
+        Token::new(TokenType::Empty, Span::empty())
+    }
+
+    pub fn syntax(&self) -> Cow<'static, str> {
+        self.token_type.syntax()
+    }
 
     pub fn is_delimiter(&self) -> bool {
         match &self.token_type {
             TokenType::RightBrace
             | TokenType::Else
             | TokenType::EndLoop
-            | TokenType::EndIf => true,
+            | TokenType::EndIf
+            | TokenType::RightParen => true,
             _ => false,
         }
     }
