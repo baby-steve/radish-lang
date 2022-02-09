@@ -1,11 +1,5 @@
 //! Runs snippet tests.
-
-use radish_lang::compiler::table::SymbolTable;
-use radish_lang::{
-    common::source::Source,
-    compiler::{analysis::Analyzer, compiler::Compiler, parser::Parser},
-    vm::vm::{RadishConfig, RadishFile, VM},
-};
+use radish_lang::{Radish, RadishFile, RadishConfig, common::source::Source};
 
 use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
 
@@ -60,57 +54,22 @@ impl TestSnippet {
     pub fn run(&self) {
         println!("testing {:?}...", &self.source.path);
 
-        let result = Parser::new(Rc::clone(&self.source)).parse();
+        let stdout = RadishMockLogger::new();
 
-        match result {
-            Ok(_) => {
-                // Capture all messages printed from the VM.
-                let stdout = RadishMockLogger::new();
+        let config = RadishConfig::with_stdout(stdout.clone());
 
-                // Configuartion with stdout
-                let config = RadishConfig::with_stdout(stdout.clone());
+        let mut radish = Radish::with_settings(config);
 
-                let scope = SymbolTable::new(0);
-                let mut parser = Parser::new(self.source.clone());
-                let mut semantic_analyzer = Analyzer::new();
-                let mut compiler = Compiler::new(&scope);
-                let mut vm = VM::new(&config);
+        radish.run_from_source(self.source.clone());        
 
-                let ast = match parser.parse() {
-                    Ok(result) => {
-                        println!("{:#?}", result);
-                        result
-                    }
-                    Err(_) => panic!("error: could not parse"),
-                };
+        for (i, value) in stdout.buffer.borrow().iter().enumerate() {
+            let expected_value = &self.expected_values[i];
 
-                let table = match semantic_analyzer.analyze(&ast) {
-                    Ok(table) => table,
-                    Err(_) => panic!("error: could not compile"),
-                };
-
-                let (module, script) = match compiler.compile(&ast, &table) {
-                    Ok((module, script)) => (module, script),
-                    Err(_) => panic!("error: could not compile"),
-                };
-
-                vm.interpret(script, module);
-
-                // Check each value printed by vm to their expected value.
-                for (i, value) in stdout.buffer.borrow().iter().enumerate() {
-                    let expected_value = &self.expected_values[i];
-
-                    if expected_value != value {
-                        println!("Expected '{}', but got '{}'", expected_value, value);
-                        panic!("Test failed");
-                    }
-                }
+            if expected_value != value {
+                println!("Expected '{}', but got '{}'", expected_value, value);
+                panic!("Test failed");
             }
-            Err(err) => {
-                println!("{:?}", err);
-                panic!("Test failed.");
-            }
-        };
+        }
     }
 }
 
@@ -128,7 +87,7 @@ fn test_files() {
 
     while let Some(path) = files.pop() {
         let file_contents = fs::read_to_string(&path).expect("Could not read file");
-        let source = Source::new(&file_contents, &path);
+        let source = Source::new(&file_contents, &path.to_string_lossy());
 
         TestSnippet::new(source).run();
     }
