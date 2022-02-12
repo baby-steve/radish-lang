@@ -1,4 +1,5 @@
 use crate::common::span::Span;
+use crate::SymbolTable;
 use std::cmp::Ordering;
 
 #[derive(Debug, PartialEq)]
@@ -74,7 +75,7 @@ impl Stmt {
             | Self::FunDeclaration(_, pos)
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
-            | Self::Assignment(_, _, _, pos) 
+            | Self::Assignment(_, _, _, pos)
             | Self::IfStmt(_, _, _, pos)
             | Self::LoopStmt(_, pos)
             | Self::WhileStmt(_, _, pos)
@@ -118,8 +119,7 @@ impl Expr {
 
     pub fn is_callable(&self) -> bool {
         match self {
-            Self::Identifier(_)
-            | Self::CallExpr(_, _, _) => true,
+            Self::Identifier(_) | Self::CallExpr(_, _, _) => true,
             Self::UnaryExpr(_, arg, _) => arg.is_callable(),
             _ => false,
         }
@@ -155,6 +155,19 @@ pub struct Function {
     pub id: Ident,
     pub params: Vec<Ident>,
     pub body: Box<Vec<Stmt>>,
+    // HACK
+    pub scope: SymbolTable,
+}
+
+impl Function {
+    pub fn new(id: Ident, params: Vec<Ident>, body: Box<Vec<Stmt>>) -> Function {
+        Function {
+            id,
+            params,
+            body,
+            scope: SymbolTable::new(0), // HACK
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -162,7 +175,6 @@ pub struct Ident {
     pub name: String,
     pub pos: Span,
 }
-
 
 impl PartialEq for Ident {
     fn eq(&self, other: &Self) -> bool {

@@ -9,14 +9,13 @@ use crate::compiler::{
 };
 
 use crate::common::{source::Source, span::Span};
-use crate::error::{AsDiagnostic, Diagnostic, Label, Item};
+use crate::error::{Item};
 
 pub struct Parser {
     source: Rc<Source>,
     scanner: Scanner,
     previous: Token,
     current: Token,
-    //diagnostics: Vec<Diagnostic>,
 }
 
 impl Parser {
@@ -26,7 +25,6 @@ impl Parser {
             scanner: Scanner::new(source),
             previous: Token::empty(),
             current: Token::empty(),
-            //diagnostics: Vec::new(),
         }
     }
 
@@ -215,7 +213,7 @@ impl Parser {
 
         let span = Span::combine(&start, &self.current.span);
 
-        let function = Function { id, params, body };
+        let function = Function::new(id, params, body);
 
         Ok(Stmt::FunDeclaration(function, span))
     }
