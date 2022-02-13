@@ -7,8 +7,11 @@ edition = "2018"
 
 [dependencies]
 rustc-hash = "1"
+clap = "2.34.0"
 termcolor = "1.1.2"
 
 [dev-dependencies]
 regex = "1"
 lazy_static = "1.4.0"
+assert_cmd = "2.0"
+predicates = "2.1"

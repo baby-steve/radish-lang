@@ -1,30 +1,13 @@
-use radish_lang::common::source::Source;
+use radish_lang::{Radish, Cli};
 
-use radish_lang::Radish;
-
-fn main() {
-    println!("Hello, Radish!");
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Cli::new();
 
     let mut radish = Radish::new();
 
-    let source = Source::new(
-        "
-        fun main(a, b) {
-            var i = 0
-            while i < a loop
-                i += 1
-                if i == b then
-                    print \"a is equal to b\"
-                else
-                    print i
-                endif
-            endloop
-        }
-
-        main(13, 8)
-        ",
-        "./test_file",
-    );
+    let source = radish.read_file(&args.path)?;
 
     radish.run_from_source(source);
+    
+    Ok(())
 }

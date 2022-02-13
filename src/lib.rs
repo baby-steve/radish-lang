@@ -1,7 +1,10 @@
+pub mod cli;
 pub mod common;
 pub mod compiler;
 pub mod error;
 pub mod vm;
+
+pub use cli::Cli;
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -65,9 +68,7 @@ impl Radish {
     }
 
     pub fn with_settings(config: Rc<RadishConfig>) -> Radish {
-        Radish {
-            config,
-        }
+        Radish { config }
     }
 
     pub fn parse_source(&mut self, source: Rc<Source>) -> AST {
@@ -82,7 +83,10 @@ impl Radish {
         let mut analyzer = Analyzer::new();
         match analyzer.analyze(ast) {
             Ok(table) => table,
-            Err(_) => todo!(),
+            Err(err) => {
+                println!("{:?}", err);
+                panic!("error: failed to compile");
+            }
         }
     }
 
@@ -104,7 +108,20 @@ impl Radish {
     pub fn run_from_source(&mut self, src: Rc<Source>) {
         let ast = self.parse_source(src.clone());
         let scope = self.check(&ast);
+        //println!("{:#?}", &ast);
         let (module, script) = self.compile(&ast, &scope);
         self.interpret(script, module);
+    }
+
+    pub fn read_file(&self, path: &str) -> Result<Rc<Source>, Box<dyn std::error::Error>> {
+        let path_buf = std::path::PathBuf::from(path);
+        let result = std::fs::read_to_string(&path_buf);
+
+        let content = match result {
+            Ok(res) => res,
+            Err(error) => return Err(error.into()),
+        };
+
+        Ok(Source::new(&content, path_buf.to_string_lossy()))
     }
 }
