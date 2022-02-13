@@ -216,7 +216,9 @@ impl Visitor<(), SemanticError> for Analyzer {
             self.statement(&node)?;
         }
 
-        self.exit_scope();
+        let scope = self.exit_scope().unwrap();
+
+        fun.replace_scope(scope);
 
         Ok(())
     }

@@ -88,7 +88,11 @@ impl<'a> Compiler<'a> {
         }
     }
 
-    pub fn compile(&mut self, ast: &AST, scope: &'a SymbolTable) -> Result<(Rc<RefCell<ModuleValue>>, FunctionValue), String> {
+    pub fn compile(
+        &mut self,
+        ast: &AST,
+        scope: &'a SymbolTable,
+    ) -> Result<(Rc<RefCell<ModuleValue>>, FunctionValue), String> {
         self.scope = scope;
 
         let script = FunctionValue {
@@ -281,6 +285,8 @@ impl<'a> Compiler<'a> {
         for byte in arg.to_le_bytes() {
             self.emit_byte(byte);
         }
+
+        self.emit_byte(Opcode::Pop as u8);
     }
 
     /// Resolve a local variable with the given name. Returns the variable's
@@ -398,7 +404,9 @@ impl<'a> Compiler<'a> {
         let frame = self.leave_function();
 
         Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
+
         self.emit_constant(Value::from(frame.function));
+        self.emit_byte(Opcode::Closure as u8);
 
         Ok(())
     }

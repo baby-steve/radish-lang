@@ -12,8 +12,9 @@ pub enum Value {
     Number(f64),
     Boolean(bool),
     String(Rc<RefCell<String>>),
-    //Function(Rc<RefCell<Function>>),
     Function(Rc<Function>),
+    //Closure(Rc<Closure>),
+    Closure(Closure),
     Nil,
 }
 
@@ -48,8 +49,9 @@ impl Clone for Value {
             Self::Nil => Self::Nil,
             Self::Boolean(val) => Self::Boolean(*val),
             Self::Number(val) => Self::Number(*val),
-            Self::String(val) => Self::String(val.clone()),
-            Self::Function(val) => Self::Function(val.clone()),
+            Self::String(val) => Self::String(Rc::clone(val)),
+            Self::Function(val) => Self::Function(Rc::clone(val)),
+            Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))), 
         }
     }
 }
@@ -61,7 +63,8 @@ impl fmt::Display for Value {
             Value::Boolean(false) => f.write_str("false"),
             Value::Boolean(true) => f.write_str("true"),
             Value::String(val) => f.write_str(&format!("\"{}\"", val.borrow())),
-            Value::Function(val) => f.write_str(&format!("<fun {}>", val.name /*val.borrow().name*/)),
+            Value::Function(val) => write!(f, "<fun {}>", val.format_name()),
+            Value::Closure(val) => write!(f, "<fun {}>", val.function.format_name()),
             Value::Nil => f.write_str("nil"),
         }
     }
@@ -73,6 +76,7 @@ impl Add for Value {
         match (self, other) {
             (Value::Number(a), Value::Number(b)) => return Value::Number(a + b),
             (Value::String(a), Value::String(b)) => {
+                // FIXME: I believe this doesn't work. Need to look into it.
                 a.borrow_mut().push_str(&b.borrow());
                 Value::String(a)
             }
@@ -139,6 +143,16 @@ pub struct Function {
     pub module: Weak<RefCell<Module>>,
 }
 
+impl Function {
+    pub fn format_name(&self) -> &str {
+        if &*self.name == "" {
+            "script"
+        } else {
+            &*self.name
+        }
+    }
+}
+
 impl PartialEq for Function {
     fn eq(&self, other: &Self) -> bool {
         self.name == other.name
@@ -159,12 +173,90 @@ impl Ord for Function {
 
 impl Eq for Function {}
 
-
 #[derive(Debug)]
+pub struct Closure {
+    pub function: Rc<Function>,
+}
+
+impl Clone for Closure {
+    fn clone(&self) -> Closure {
+        Closure {
+            function: Rc::clone(&self.function),
+        }
+    }
+}
+
+impl PartialEq for Closure {
+    fn eq(&self, other: &Self) -> bool {
+        self.function.name == other.function.name
+    }
+}
+
+impl PartialOrd for Closure {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Closure {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.function.name.cmp(&other.function.name)
+    }
+}
+
+impl Eq for Closure {}
+
+impl From<Rc<Function>> for Closure {
+    fn from(function: Rc<Function>) -> Closure {
+        Closure { function }
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct Module {
     pub name: Box<str>,
     pub variables: Vec<Value>,
     pub symbols: HashMap<String, usize>,
+}
+
+impl Module {
+    pub fn new(name: &str) -> Rc<RefCell<Module>> {
+        let module = Module {
+            name: name.to_string().into_boxed_str(),
+            variables: Vec::new(),
+            symbols: HashMap::new(),
+        };
+        Rc::new(RefCell::new(module))
+    }
+
+    #[inline]
+    pub fn add_var(&mut self, name: String) -> usize {
+        let index = self.variables.len();
+        self.variables.push(Value::Nil);
+
+        self.symbols.insert(name, index);
+
+        index
+    }
+
+    #[inline]
+    pub fn get_index(&self, name: &str) -> Option<usize> {
+        if let Some(index) = self.symbols.get(name) {
+            Some(*index)
+        } else {
+            None
+        }
+    }
+
+    #[inline]
+    pub fn set_var(&mut self, index: usize, value: Value) {
+        self.variables[index] = value;
+    }
+
+    #[inline]
+    pub fn get_var(&self, index: usize) -> &Value {
+        &self.variables[index]
+    }
 }
 
 impl PartialEq for Module {
@@ -186,55 +278,6 @@ impl Ord for Module {
 }
 
 impl Eq for Module {}
-
-impl Module {
-    pub fn new(name: &str) -> Rc<RefCell<Module>> {
-        let module = Module {
-            name: name.to_string().into_boxed_str(),
-            variables: Vec::new(),
-            symbols: HashMap::new(),
-        };
-        Rc::new(RefCell::new(module))
-    }
-
-    // add a variable
-    // used by the compiler
-    #[inline]
-    pub fn add_var(&mut self, name: String) -> usize {
-        let index = self.variables.len();
-        self.variables.push(Value::Nil);
-
-        self.symbols.insert(name, index);
-
-        index
-    }
-
-    // get a symbol's index
-    // used by the compiler
-    #[inline]
-    pub fn get_index(&self, name: &str) -> Option<usize> {
-        // println!("{:?}", self.symbols);
-        if let Some(index) = self.symbols.get(name) {
-            Some(*index)
-        } else {
-            None
-        }
-    }
-
-    // set a the variable at index to value
-    // used by the vm
-    #[inline]
-    pub fn set_var(&mut self, index: usize, value: Value) {
-        self.variables[index] = value;
-    }
-
-    // get a symbol's value
-    // used by the vm
-    #[inline]
-    pub fn get_var(&self, index: usize) -> &Value {
-        &self.variables[index]
-    }
-}
 
 impl fmt::Display for Module {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

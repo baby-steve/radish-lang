@@ -12,6 +12,9 @@ pub enum Opcode {
     GetLocal,
     SetLocal,
 
+    GetCapture,
+    SetCapture,
+
     True,
     False,
     Nil,
@@ -35,6 +38,7 @@ pub enum Opcode {
     Loop,
 
     Call,
+    Closure,
 
     Print,
     Return,

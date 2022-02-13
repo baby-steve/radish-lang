@@ -156,7 +156,7 @@ pub struct Function {
     pub params: Vec<Ident>,
     pub body: Box<Vec<Stmt>>,
     // HACK
-    pub scope: SymbolTable,
+    pub scope: std::cell::RefCell<SymbolTable>,
 }
 
 impl Function {
@@ -165,8 +165,20 @@ impl Function {
             id,
             params,
             body,
-            scope: SymbolTable::new(0), // HACK
+            scope: std::cell::RefCell::new(SymbolTable::new(0)), // HACK
         }
+    }
+
+    pub fn replace_scope(&self, replacement: SymbolTable) {
+        for local in replacement.locals.iter() {
+            self.scope.borrow_mut().add_local(local.0, local.1.clone());
+        }
+
+        for non_local in replacement.non_locals.iter() {
+            self.scope.borrow_mut().add_non_local(non_local.0, non_local.1.clone());
+        }
+
+        self.scope.borrow_mut().depth = replacement.depth;
     }
 }
 
