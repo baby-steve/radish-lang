@@ -13,6 +13,8 @@ impl<'a> Disassembler<'a> {
     pub fn disassemble_chunk(name: &str, function: &Function) {
         let dis = Disassembler::new(name, function);
 
+        dbg!(&function.chunk.code);
+
         println!("Disassembling \"{}\"...", dis.name);
         let mut offset = 0;
 
@@ -44,6 +46,9 @@ impl<'a> Disassembler<'a> {
 
             Opcode::GetLocal => self.long_const_instruction("GetLocal", offset, false),
             Opcode::SetLocal => self.long_const_instruction("SetLocal", offset, false),
+
+            Opcode::GetCapture => self.long_const_instruction("GetCapture", offset, false),
+            Opcode::SetCapture => self.long_const_instruction("SetCapture", offset, false),
 
             Opcode::True => self.simple_instruction("True", offset),
             Opcode::False => self.simple_instruction("False", offset),
@@ -79,6 +84,20 @@ impl<'a> Disassembler<'a> {
                 println!(" (arg_count: {})", index);                
 
                 offset + 2
+            }
+
+            Opcode::Closure => {
+                self.write_instruction("Closure", offset);
+
+                let index = &self.function.chunk.code[offset + 1];
+                let i_padding = " ".repeat(
+                    self.function.chunk.constants.len().to_string().len() - index.to_string().len(),
+                );
+                print!("{}{}", index, i_padding);
+
+                println!(" ({})", index);                
+
+                offset + 1
             }
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Return => self.simple_instruction("Return", offset),

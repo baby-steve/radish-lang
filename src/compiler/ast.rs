@@ -1,4 +1,6 @@
 use crate::common::span::Span;
+use crate::SymbolTable;
+use std::cmp::Ordering;
 
 #[derive(Debug, PartialEq)]
 pub struct AST {
@@ -73,7 +75,7 @@ impl Stmt {
             | Self::FunDeclaration(_, pos)
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
-            | Self::Assignment(_, _, _, pos) 
+            | Self::Assignment(_, _, _, pos)
             | Self::IfStmt(_, _, _, pos)
             | Self::LoopStmt(_, pos)
             | Self::WhileStmt(_, _, pos)
@@ -117,8 +119,7 @@ impl Expr {
 
     pub fn is_callable(&self) -> bool {
         match self {
-            Self::Identifier(_)
-            | Self::CallExpr(_, _, _) => true,
+            Self::Identifier(_) | Self::CallExpr(_, _, _) => true,
             Self::UnaryExpr(_, arg, _) => arg.is_callable(),
             _ => false,
         }
@@ -154,12 +155,67 @@ pub struct Function {
     pub id: Ident,
     pub params: Vec<Ident>,
     pub body: Box<Vec<Stmt>>,
+    // HACK
+    pub scope: std::cell::RefCell<SymbolTable>,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl Function {
+    pub fn new(id: Ident, params: Vec<Ident>, body: Box<Vec<Stmt>>) -> Function {
+        Function {
+            id,
+            params,
+            body,
+            scope: std::cell::RefCell::new(SymbolTable::new(0)), // HACK
+        }
+    }
+
+    pub fn replace_scope(&self, replacement: SymbolTable) {
+        for local in replacement.locals.iter() {
+            self.scope.borrow_mut().add_local(local.0, local.1.clone());
+        }
+
+        for non_local in replacement.non_locals.iter() {
+            self.scope.borrow_mut().add_non_local(non_local.0, non_local.1.clone());
+        }
+
+        self.scope.borrow_mut().depth = replacement.depth;
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct Ident {
     pub name: String,
     pub pos: Span,
+}
+
+impl PartialEq for Ident {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl PartialOrd for Ident {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Ident {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl Eq for Ident {}
+
+impl std::hash::Hash for Ident {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: std::hash::Hasher,
+    {
+        self.name.hash(state);
+        state.finish();
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]

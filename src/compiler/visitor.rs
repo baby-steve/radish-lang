@@ -1,21 +1,18 @@
 use crate::compiler::ast::*;
+use crate::common::span::Span;
 
 // Todo: should only have defaults for some of these.
-pub trait Visitor {
-    fn visit(&mut self, node: &ASTNode) {
+pub trait Visitor<E, T> {
+    fn visit(&mut self, node: &ASTNode) -> Result<E, T> {
         match node {
             ASTNode::Expr(expr) => self.expression(expr),
             ASTNode::Stmt(stmt) => self.statement(stmt),
         }
     }
 
-    fn block(&mut self, body: &Vec<Stmt>) {
-        for node in body {
-            self.statement(&node);
-        }
-    }
+    fn block(&mut self, body: &Vec<Stmt>) -> Result<E, T>;
 
-    fn statement(&mut self, stmt: &Stmt) {
+    fn statement(&mut self, stmt: &Stmt) -> Result<E, T> {
         match stmt {
             Stmt::BlockStmt(body, _) => self.block(&body),
             Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
@@ -26,59 +23,57 @@ pub trait Visitor {
             Stmt::LoopStmt(body, _) => self.loop_statement(&body),
             Stmt::WhileStmt(expr, body, _) => self.while_statement(&expr, &body),
             Stmt::ReturnStmt(value, _) => self.return_statement(&value),
-            Stmt::BreakStmt(_) => self.break_statement(),
-            Stmt::ContinueStmt(_) => self.continue_statement(),
+            Stmt::BreakStmt(pos) => self.break_statement(&pos),
+            Stmt::ContinueStmt(pos) => self.continue_statement(&pos),
             Stmt::PrintStmt(expr, _) => self.print(&expr),
         }
     }
 
-    fn function_declaration(&mut self, fun: &Function) {
-        self.block(&fun.body);
+    fn function_declaration(&mut self, fun: &Function) -> Result<E, T> {
+        self.block(&fun.body)
     }
 
-    fn var_declaration(&mut self, _: &Ident, init: &Option<Expr>) {
-        match &init {
-            Some(expr) => self.expression(&expr),
-            None => return,
-        }
+    fn var_declaration(&mut self, _: &Ident, init: &Option<Expr>) -> Result<E, T>;
+
+    fn expression_stmt(&mut self, expr: &Expr) -> Result<E, T> {
+        self.expression(&expr)
     }
 
-    fn expression_stmt(&mut self, expr: &Expr) {
-        self.expression(&expr);
-    }
-
-    fn if_statement(&mut self, expr: &Expr, body: &Vec<Stmt>, else_branch: &Option<Box<Stmt>>) {
-        self.expression(&expr);
-        self.block(&body);
+    fn if_statement(
+        &mut self,
+        expr: &Expr,
+        body: &Vec<Stmt>,
+        else_branch: &Option<Box<Stmt>>,
+    ) -> Result<E, T> {
+        self.expression(&expr)?;
         if let Some(else_branch) = &else_branch {
-            self.statement(&else_branch);
+            self.statement(&else_branch)?;
         }
+        self.block(&body)
     }
 
-    fn loop_statement(&mut self, body: &Vec<Stmt>) {
-        self.block(&body);
+    fn loop_statement(&mut self, body: &Vec<Stmt>) -> Result<E, T> {
+        self.block(&body)
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) {
-        self.expression(&expr);
-        self.block(&body);
+    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) -> Result<E, T> {
+        self.expression(&expr)?;
+        self.block(&body)
     }
 
-    fn return_statement(&mut self, return_val: &Option<Expr>) {}
+    fn return_statement(&mut self, _: &Option<Expr>) -> Result<E, T>;
+    fn break_statement(&mut self, pos: &Span) -> Result<E, T>;
+    fn continue_statement(&mut self, pos: &Span) -> Result<E, T>;
 
-    fn break_statement(&mut self) {}
-
-    fn continue_statement(&mut self) {}
-
-    fn print(&mut self, expr: &Expr) {
-        self.expression(&expr);
+    fn print(&mut self, expr: &Expr) -> Result<E, T> {
+        self.expression(&expr)
     }
 
-    fn assignment(&mut self, _: &Ident, _: &OpAssignment, expr: &Expr) {
-        self.expression(&expr);
+    fn assignment(&mut self, _: &Ident, _: &OpAssignment, expr: &Expr) -> Result<E, T> {
+        self.expression(&expr)
     }
 
-    fn expression(&mut self, expr: &Expr) {
+    fn expression(&mut self, expr: &Expr) -> Result<E, T> {
         match expr {
             Expr::BinaryExpr(expr, _) => self.binary_expression(&expr),
             Expr::ParenExpr(expr, _) => self.expression(&expr),
@@ -93,25 +88,24 @@ pub trait Visitor {
         }
     }
 
-    fn binary_expression(&mut self, expr: &BinaryExpr) {
-        self.expression(&expr.left);
-        self.expression(&expr.right);
+    fn binary_expression(&mut self, expr: &BinaryExpr) -> Result<E, T> {
+        self.expression(&expr.left)?;
+        self.expression(&expr.right)
     }
 
-    fn logical_expr(&mut self, expr: &BinaryExpr) {
-        self.expression(&expr.left);
-        self.expression(&expr.right);
+    fn logical_expr(&mut self, expr: &BinaryExpr) -> Result<E, T> {
+        self.expression(&expr.left)?;
+        self.expression(&expr.right)
     }
 
-    fn unary(&mut self, arg: &Expr, _: &Op) {
-        self.expression(&arg);
+    fn unary(&mut self, arg: &Expr, _: &Op) -> Result<E, T> {
+        self.expression(&arg)
     }
 
-    fn call_expr(&mut self, _: &Expr, _: &Vec<Box<Expr>>) {}
-
-    fn identifier(&mut self, _: &Ident) {}
-    fn number(&mut self, _: &f64) {}
-    fn string(&mut self, _: &str) {}
-    fn boolean(&mut self, _: &bool) {}
-    fn nil(&mut self) {}
+    fn call_expr(&mut self, _: &Expr, _: &Vec<Box<Expr>>) -> Result<E, T>;
+    fn identifier(&mut self, _: &Ident) -> Result<E, T>;
+    fn number(&mut self, _: &f64) -> Result<E, T>;
+    fn string(&mut self, _: &str) -> Result<E, T>;
+    fn boolean(&mut self, _: &bool) -> Result<E, T>;
+    fn nil(&mut self) -> Result<E, T>;
 }

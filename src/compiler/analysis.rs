@@ -4,18 +4,22 @@ use std::fmt;
 
 use crate::compiler::{
     ast::*,
-    table::{Symbol, SymbolKind, SymbolTable},
+    error::{SemanticError, SemanticErrorKind},
+    table::{Symbol, SymbolTable},
     visitor::Visitor,
 };
 
-#[derive(Debug)]
+use crate::error::Item;
+
+#[derive(Debug, Clone)]
 pub struct Analyzer {
     /// Chain of enclosing scopes.
     pub scopes: Vec<SymbolTable>,
     /// Keep track of variables that where referenced before assignment
-    pub unresolved: HashSet<String>,
+    pub unresolved: HashSet<Ident>,
     /// Flag set to true if the analyzer is currently in a loop.
     in_loop: bool,
+    in_function: bool, // are these really necessary?
 }
 
 impl Analyzer {
@@ -28,179 +32,238 @@ impl Analyzer {
             scopes: vec![scope],
             unresolved: HashSet::new(),
             in_loop: false,
+            in_function: false,
         }
     }
 
-    pub fn analyze(&mut self, ast: &AST) -> SymbolTable {
-        self.define_functions(&ast);
+    pub fn analyze(&mut self, ast: &AST) -> Result<SymbolTable, ()> {
+        self.foward_declare(&ast);
 
         //println!("{}", self.scopes[self.scopes.len() - 1]);
 
         for node in &ast.items {
-            self.statement(&node);
+            match self.statement(&node) {
+                Ok(_) => continue,
+                // TODO: handle errors.
+                Err(_) => continue,
+            }
         }
 
-        //println!("{}", self.scopes[self.scopes.len() - 1]);
+        println!("{}", self.scopes[self.scopes.len() - 1]);
 
         if !self.unresolved.is_empty() {
             for err in self.unresolved.iter() {
-                println!("found undefined variable '{}'.", err);
+                self.unresolved_err(&err.name, &err.pos);
+                println!("{:?}", err);
             }
 
-            panic!("Aborting due to the incorrectness of the given program");
+            return Err(());
         }
 
-        self.scopes.pop().unwrap()
+        Ok(self.scopes.pop().unwrap())
     }
 
     fn enter_scope(&mut self) {
         self.scopes.push(SymbolTable::new(self.scopes.len()));
     }
 
-    fn exit_scope(&mut self) {
-        //println!("{}", self.scopes[self.scopes.len() - 1]);
-        self.scopes.pop();
+    fn renter_scope(&mut self, scope: SymbolTable) {
+        self.scopes.push(scope);
     }
 
-    /// Add a symbol to the current scope. If the symbol is already in
-    /// this scope returns an error (for now just panics).
-    fn add_symbol(&mut self, name: &str, sym: Symbol) -> Option<Symbol> {
+    fn exit_scope(&mut self) -> Option<SymbolTable> {
+        println!("{}", self.scopes[self.scopes.len() - 1]);
+        if self.scopes.len() == 1 {
+            return None;
+        }
+        self.scopes.pop()
+    }
+
+    /// Returns the topmost, i.e. local, scope, mutably.
+    fn local_scope(&mut self) -> &mut SymbolTable {
         let last = self.scopes.len() - 1;
-
-        self.scopes[last].add_symbol(name, sym)
+        &mut self.scopes[last]
     }
 
-    /// Resolve a symbol by recursively checking each enclosing scope.
-    /// If the symbol isn't found then returns None.
-    fn try_resolve(&mut self, name: &str) -> Option<&Symbol> {
-        let mut depth = self.scopes.len();
+    /// Returns the topmost scope immutably.
+    fn borrow_local_scope(&self) -> &SymbolTable {
+        let last = self.scopes.len() - 1;
+        &self.scopes[last]
+    }
 
-        while depth > 0 {
-            let scope = &self.scopes[depth - 1];
-            depth -= 1;
-
-            match scope.get_symbol(name) {
-                Some(val) => return Some(val),
-                None => continue,
+    fn local_symbol(&self, name: &str) -> Option<Symbol> {
+        for (local_name, symbol) in self.borrow_local_scope().locals.iter() {
+            if local_name == name {
+                return Some(symbol.clone());
             }
         }
 
         None
     }
 
-    fn resolve_symbol(&mut self, name: &str) -> Option<&Symbol> {
-        if let Some(symbol) = self.try_resolve(name) {
-            return Some(symbol);
+    fn nonlocal_symbol(&self, name: &str) -> Option<Symbol> {
+        for (non_local_name, symbol) in self.borrow_local_scope().non_locals.iter() {
+            if non_local_name == name {
+                return Some(symbol.clone());
+            }
         }
 
         None
     }
 
-    // Todo: give this a better name.
-    // Note: should this be done by the parser?
+    fn resolve_symbol(&mut self, name: &str) -> Option<Symbol> {
+        if let Some(symbol) = self.local_symbol(name) {
+            return Some(symbol);
+        }
+
+        if let Some(symbol) = self.nonlocal_symbol(name) {
+            return Some(symbol);
+        }
+
+        if let Some(scope) = self.exit_scope() {
+            let resolved = self.resolve_symbol(name);
+            self.renter_scope(scope);
+            if let Some(symbol) = resolved {
+                if symbol.2 > 0 {
+                    self.local_scope().add_non_local(name, symbol.clone());
+                }
+                return Some(symbol);
+            }
+        }
+
+        None
+    }
+
     /// Add all functions declared in the global scope to
     /// the current symbol table.
-    fn define_functions(&mut self, ast: &AST) {
+    fn foward_declare(&mut self, ast: &AST) {
         for node in &ast.items {
             match node {
                 Stmt::FunDeclaration(fun, _) => {
-                    self.add_symbol(&fun.id.name, Symbol::from(fun));
+                    self.local_scope()
+                        .add_local(&fun.id.name, Symbol::from(fun));
                 }
                 _ => continue,
             }
         }
     }
+
+    fn unresolved_err(&self, name: &str, span: &Span) -> SemanticError {
+        let err_kind = SemanticErrorKind::UnresolvedIdent {
+            item: Item::new(span, name),
+        };
+
+        let err = SemanticError::new(err_kind);
+
+        err
+    }
+
+    fn duplicate_ids(&self, name: &str, pos: &Span, prev: &Span) -> SemanticError {
+        let err_kind = SemanticErrorKind::DuplicateIdent {
+            first: Item::new(prev, name),
+            second: Item::new(pos, name),
+        };
+
+        let err = SemanticError::new(err_kind);
+
+        err
+    }
 }
 
-impl Visitor for Analyzer {
-    fn block(&mut self, body: &Vec<Stmt>) {
+impl Visitor<(), SemanticError> for Analyzer {
+    fn block(&mut self, body: &Vec<Stmt>) -> Result<(), SemanticError> {
         self.enter_scope();
 
         for node in body {
-            self.statement(&node);
+            self.statement(&node)?;
         }
 
         self.exit_scope();
+
+        Ok(())
     }
 
-    fn function_declaration(&mut self, fun: &Function) {
+    fn function_declaration(&mut self, fun: &Function) -> Result<(), SemanticError> {
+        let depth = self.scopes.len() - 1;
+
         if self.scopes.len() > 1 {
-            match self.add_symbol(&fun.id.name, Symbol::from(fun)) {
-                Some(old_value) => {
-                    // Todo: this should return an Analysis error.
-                    panic!(
-                            "Identifier '{}' has already been declared in this scope. first declaration at {:?}",
-                            &fun.id.name, old_value.1,
-                        );
-                }
-                None => {}
+            if let Some(Symbol(_, prev_pos, _)) = self.local_scope().add_local(
+                &fun.id.name,
+                Symbol::fun(fun.params.len(), &fun.id.pos, depth),
+            ) {
+                return Err(self.duplicate_ids(&fun.id.name, &fun.id.pos, &prev_pos));
             }
         }
 
         self.enter_scope();
 
         for param in &fun.params {
-            match self.add_symbol(&param.name, Symbol::new(SymbolKind::Var, &param.pos)) {
-                Some(old_value) => {
-                    // Todo: this should return an Analysis error.
-                    panic!(
-                            "identifier '{}' has already been declared in this scope. first declaration at {:?}",
-                            &param.name, old_value.1,
-                        );
-                }
-                None => {}
+            if let Some(_) = self
+                .local_scope()
+                .add_local(&param.name, Symbol::var(&param.pos, depth))
+            {
+                let err_kind = SemanticErrorKind::DuplicateParam {
+                    param: Item::new(&param.pos, &param.name),
+                };
+
+                let err = SemanticError::new(err_kind);
+
+                return Err(err);
             }
         }
 
         for node in fun.body.iter() {
-            self.statement(&node);
+            self.statement(&node)?;
         }
 
-        self.exit_scope();
+        let scope = self.exit_scope().unwrap();
+
+        fun.replace_scope(scope);
+
+        Ok(())
     }
 
-    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) {
+    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) -> Result<(), SemanticError> {
         if let Some(expr) = &init {
-            self.expression(&expr);
+            self.expression(&expr)?;
         }
 
         if self.scopes.len() == 1 {
-            match self.unresolved.get(&id.name) {
+            match self.unresolved.get(&id) {
                 Some(_) => {
-                    self.unresolved.remove(&id.name);
+                    self.unresolved.remove(&id);
                 }
                 None => {}
             };
         }
 
-        match self.add_symbol(&id.name, Symbol::new(SymbolKind::Var, &id.pos)) {
-            Some(_old_value) => {
-                // Todo: this should return an Analysis error.
-                let (start_line, _start_col) =
-                    Span::get_line_index(&id.pos.source.contents, id.pos.start).unwrap();
-                panic!(
-                        "Identifier '{}' has already been declared in this scope. first declaration on line {:?}",
-                        &id.name, start_line,
-                    );
-            }
-            None => {}
-        }
-    }
-
-    fn assignment(&mut self, id: &Ident, _: &OpAssignment, expr: &Expr) {
-        self.expression(&expr);
-        self.identifier(&id);
-    }
-
-    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) {
-        if !callee.is_callable() {
-            panic!("Looks like you just tried to call something that wasn't callable.");
+        let depth = self.scopes.len() - 1;
+        if let Some(Symbol(_, prev_pos, _)) =
+            self.local_scope().add_local(&id.name, Symbol::var(&id.pos, depth))
+        {
+            return Err(self.duplicate_ids(&id.name, &id.pos, &prev_pos));
         }
 
-        match callee {
+        Ok(())
+    }
+
+    fn assignment(
+        &mut self,
+        id: &Ident,
+        _: &OpAssignment,
+        expr: &Expr,
+    ) -> Result<(), SemanticError> {
+        self.expression(&expr)?;
+        self.identifier(&id)?;
+
+        Ok(())
+    }
+
+    fn call_expr(&mut self, _: &Expr, args: &Vec<Box<Expr>>) -> Result<(), SemanticError> {
+        /*match callee {
             Expr::Identifier(id) => {
                 if let Some(symbol) = self.resolve_symbol(&id.name) {
-                    if let SymbolKind::Fun { arg_count } = symbol.0 {
+                    if let (SymbolKind::Fun { arg_count }, _) = symbol {
                         if args.len() != arg_count {
                             panic!(
                                 "The function '{}' takes {} argument{}, but got {}.",
@@ -214,51 +277,107 @@ impl Visitor for Analyzer {
                 } else {
                     // if its the global scope, then its an error.
                     if self.scopes.len() == 1 {
-                        panic!("Could not find '{}' anywhere.", &id.name);
+                        let err = self.unresolved_err(&id.name, &id.pos);
+                        return Err(err);
                     }
 
                     // if we're in a local scope, it could be declared
-                    // later in global scope.
-                    self.unresolved.insert(id.name.clone());
+                    // later in the global scope.
+                    self.unresolved.insert(id.clone());
                 }
             }
             _ => unimplemented!("Can only call identifiers currently."),
-        };
+        };*/
 
         for arg in args {
-            self.expression(&arg);
+            self.expression(&arg)?;
         }
+
+        Ok(())
     }
 
-    fn identifier(&mut self, id: &Ident) {
+    fn identifier(&mut self, id: &Ident) -> Result<(), SemanticError> {
         if self.resolve_symbol(&id.name) == None {
             // if its the global scope, then its an error.
             if self.scopes.len() == 1 {
-                panic!("Could not find '{}' anywhere.", &id.name);
+                return Err(self.unresolved_err(&id.name, &id.pos));
             }
 
             // if we're in a local scope, it could be declared
             // later in global scope.
-            self.unresolved.insert(id.name.clone());
+            self.unresolved.insert(id.clone());
+        }
+
+        Ok(())
+    }
+
+    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) -> Result<(), SemanticError> {
+        self.expression(&expr)?;
+
+        self.in_loop = true;
+
+        self.block(&body)?;
+
+        self.in_loop = false;
+
+        Ok(())
+    }
+
+    fn loop_statement(&mut self, body: &Vec<Stmt>) -> Result<(), SemanticError> {
+        self.in_loop = true;
+
+        self.block(&body)?;
+
+        self.in_loop = false;
+
+        Ok(())
+    }
+
+    fn return_statement(&mut self, _: &Option<Expr>) -> Result<(), SemanticError> {
+        Ok(())
+    }
+
+    fn break_statement(&mut self, pos: &Span) -> Result<(), SemanticError> {
+        if !self.in_loop {
+            let err_kind = SemanticErrorKind::BreakOutsideLoop {
+                item: Item::new(pos, "break"),
+            };
+
+            let err = SemanticError::new(err_kind);
+
+            Err(err)
+        } else {
+            Ok(())
         }
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) {
-        self.expression(&expr);
+    fn continue_statement(&mut self, pos: &Span) -> Result<(), SemanticError> {
+        if !self.in_loop {
+            let err_kind = SemanticErrorKind::ContinueOutsideLoop {
+                item: Item::new(pos, "continue"),
+            };
 
-        self.in_loop = true;
+            let err = SemanticError::new(err_kind);
 
-        self.block(&body);
-
-        self.in_loop = false;
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+    fn number(&mut self, _: &f64) -> Result<(), SemanticError> {
+        Ok(())
     }
 
-    fn loop_statement(&mut self, body: &Vec<Stmt>) {
-        self.in_loop = true;
+    fn string(&mut self, _: &str) -> Result<(), SemanticError> {
+        Ok(())
+    }
 
-        self.block(&body);
+    fn boolean(&mut self, _: &bool) -> Result<(), SemanticError> {
+        Ok(())
+    }
 
-        self.in_loop = false;
+    fn nil(&mut self) -> Result<(), SemanticError> {
+        Ok(())
     }
 }
 

@@ -9,11 +9,19 @@ pub enum SymbolKind {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct Symbol(pub SymbolKind, pub Span);
+pub struct Symbol(pub SymbolKind, pub Span, pub usize);
 
 impl Symbol {
-    pub fn new(kind: SymbolKind, span: &Span) -> Symbol {
-        Symbol(kind, Span::from(&span))
+    pub fn new(kind: SymbolKind, span: &Span, depth: usize) -> Symbol {
+        Symbol(kind, Span::from(&span), depth)
+    }
+
+    pub fn var(span: &Span, depth: usize) -> Symbol {
+        Symbol(SymbolKind::Var, Span::from(&span), depth)
+    }
+
+    pub fn fun(arg_count: usize, span: &Span, depth: usize) -> Symbol {
+        Symbol(SymbolKind::Fun { arg_count }, Span::from(&span), depth)
     }
 }
 
@@ -22,7 +30,7 @@ impl From<&Function> for Symbol {
         let kind = SymbolKind::Fun {
             arg_count: fun.params.len(),
         };
-        Symbol::new(kind, &fun.id.pos)
+        Symbol::new(kind, &fun.id.pos, 0)
     }
 }
 
@@ -39,32 +47,48 @@ impl fmt::Display for Symbol {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SymbolTable {
-    symbols: HashMap<String, Symbol>,
-    identifiers: Vec<String>,
-    depth: usize,
+    pub locals: HashMap<String, Symbol>,
+    pub non_locals: HashMap<String, Symbol>,
+    pub depth: usize,
 }
 
 impl SymbolTable {
     pub fn new(depth: usize) -> Self {
         SymbolTable {
-            symbols: HashMap::new(),
-            identifiers: Vec::new(),
+            locals: HashMap::new(),
+            non_locals: HashMap::new(),
             depth,
         }
     }
 
-    pub fn add_symbol(&mut self, key: &str, value: Symbol) -> Option<Symbol> {
-        self.symbols.insert(key.to_string(), value)
+    pub fn add_local(&mut self, key: &str, value: Symbol) -> Option<Symbol> {
+        self.locals.insert(key.to_string(), value)
     }
 
-    pub fn get_symbol(&self, key: &str) -> Option<&Symbol> {
-        self.symbols.get(key)
+    pub fn get_local(&self, key: &str) -> Option<&Symbol> {
+        self.locals.get(key)
+    }
+
+    pub fn add_non_local(&mut self, key: &str, value: Symbol) -> Option<Symbol> {
+        self.non_locals.insert(key.to_string(), value)
+    }
+
+    pub fn get_non_local(&self, key: &str) -> Option<&Symbol> {
+        self.non_locals.get(key)
+    }
+
+    pub fn has_local(&self, key: &str) -> bool {
+        self.locals.contains_key(key)
+    }
+
+    pub fn has_non_local(&self, key: &str) -> bool {
+        self.non_locals.contains_key(key)
     }
 
     pub fn all(&self) -> &HashMap<String, Symbol> {
-        &self.symbols
+        &self.locals
     }
 }
 
@@ -74,7 +98,15 @@ impl fmt::Display for SymbolTable {
         let l_width = 60;
         let mut max_width = 12;
 
-        for value in self.symbols.iter() {
+        for value in self.locals.iter() {
+            if value.0.len() > max_width {
+                max_width = value.0.len();
+            }
+
+            entries.push(value);
+        }
+
+        for value in self.non_locals.iter() {
             if value.0.len() > max_width {
                 max_width = value.0.len();
             }

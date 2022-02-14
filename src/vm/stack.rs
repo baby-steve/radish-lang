@@ -11,6 +11,7 @@ impl Stack {
     }
 
     pub fn push(&mut self, val: Value) {
+        //dbg!("did it get to here?");
         self.stack.push(val);
     }
 
@@ -19,7 +20,7 @@ impl Stack {
     }
 
     pub fn peek(&mut self) -> Option<Value> {
-        if self.stack.len() <= 0 {
+        if self.stack.is_empty() {
             None
         } else {
             Some(self.stack[self.stack.len() - 1].clone())

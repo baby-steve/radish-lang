@@ -1,63 +1,22 @@
-use std::{
-    cell::RefCell,
-    collections::{
-        hash_map::Entry::{Occupied, Vacant},
-        HashMap,
-    },
-    convert::TryInto,
-    rc::Rc,
-};
+use std::{cell::RefCell, convert::TryInto, rc::Rc};
 
 use std::time::Instant;
 
 use crate::{
     common::{
-        chunk::Chunk, disassembler::Disassembler, opcode::Opcode, value::Function, value::Module,
-        value::Value,
+        chunk::Chunk, disassembler::Disassembler, opcode::Opcode, value::Closure, value::Function,
+        value::Module, value::Value,
     },
     vm::stack::Stack,
 };
 
-pub trait RadishFile {
-    fn write(&self, msg: &str);
-}
-
-impl std::fmt::Debug for dyn RadishFile {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        writeln!(f, "__RadishFile__")
-    }
-}
-
-#[derive(Debug)]
-struct RadishIO;
-
-impl RadishFile for RadishIO {
-    fn write(&self, msg: &str) {
-        print!("{}\n", msg);
-    }
-}
-
-#[derive(Debug)]
-pub struct RadishConfig {
-    stdout: Rc<dyn RadishFile>,
-}
-
-impl RadishConfig {
-    pub fn new() -> Rc<RadishConfig> {
-        Rc::new(RadishConfig {
-            stdout: Rc::new(RadishIO),
-        })
-    }
-
-    pub fn with_stdout(stdout: Rc<dyn RadishFile>) -> Rc<RadishConfig> {
-        Rc::new(RadishConfig { stdout })
-    }
-}
+use crate::{RadishConfig, RadishFile};
 
 #[derive(Debug)]
 pub struct CallFrame {
     /// Call frame's function.
-    pub function: Rc<Function>,
+    //pub function: Rc<Function>,
+    pub closure: Closure,
     /// Track where we're at in the function's chunk.
     pub ip: usize,
     /// VM stack offset.
@@ -76,32 +35,40 @@ pub struct VM {
 }
 
 impl VM {
-    pub fn new(config: &Rc<RadishConfig>, module: Rc<RefCell<Module>>) -> VM {
+    pub fn new(config: &Rc<RadishConfig>) -> VM {
         VM {
             stack: Stack::new(),
             frames: Vec::new(),
             frame_count: 0,
             config: Rc::clone(&config),
-            last_module: module,
+            // HACK: this needs to be refactored.
+            last_module: Module::new(""),
         }
     }
 
-    pub fn interpret(&mut self, script: Function) {
-        let script = Rc::new(script);
+    pub fn interpret(&mut self, script: Function, module: Rc<RefCell<Module>>) {
+        self.last_module = module;
 
-        self.stack.push(Value::Function(Rc::clone(&script)));
-        self.call_function(script, 0);
+        //let script = Rc::new(script);
+
+        //self.stack.push(Value::Function(Rc::clone(&script)));
+
+        let closure = Closure {
+            function: Rc::new(script),
+        };
+        self.stack.push(Value::Closure(closure.clone()));
+        self.call_function(closure, 0);
 
         let start = Instant::now();
         self.run();
         let duration = start.elapsed();
 
-        println!("Time elapsed in run() is: {:?}", duration);
+        //println!("Time elapsed in run() is: {:?}", duration);
     }
 
     #[inline]
     fn decode_opcode(&mut self) -> Opcode {
-        let chunk = &self.frames[self.frame_count - 1].function.chunk;
+        let chunk = &self.frames[self.frame_count - 1].closure.function.chunk;
         let op = Opcode::from(chunk.code[self.frames[self.frame_count - 1].ip]);
 
         self.frames[self.frame_count - 1].ip += 1;
@@ -112,32 +79,44 @@ impl VM {
     fn read_byte(&mut self) -> u8 {
         let frame = &mut self.frames[self.frame_count - 1];
         frame.ip += 1;
-        frame.function.chunk.code[frame.ip - 1]
+        frame.closure.function.chunk.code[frame.ip - 1]
     }
 
     #[inline]
     fn read_short(&mut self) -> u16 {
         let frame = &mut self.frames[self.frame_count - 1];
         frame.ip += 2;
-        let byte1 = frame.function.chunk.code[frame.ip - 2];
-        let byte2 = frame.function.chunk.code[frame.ip - 1];
+        let byte1 = frame.closure.function.chunk.code[frame.ip - 2];
+        let byte2 = frame.closure.function.chunk.code[frame.ip - 1];
         u16::from_le_bytes([byte1, byte2])
     }
 
     #[inline]
     fn read_long(&mut self) -> u32 {
+        //dbg!("...");
         let frame = &mut self.frames[self.frame_count - 1];
         frame.ip += 4;
-        let bytes = frame.function.chunk.code[frame.ip - 4..frame.ip]
+        let bytes = frame.closure.function.chunk.code[frame.ip - 4..frame.ip]
             .try_into()
             .expect(&format!("Expected a slice of length {}.", 4));
-        u32::from_le_bytes(bytes)
+        //dbg!("why??");
+
+        let bytes = u32::from_le_bytes(bytes);
+
+        //dbg!("did it get here?");
+
+        bytes
     }
 
     #[inline]
     fn read_constant_long(&mut self) -> Value {
         let index = self.read_long() as usize;
-        self.frames[self.frame_count - 1].function.chunk.constants[index].clone()
+        self.frames[self.frame_count - 1]
+            .closure
+            .function
+            .chunk
+            .constants[index]
+            .clone()
     }
 
     #[inline]
@@ -151,7 +130,9 @@ impl VM {
     #[inline]
     fn call_value(&mut self, callee: Value, arg_count: usize) {
         match callee {
-            Value::Function(fun) => self.call_function(fun, arg_count),
+            Value::Closure(fun) => self.call_function(fun, arg_count),
+            //Value::Function(fun) => self.call_function(fun, arg_count),
+            //Value::Closure(closure) => self.call_closure(closure, arg_count),
             _ => {
                 println!("Value '{}' is not callable.", callee);
                 panic!("Attempt to call an uncallable value.");
@@ -160,10 +141,10 @@ impl VM {
     }
 
     #[inline]
-    fn call_function(&mut self, fun: Rc<Function>, arg_count: usize) {
+    fn call_function(&mut self, closure: Closure, arg_count: usize) {
         let offset = self.stack.stack.len() - arg_count;
         let frame = CallFrame {
-            function: Rc::clone(&fun),
+            closure: Closure::from(Rc::clone(&closure.function)),
             ip: 0,
             offset,
         };
@@ -177,10 +158,12 @@ impl VM {
             // Todo: store current frame in local variable
             // let frame = &mut self.frames[self.frame_count]
 
-            // let dis = Disassembler::new("script", &self.frames[self.frame_count - 1].function);
-            // let offset = &self.frames[self.frame_count - 1].ip;
-            //
-            // dis.disassemble_instruction(*offset);
+            let dis = Disassembler::new(
+                "script",
+                &self.frames[self.frame_count - 1].closure.function,
+            );
+            let offset = &self.frames[self.frame_count - 1].ip;
+            dis.disassemble_instruction(*offset);
             // print!("    ");
             // for slot in &self.stack.stack {
             //     print!("[ {} ]", &slot);
@@ -191,7 +174,12 @@ impl VM {
                 Opcode::LoadConst => {
                     let index = self.read_byte() as usize;
                     self.stack.push(
-                        self.frames[self.frame_count - 1].function.chunk.constants[index].clone(),
+                        self.frames[self.frame_count - 1]
+                            .closure
+                            .function
+                            .chunk
+                            .constants[index]
+                            .clone(),
                     );
                 }
                 Opcode::LoadConstLong => {
@@ -244,6 +232,8 @@ impl VM {
 
                     self.stack.stack[slot_index as usize] = self.stack.peek().unwrap();
                 }
+                Opcode::GetCapture => todo!(),
+                Opcode::SetCapture => todo!(),
                 Opcode::Negate => {
                     let value = self.stack.pop().unwrap();
                     self.stack.push(-value);
@@ -325,6 +315,19 @@ impl VM {
                     let callee = self.stack.peek_n(arg_count + 1).unwrap();
                     self.call_value(callee, arg_count);
                 }
+                Opcode::Closure => {
+                    let function = self.stack.pop().unwrap();
+                    let closure = Closure {
+                        function: match function {
+                            Value::Function(f) => f,
+                            _ => {
+                                println!("{}", function);
+                                unreachable!("can only create a closure from a function");
+                            }
+                        },
+                    };
+                    self.stack.push(Value::Closure(closure));
+                }
                 Opcode::Print => {
                     let msg = self.stack.pop().unwrap();
                     self.config.stdout.write(&format!("{}", msg));
@@ -346,11 +349,11 @@ impl VM {
                 }
             }
 
-            // print!("    ");
-            // for slot in &self.stack.stack {
-            //     print!("[ {} ]", &slot);
-            // }
-            // print!("\n");
+            print!("    ");
+            for slot in &self.stack.stack {
+                print!("[ {} ]", &slot);
+            }
+            print!("\n");
         }
     }
 }
