@@ -1,16 +1,14 @@
 use std::{cell::RefCell, convert::TryInto, rc::Rc};
 
-use std::time::Instant;
-
 use crate::{
     common::{
-        chunk::Chunk, disassembler::Disassembler, opcode::Opcode, value::Closure, value::Function,
+        disassembler::Disassembler, opcode::Opcode, value::Closure, value::Function,
         value::Module, value::Value,
     },
     vm::stack::Stack,
 };
 
-use crate::{RadishConfig, RadishFile};
+use crate::{RadishConfig};
 
 #[derive(Debug)]
 pub struct CallFrame {
@@ -49,21 +47,13 @@ impl VM {
     pub fn interpret(&mut self, script: Function, module: Rc<RefCell<Module>>) {
         self.last_module = module;
 
-        //let script = Rc::new(script);
-
-        //self.stack.push(Value::Function(Rc::clone(&script)));
-
         let closure = Closure {
             function: Rc::new(script),
         };
         self.stack.push(Value::Closure(closure.clone()));
         self.call_function(closure, 0);
 
-        let start = Instant::now();
         self.run();
-        let duration = start.elapsed();
-
-        //println!("Time elapsed in run() is: {:?}", duration);
     }
 
     #[inline]
@@ -262,6 +252,11 @@ impl VM {
                     let a = self.stack.pop().unwrap();
                     self.stack.push(a / b);
                 }
+                Opcode::Remainder => {
+                    let b = self.stack.pop().unwrap();
+                    let a = self.stack.pop().unwrap();
+                    self.stack.push(a % b);
+                }
                 Opcode::LessThan => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
@@ -342,6 +337,7 @@ impl VM {
 
                     self.frame_count -= 1;
 
+                    self.stack.pop();
                     self.stack.pop();
                     self.stack.push(result);
 

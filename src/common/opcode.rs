@@ -22,6 +22,7 @@ pub enum Opcode {
     Subtract,
     Multiply,
     Divide,
+    Remainder,
     LessThan,
     LessThanEquals,
     GreaterThan,

@@ -580,6 +580,11 @@ impl Visitor<(), String> for Compiler<'_> {
                 self.expression(&expr)?;
                 self.emit_byte(Opcode::Divide as u8);
             }
+            OpAssignment::ModuloEquals => {
+                self.load_variable(&id.name);
+                self.expression(&expr)?;
+                self.emit_byte(Opcode::Remainder as u8);
+            }
             OpAssignment::Equals => {
                 self.expression(&expr)?;
             }
@@ -607,6 +612,7 @@ impl Visitor<(), String> for Compiler<'_> {
             Op::Subtract => self.emit_byte(Opcode::Subtract as u8),
             Op::Multiply => self.emit_byte(Opcode::Multiply as u8),
             Op::Divide => self.emit_byte(Opcode::Divide as u8),
+            Op::Remainder => self.emit_byte(Opcode::Remainder as u8),
             Op::LessThan => self.emit_byte(Opcode::LessThan as u8),
             Op::LessThanEquals => self.emit_byte(Opcode::LessThanEquals as u8),
             Op::GreaterThan => self.emit_byte(Opcode::GreaterThan as u8),
