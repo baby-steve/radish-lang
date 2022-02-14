@@ -5,7 +5,7 @@ use std::{
 
 use crate::common::source::Source;
 
-#[derive(Clone, PartialEq)]
+#[derive(PartialEq, PartialOrd, Eq)]
 pub struct Span {
     pub source: Rc<Source>,
     pub start: usize,
@@ -72,6 +72,12 @@ impl Span {
         let col = lines.last().unwrap().chars().count() - 1;
 
         Some((line, col))
+    }
+}
+
+impl Clone for Span {
+    fn clone(&self) -> Self {
+        Span::new(Rc::clone(&self.source), self.start, self.end)
     }
 }
 
