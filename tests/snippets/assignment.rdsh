@@ -19,6 +19,9 @@ f *= 10 // expect: 50
 var g = 10
 g /= 5 // expect: 2
 
+var h = 40
+h %= 7 // expect: 2 
+
 // Test with local variables.
 {
     var f = 7

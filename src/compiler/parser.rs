@@ -9,7 +9,7 @@ use crate::compiler::{
 };
 
 use crate::common::{source::Source, span::Span};
-use crate::error::{Item};
+use crate::error::Item;
 
 pub struct Parser {
     source: Rc<Source>,
@@ -74,9 +74,9 @@ impl Parser {
         if !self.match_token(&expected) {
             let actual = self.current.clone();
 
-            let err_kind = ParseErrorKind::Expected { 
-                expected: Item::new(&Span::empty(), expected.syntax()), 
-                actual: Item::new(&actual.span, actual.syntax()), 
+            let err_kind = ParseErrorKind::Expected {
+                expected: Item::new(&Span::empty(), expected.syntax()),
+                actual: Item::new(&actual.span, actual.syntax()),
             };
 
             let err = ParseError::new(err_kind);
@@ -406,6 +406,11 @@ impl Parser {
                 self.consume(TokenType::DivideEquals);
                 OpAssignment::DivideEquals
             }
+            // expr %= ...
+            TokenType::ModuloEquals => {
+                self.consume(TokenType::ModuloEquals);
+                OpAssignment::ModuloEquals
+            }
             // expr
             _ => return Ok(Stmt::ExpressionStmt(Box::new(node))),
         };
@@ -414,11 +419,11 @@ impl Parser {
             Expr::Identifier(id) => id,
             _ => {
                 let err_kind = ParseErrorKind::ExpectedIdent {
-                    actual: Item::new(&self.current.span, self.current.syntax())
+                    actual: Item::new(&self.current.span, self.current.syntax()),
                 };
                 let err = ParseError::new(err_kind);
                 return Err(err);
-            },
+            }
         };
 
         // id op ....
@@ -625,6 +630,18 @@ impl Parser {
                     node =
                         Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Divide, node, right)), span)
                 }
+                // expr % ...
+                TokenType::Percent => {
+                    self.consume(TokenType::Percent);
+
+                    let right = self.parse_member()?;
+
+                    let span = Span::combine(&node.position(), &right.position());
+                    node = Expr::BinaryExpr(
+                        Box::new(BinaryExpr::new(Op::Remainder, node, right)),
+                        span,
+                    )
+                }
                 _ => break,
             };
         }
@@ -747,8 +764,8 @@ impl Parser {
                 }
                 _ => {
                     let current = self.current.clone();
-                    let err_kind = ParseErrorKind::Unexpected { 
-                        found: Item::new(&current.span, current.syntax()) 
+                    let err_kind = ParseErrorKind::Unexpected {
+                        found: Item::new(&current.span, current.syntax()),
                     };
                     let err = self.error(err_kind);
                     return Err(err);
@@ -773,7 +790,7 @@ impl Parser {
             // <error>
             _ => {
                 let err_kind = ParseErrorKind::ExpectedIdent {
-                    actual: Item::new(&self.current.span, token.syntax())
+                    actual: Item::new(&self.current.span, token.syntax()),
                 };
                 let err = ParseError::new(err_kind);
                 return Err(err);

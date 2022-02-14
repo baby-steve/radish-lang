@@ -224,6 +224,7 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    Remainder,
     Bang,
     LessThan,
     LessThanEquals,
@@ -242,4 +243,5 @@ pub enum OpAssignment {
     MinusEquals,
     MultiplyEquals,
     DivideEquals,
+    ModuloEquals,
 }

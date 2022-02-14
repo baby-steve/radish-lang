@@ -53,6 +53,13 @@ impl Scanner {
                     self.make_token(TokenType::Star)
                 }
             }
+            Some("%") => {
+                if self.match_("=") {
+                    self.make_token(TokenType::ModuloEquals)
+                } else {
+                    self.make_token(TokenType::Percent)
+                }
+            }
             Some("!") => {
                 if self.match_("=") {
                     self.make_token(TokenType::NotEqual)
@@ -400,6 +407,7 @@ mod tests {
             ("-", TokenType::Minus),
             ("*", TokenType::Star),
             ("/", TokenType::Slash),
+            ("%", TokenType::Percent),
             ("!", TokenType::Bang),
             ("=", TokenType::Equals),
             ("<", TokenType::LessThan),
@@ -412,6 +420,7 @@ mod tests {
             ("-=", TokenType::MinusEquals),
             ("*=", TokenType::MultiplyEquals),
             ("/=", TokenType::DivideEquals),
+            ("%=", TokenType::ModuloEquals),
             ("(", TokenType::LeftParen),
             (")", TokenType::RightParen),
             ("{", TokenType::LeftBrace),

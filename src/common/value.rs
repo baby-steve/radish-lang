@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::cmp::{Ord, Ordering};
 use std::collections::HashMap;
 use std::fmt;
-use std::ops::{Add, Div, Mul, Neg, Not, Sub};
+use std::ops::{Add, Div, Mul, Neg, Not, Sub, Rem};
 use std::rc::{Rc, Weak};
 
 use crate::common::chunk::Chunk;
@@ -110,6 +110,16 @@ impl Div for Value {
     fn div(self, other: Value) -> <Self as std::ops::Div<Value>>::Output {
         match (self, other) {
             (Value::Number(a), Value::Number(b)) => Value::Number(a / b),
+            _ => panic!("Operands must be numbers"),
+        }
+    }
+}
+
+impl Rem for Value {
+    type Output = Self;
+    fn rem(self, other: Value) -> <Self as std::ops::Rem<Value>>::Output {
+        match (self, other) {
+            (Value::Number(a), Value::Number(b)) => Value::Number(a % b),
             _ => panic!("Operands must be numbers"),
         }
     }

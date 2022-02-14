@@ -15,6 +15,8 @@ pub enum TokenType {
     Star,
     // -
     Minus,
+    // %
+    Percent,
     // !
     Bang,
     // =
@@ -39,6 +41,8 @@ pub enum TokenType {
     MultiplyEquals,
     // /=
     DivideEquals,
+    // %=
+    ModuloEquals,
     // \n
     Newline,
     // (
@@ -113,6 +117,7 @@ impl TokenType {
             Minus => "-",
             Star => "*",
             Slash => "/",
+            Percent => "%",
             Bang => "!",
             Equals => "=",
             LessThan => "<",
@@ -125,6 +130,7 @@ impl TokenType {
             MinusEquals => "-=",
             MultiplyEquals => "*=",
             DivideEquals => "/=",
+            ModuloEquals => "%=",
             Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
@@ -207,6 +213,7 @@ impl Token {
             "-" => TokenType::Minus,
             "*" => TokenType::Star,
             "/" => TokenType::Slash,
+            "%" => TokenType::Percent,
             "!" => TokenType::Bang,
             "=" => TokenType::Equals,
             "<" => TokenType::LessThan,
@@ -219,6 +226,7 @@ impl Token {
             "-=" => TokenType::MinusEquals,
             "*=" => TokenType::MultiplyEquals,
             "/=" => TokenType::DivideEquals,
+            "%=" => TokenType::ModuloEquals,
             "\\n" => TokenType::Newline,
             "(" => TokenType::LeftParen,
             ")" => TokenType::RightParen,

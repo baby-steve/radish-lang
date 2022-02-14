@@ -4,6 +4,7 @@ print 12 + 3 // expect: 15
 print 40 - 1 // expect: 39 
 print 50 * 2 // expect: 100
 print 25 / 5 // expect: 5
+print 23 % 2 // expect: 1
 
 print 2 + 3 - 4 * 5 / 2 // expect: -5
 

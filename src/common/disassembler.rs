@@ -58,6 +58,7 @@ impl<'a> Disassembler<'a> {
             Opcode::Subtract => self.simple_instruction("Subtract", offset),
             Opcode::Multiply => self.simple_instruction("Multiply", offset),
             Opcode::Divide => self.simple_instruction("Divide", offset),
+            Opcode::Remainder => self.simple_instruction("Remainder", offset),
             Opcode::LessThan => self.simple_instruction("LessThan", offset),
             Opcode::LessThanEquals => self.simple_instruction("LessThanEquals", offset),
             Opcode::GreaterThan => self.simple_instruction("GreaterThan", offset),
