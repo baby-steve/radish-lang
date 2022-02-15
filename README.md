@@ -55,7 +55,7 @@ ARGS:
 ```
 
 # Installation
-Right now the only way to use Radish is building it from source and use cargo to run it. Make sure you have Rust and Cargo [installed](https://www.rust-lang.org/tools/install) before running the following commands:
+Right now the only way to use Radish is building it from source and using Cargo to run it. Make sure you have Rust and Cargo [installed](https://www.rust-lang.org/tools/install) before running the following commands:
 ```console
 $ git clone https://github.com/accusatorySteve/radish-lang.git
 $ cd radish-lang
