@@ -250,11 +250,11 @@ impl<'a> Compiler<'a> {
     fn load_variable(&mut self, name: &str) {
         let arg = match self.resolve_local(name) {
             Some(index) => {
-                self.emit_byte(Opcode::GetLocal as u8);
+                self.emit_byte(Opcode::LoadLocal as u8);
                 index as u32
             }
             None => {
-                self.emit_byte(Opcode::GetGlobal as u8);
+                self.emit_byte(Opcode::LoadGlobal as u8);
                 let index = self.module.borrow().get_index(name).unwrap();
                 index as u32
             }
@@ -270,11 +270,11 @@ impl<'a> Compiler<'a> {
     fn save_variable(&mut self, name: &str) {
         let arg = match self.resolve_local(name) {
             Some(index) => {
-                self.emit_byte(Opcode::SetLocal as u8);
+                self.emit_byte(Opcode::SaveLocal as u8);
                 index as u32
             }
             None => {
-                self.emit_byte(Opcode::SetGlobal as u8);
+                self.emit_byte(Opcode::SaveGlobal as u8);
                 //self.identifier_constant(name)
 
                 let index = self.module.borrow().get_index(name).unwrap();
@@ -286,7 +286,7 @@ impl<'a> Compiler<'a> {
             self.emit_byte(byte);
         }
 
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
     }
 
     /// Resolve a local variable with the given name. Returns the variable's
@@ -317,7 +317,7 @@ impl<'a> Compiler<'a> {
         self.scope_depth -= 1;
 
         while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth {
-            self.emit_byte(Opcode::Pop as u8);
+            self.emit_byte(Opcode::Del as u8);
             self.locals.pop();
         }
     }
@@ -432,13 +432,13 @@ impl Visitor<(), String> for Compiler<'_> {
     ) -> Result<(), String> {
         self.expression(&expr)?;
         let then_jump = self.emit_jump(Opcode::JumpIfFalse);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
         self.block(&body)?;
 
         let else_jump = self.emit_jump(Opcode::Jump);
 
         self.patch_jump(then_jump);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         if let Some(else_branch) = &else_branch {
             self.statement(&else_branch)?;
@@ -467,7 +467,7 @@ impl Visitor<(), String> for Compiler<'_> {
 
         self.expression(&expr)?;
         let exit_jump = self.emit_jump(Opcode::JumpIfFalse);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         self.block(&body)?;
 
@@ -475,7 +475,7 @@ impl Visitor<(), String> for Compiler<'_> {
 
         self.patch_jump(exit_jump);
         self.leave_loop();
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         Ok(())
     }
@@ -510,7 +510,7 @@ impl Visitor<(), String> for Compiler<'_> {
 
     fn break_statement(&mut self, _: &Span) -> Result<(), String> {
         let exit_jump = self.emit_jump(Opcode::Jump);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         let index = &self.loops.len() - 1;
         self.loops[index].jump_placeholders.push(exit_jump);
@@ -568,22 +568,22 @@ impl Visitor<(), String> for Compiler<'_> {
             OpAssignment::MinusEquals => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
-                self.emit_byte(Opcode::Subtract as u8);
+                self.emit_byte(Opcode::Sub as u8);
             }
             OpAssignment::MultiplyEquals => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
-                self.emit_byte(Opcode::Multiply as u8);
+                self.emit_byte(Opcode::Mul as u8);
             }
             OpAssignment::DivideEquals => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
-                self.emit_byte(Opcode::Divide as u8);
+                self.emit_byte(Opcode::Div as u8);
             }
             OpAssignment::ModuloEquals => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
-                self.emit_byte(Opcode::Remainder as u8);
+                self.emit_byte(Opcode::Rem as u8);
             }
             OpAssignment::Equals => {
                 self.expression(&expr)?;
@@ -598,7 +598,7 @@ impl Visitor<(), String> for Compiler<'_> {
     fn expression_stmt(&mut self, expr: &Expr) -> Result<(), String> {
         self.expression(&expr)?;
 
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         Ok(())
     }
@@ -609,16 +609,16 @@ impl Visitor<(), String> for Compiler<'_> {
 
         match &expr.op {
             Op::Add => self.emit_byte(Opcode::Add as u8),
-            Op::Subtract => self.emit_byte(Opcode::Subtract as u8),
-            Op::Multiply => self.emit_byte(Opcode::Multiply as u8),
-            Op::Divide => self.emit_byte(Opcode::Divide as u8),
-            Op::Remainder => self.emit_byte(Opcode::Remainder as u8),
-            Op::LessThan => self.emit_byte(Opcode::LessThan as u8),
-            Op::LessThanEquals => self.emit_byte(Opcode::LessThanEquals as u8),
-            Op::GreaterThan => self.emit_byte(Opcode::GreaterThan as u8),
-            Op::GreaterThanEquals => self.emit_byte(Opcode::GreaterThanEquals as u8),
-            Op::EqualsTo => self.emit_byte(Opcode::EqualsTo as u8),
-            Op::NotEqual => self.emit_byte(Opcode::NotEqual as u8),
+            Op::Subtract => self.emit_byte(Opcode::Sub as u8),
+            Op::Multiply => self.emit_byte(Opcode::Mul as u8),
+            Op::Divide => self.emit_byte(Opcode::Div as u8),
+            Op::Remainder => self.emit_byte(Opcode::Rem as u8),
+            Op::LessThan => self.emit_byte(Opcode::CmpLT as u8),
+            Op::LessThanEquals => self.emit_byte(Opcode::CmpLTEq as u8),
+            Op::GreaterThan => self.emit_byte(Opcode::CmpGT as u8),
+            Op::GreaterThanEquals => self.emit_byte(Opcode::CmpGTEq as u8),
+            Op::EqualsTo => self.emit_byte(Opcode::CmpGTEq as u8),
+            Op::NotEqual => self.emit_byte(Opcode::CmpNotEq as u8),
             _ => unreachable!("{:?} is not a binary operator.", &expr.op),
         }
 
@@ -635,7 +635,7 @@ impl Visitor<(), String> for Compiler<'_> {
         };
 
         let end_jump = self.emit_jump(op);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         self.expression(&expr.right)?;
 
@@ -648,7 +648,7 @@ impl Visitor<(), String> for Compiler<'_> {
         self.expression(&arg)?;
 
         match op {
-            Op::Subtract => self.emit_byte(Opcode::Negate as u8),
+            Op::Subtract => self.emit_byte(Opcode::Neg as u8),
             Op::Bang => self.emit_byte(Opcode::Not as u8),
             _ => unreachable!("{:?} is not an unary operator.", &op),
         }
@@ -729,7 +729,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::Add as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -750,7 +750,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::Subtract as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -771,7 +771,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::Multiply as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -792,7 +792,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::Divide as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -813,7 +813,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::LessThan as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -834,7 +834,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::LessThanEquals as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -855,7 +855,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::GreaterThan as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -876,7 +876,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::GreaterThanEquals as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -897,7 +897,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::EqualsTo as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -918,7 +918,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::NotEqual as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -942,7 +942,7 @@ mod tests {
                 2,
                 Opcode::Multiply as u8,
                 Opcode::Add as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -961,7 +961,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 0,
                 Opcode::Negate as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -976,7 +976,7 @@ mod tests {
             vec![
                 Opcode::True as u8,
                 Opcode::Not as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             ]
         );
@@ -987,13 +987,13 @@ mod tests {
         let result = run_test_compiler("true");
         assert_eq!(
             result.chunk.code,
-            vec!(Opcode::True as u8, Opcode::Pop as u8, Opcode::Halt as u8)
+            vec!(Opcode::True as u8, Opcode::Del as u8, Opcode::Halt as u8)
         );
 
         let result = run_test_compiler("false");
         assert_eq!(
             result.chunk.code,
-            vec!(Opcode::False as u8, Opcode::Pop as u8, Opcode::Halt as u8)
+            vec!(Opcode::False as u8, Opcode::Del as u8, Opcode::Halt as u8)
         );
     }
 
@@ -1002,7 +1002,7 @@ mod tests {
         let result = run_test_compiler("nil");
         assert_eq!(
             result.chunk.code,
-            vec![Opcode::Nil as u8, Opcode::Pop as u8, Opcode::Halt as u8]
+            vec![Opcode::Nil as u8, Opcode::Del as u8, Opcode::Halt as u8]
         );
     }
 
@@ -1063,7 +1063,7 @@ mod tests {
             vec![
                 Opcode::LoadConst as u8,
                 0,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8,
             ]
         );

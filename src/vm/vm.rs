@@ -148,12 +148,12 @@ impl VM {
             // Todo: store current frame in local variable
             // let frame = &mut self.frames[self.frame_count]
 
-            let dis = Disassembler::new(
-                "script",
-                &self.frames[self.frame_count - 1].closure.function,
-            );
-            let offset = &self.frames[self.frame_count - 1].ip;
-            dis.disassemble_instruction(*offset);
+            // let dis = Disassembler::new(
+            //     "script",
+            //     &self.frames[self.frame_count - 1].closure.function,
+            // );
+            // let offset = &self.frames[self.frame_count - 1].ip;
+            // dis.disassemble_instruction(*offset);
             // print!("    ");
             // for slot in &self.stack.stack {
             //     print!("[ {} ]", &slot);
@@ -185,7 +185,7 @@ impl VM {
                 Opcode::Nil => {
                     self.stack.push(Value::Nil);
                 }
-                Opcode::Pop => {
+                Opcode::Del => {
                     self.stack.pop();
                 }
                 Opcode::DefGlobal => {
@@ -196,27 +196,27 @@ impl VM {
 
                     self.stack.pop();
                 }
-                Opcode::GetGlobal => {
+                Opcode::LoadGlobal => {
                     let index = self.read_long() as usize;
                     let value = self.last_module.borrow().get_var(index).clone();
 
                     self.stack.push(value);
                 }
-                Opcode::SetGlobal => {
+                Opcode::SaveGlobal => {
                     let index = self.read_long() as usize;
 
                     self.last_module
                         .borrow_mut()
                         .set_var(index, self.stack.peek().unwrap());
                 }
-                Opcode::GetLocal => {
+                Opcode::LoadLocal => {
                     let slot_index =
                         self.read_long() as usize + self.frames[self.frame_count - 1].offset - 1;
 
                     self.stack
                         .push(self.stack.stack[slot_index as usize].clone());
                 }
-                Opcode::SetLocal => {
+                Opcode::SaveLocal => {
                     let slot_index =
                         self.read_long() as usize + self.frames[self.frame_count - 1].offset - 1;
 
@@ -224,7 +224,7 @@ impl VM {
                 }
                 Opcode::GetCapture => todo!(),
                 Opcode::SetCapture => todo!(),
-                Opcode::Negate => {
+                Opcode::Neg => {
                     let value = self.stack.pop().unwrap();
                     self.stack.push(-value);
                 }
@@ -237,52 +237,52 @@ impl VM {
                     let a = self.stack.pop().unwrap();
                     self.stack.push(a + b);
                 }
-                Opcode::Subtract => {
+                Opcode::Sub => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(a - b);
                 }
-                Opcode::Multiply => {
+                Opcode::Mul => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(a * b);
                 }
-                Opcode::Divide => {
+                Opcode::Div => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(a / b);
                 }
-                Opcode::Remainder => {
+                Opcode::Rem => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(a % b);
                 }
-                Opcode::LessThan => {
+                Opcode::CmpLT => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a < b));
                 }
-                Opcode::LessThanEquals => {
+                Opcode::CmpLTEq => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a <= b));
                 }
-                Opcode::GreaterThan => {
+                Opcode::CmpGT => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a > b));
                 }
-                Opcode::GreaterThanEquals => {
+                Opcode::CmpGTEq => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a >= b));
                 }
-                Opcode::EqualsTo => {
+                Opcode::CmpEq => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a == b));
                 }
-                Opcode::NotEqual => {
+                Opcode::CmpNotEq => {
                     let b = self.stack.pop().unwrap();
                     let a = self.stack.pop().unwrap();
                     self.stack.push(Value::Boolean(a != b));
@@ -345,11 +345,11 @@ impl VM {
                 }
             }
 
-            print!("    ");
-            for slot in &self.stack.stack {
-                print!("[ {} ]", &slot);
-            }
-            print!("\n");
+            // print!("    ");
+            // for slot in &self.stack.stack {
+            //     print!("[ {} ]", &slot);
+            // }
+            // print!("\n");
         }
     }
 }
