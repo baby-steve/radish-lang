@@ -1,5 +1,4 @@
 use clap::{App, Arg};
-use std::path::PathBuf;
 
 #[derive(Debug)]
 pub struct Cli {
@@ -54,7 +53,7 @@ impl Cli {
 
         let dump_ast = matches.is_present("dump-ast");
         let dump_code = matches.is_present("dump-bytecode");
-        let trace = matches.is_present("trace-execution");
+        let trace = matches.is_present("trace");
 
         let args = matches
             .values_of("arguments")

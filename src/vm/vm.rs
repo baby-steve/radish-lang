@@ -2,13 +2,13 @@ use std::{cell::RefCell, convert::TryInto, rc::Rc};
 
 use crate::{
     common::{
-        disassembler::Disassembler, opcode::Opcode, value::Closure, value::Function,
-        value::Module, value::Value,
+        disassembler::Disassembler, opcode::Opcode, value::Closure, value::Function, value::Module,
+        value::Value,
     },
     vm::stack::Stack,
 };
 
-use crate::{RadishConfig};
+use crate::RadishConfig;
 
 #[derive(Debug)]
 pub struct CallFrame {
@@ -145,20 +145,22 @@ impl VM {
 
     fn run(&mut self) {
         loop {
-            // Todo: store current frame in local variable
+            // TODO: store current frame in local variable
             // let frame = &mut self.frames[self.frame_count]
 
-            // let dis = Disassembler::new(
-            //     "script",
-            //     &self.frames[self.frame_count - 1].closure.function,
-            // );
-            // let offset = &self.frames[self.frame_count - 1].ip;
-            // dis.disassemble_instruction(*offset);
-            // print!("    ");
-            // for slot in &self.stack.stack {
-            //     print!("[ {} ]", &slot);
-            // }
-            // print!("\n");
+            if self.config.trace {
+                let dis = Disassembler::new(
+                    "script",
+                    &self.frames[self.frame_count - 1].closure.function,
+                );
+                let offset = &self.frames[self.frame_count - 1].ip;
+                dis.disassemble_instruction(*offset);
+                print!("    ");
+                for slot in &self.stack.stack {
+                    print!("[ {} ]", &slot);
+                }
+                print!("\n");
+            }
 
             match self.decode_opcode() {
                 Opcode::LoadConst => {
@@ -328,8 +330,23 @@ impl VM {
                     self.config.stdout.write(&format!("{}", msg));
                 }
                 Opcode::Return => {
-                    let result = self.stack.pop().unwrap();
+                    // FIXME: returns don't work right. Probably a compiler problem though.
+                    // they should go something like this:
+                    // | [fun][return_val]
+                    // | [fun] *pop* <-- store return_val
+                    // | *pop*
+                    // | [return_val]
+                    // 
+                    // however it has to go like this (or it'll break)
+                    // | [fun][other_val][return_val]
+                    // | [fun][other_val] *pop*
+                    // | [fun] *pop*
+                    // | *pop*
+                    // | [return_val]
+                    //
+                    let result = self.stack.pop().unwrap(); // pop return value
 
+                    // if that was the last frame, exit the VM.
                     if self.frame_count - 1 == 0 {
                         self.stack.pop();
                         return;
@@ -337,19 +354,22 @@ impl VM {
 
                     self.frame_count -= 1;
 
-                    self.stack.pop();
-                    self.stack.pop();
-                    self.stack.push(result);
+                    self.stack.pop(); // this is supposed to be the function being returned from.
+                    self.stack.pop(); // why do we have to pop something twice?
+                    
+                    self.stack.push(result); // push the result back onto the stack.
 
                     self.frames.pop();
                 }
             }
 
-            // print!("    ");
-            // for slot in &self.stack.stack {
-            //     print!("[ {} ]", &slot);
-            // }
-            // print!("\n");
+            if self.config.trace {
+                print!("    ");
+                for slot in &self.stack.stack {
+                    print!("[ {} ]", &slot);
+                }
+                print!("\n");
+            }
         }
     }
 }

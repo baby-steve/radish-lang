@@ -6,6 +6,8 @@ use crate::{
     compiler::{ast::*, table::SymbolTable, visitor::Visitor},
 };
 
+use crate::RadishConfig;
+
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -65,6 +67,7 @@ impl Frame {
 }
 
 pub struct Compiler<'a> {
+    config: Rc<RadishConfig>,
     scope_depth: usize,
     locals: Vec<Local>,
     loops: Vec<Loop>,
@@ -76,8 +79,9 @@ pub struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(scope: &'a SymbolTable) -> Compiler<'a> {
+    pub fn new(scope: &'a SymbolTable, config: &Rc<RadishConfig>) -> Compiler<'a> {
         Compiler {
+            config: Rc::clone(&config),
             scope_depth: 0,
             locals: vec![],
             loops: vec![],
@@ -403,7 +407,9 @@ impl<'a> Compiler<'a> {
 
         let frame = self.leave_function();
 
-        Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
+        if self.config.dump_code {
+            Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
+        }
 
         self.emit_constant(Value::from(frame.function));
         self.emit_byte(Opcode::Closure as u8);
@@ -617,7 +623,7 @@ impl Visitor<(), String> for Compiler<'_> {
             Op::LessThanEquals => self.emit_byte(Opcode::CmpLTEq as u8),
             Op::GreaterThan => self.emit_byte(Opcode::CmpGT as u8),
             Op::GreaterThanEquals => self.emit_byte(Opcode::CmpGTEq as u8),
-            Op::EqualsTo => self.emit_byte(Opcode::CmpGTEq as u8),
+            Op::EqualsTo => self.emit_byte(Opcode::CmpEq as u8),
             Op::NotEqual => self.emit_byte(Opcode::CmpNotEq as u8),
             _ => unreachable!("{:?} is not a binary operator.", &expr.op),
         }

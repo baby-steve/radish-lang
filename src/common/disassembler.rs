@@ -13,8 +13,6 @@ impl<'a> Disassembler<'a> {
     pub fn disassemble_chunk(name: &str, function: &Function) {
         let dis = Disassembler::new(name, function);
 
-        dbg!(&function.chunk.code);
-
         println!("Disassembling \"{}\"...", dis.name);
         let mut offset = 0;
 

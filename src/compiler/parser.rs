@@ -8,10 +8,13 @@ use crate::compiler::{
     token::{Token, TokenType},
 };
 
+use crate::RadishConfig;
+
 use crate::common::{source::Source, span::Span};
 use crate::error::Item;
 
 pub struct Parser {
+    config: Rc<RadishConfig>,
     source: Rc<Source>,
     scanner: Scanner,
     previous: Token,
@@ -19,8 +22,9 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(source: Rc<Source>) -> Parser {
+    pub fn new(source: Rc<Source>, config: &Rc<RadishConfig>) -> Parser {
         Parser {
+            config: Rc::clone(&config),
             source: Rc::clone(&source),
             scanner: Scanner::new(source),
             previous: Token::empty(),
@@ -31,10 +35,16 @@ impl Parser {
     pub fn parse(&mut self) -> Result<AST, ParseError> {
         self.advance();
 
-        match self.parse_body() {
+        let res = match self.parse_body() {
             Ok(items) => Ok(AST::new(items)),
             Err(err) => Err(err),
+        };
+
+        if self.config.dump_ast {
+            println!("{:#?}", &res);
         }
+
+        res
     }
 
     fn advance(&mut self) {
