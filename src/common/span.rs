@@ -62,7 +62,7 @@ impl Span {
         string.split('\n').map(|l| l.to_string() + "\n").collect()
     }
 
-    fn lines(string: &str) -> Vec<String> {
+    pub fn lines(string: &str) -> Vec<String> {
         string.split('\n').map(|l| l.to_string()).collect()
     }
 

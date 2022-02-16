@@ -1,4 +1,4 @@
-use crate::common::span::Span;
+use crate::common::Span;
 use std::collections::HashSet;
 use std::fmt;
 
@@ -6,7 +6,7 @@ use crate::compiler::{
     ast::*,
     error::{SyntaxError, SyntaxErrorKind},
     table::{Symbol, SymbolTable},
-    visitor::Visitor,
+    Visitor,
 };
 
 use crate::error::Item;

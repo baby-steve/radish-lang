@@ -1,15 +1,10 @@
-use crate::{
-    common::{
-        chunk::Chunk, disassembler::Disassembler, opcode::Opcode, span::Span,
-        value::Function as FunctionValue, value::Module as ModuleValue, value::Value,
-    },
-    compiler::{ast::*, table::SymbolTable, visitor::Visitor},
+use crate::common::{
+    value::Function as FunctionValue, value::Module as ModuleValue, Chunk, Disassembler, Opcode,
+    Span, Value,
 };
 
+use crate::compiler::{ast::*, table::SymbolTable, visitor::Visitor, Rc, RefCell, SyntaxError};
 use crate::RadishConfig;
-
-use std::cell::RefCell;
-use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct Local {
@@ -96,7 +91,7 @@ impl<'a> Compiler<'a> {
         &mut self,
         ast: &AST,
         scope: &'a SymbolTable,
-    ) -> Result<(Rc<RefCell<ModuleValue>>, FunctionValue), String> {
+    ) -> Result<(Rc<RefCell<ModuleValue>>, FunctionValue), SyntaxError> {
         self.scope = scope;
 
         let script = FunctionValue {
@@ -358,7 +353,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// Sort of foward declare all globally scoped functions.
-    fn declare_globals(&mut self, ast: &AST) -> Result<(), String> {
+    fn declare_globals(&mut self, ast: &AST) -> Result<(), SyntaxError> {
         // add all global declarations to the module with a value of nil.
         for (name, _) in self.scope.all().iter() {
             self.module.borrow_mut().add_var(name.clone());
@@ -382,7 +377,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// Compile a function declaration,
-    fn function(&mut self, fun: &Function) -> Result<(), String> {
+    fn function(&mut self, fun: &Function) -> Result<(), SyntaxError> {
         if fun.params.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 parameters");
         }
@@ -418,8 +413,8 @@ impl<'a> Compiler<'a> {
     }
 }
 
-impl Visitor<(), String> for Compiler<'_> {
-    fn function_declaration(&mut self, fun: &Function) -> Result<(), String> {
+impl Visitor<(), SyntaxError> for Compiler<'_> {
+    fn function_declaration(&mut self, fun: &Function) -> Result<(), SyntaxError> {
         // at this point all global functions have already been compiled,
         // so only locally scoped functions have to be handled.
         if self.scope_depth > 0 {
@@ -435,7 +430,7 @@ impl Visitor<(), String> for Compiler<'_> {
         expr: &Expr,
         body: &Vec<Stmt>,
         else_branch: &Option<Box<Stmt>>,
-    ) -> Result<(), String> {
+    ) -> Result<(), SyntaxError> {
         self.expression(&expr)?;
         let then_jump = self.emit_jump(Opcode::JumpIfFalse);
         self.emit_byte(Opcode::Del as u8);
@@ -455,7 +450,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn loop_statement(&mut self, body: &Vec<Stmt>) -> Result<(), String> {
+    fn loop_statement(&mut self, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
         let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
@@ -467,7 +462,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) -> Result<(), String> {
+    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
         let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
@@ -486,7 +481,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn block(&mut self, body: &Vec<Stmt>) -> Result<(), String> {
+    fn block(&mut self, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
         self.enter_scope();
 
         for node in body {
@@ -498,7 +493,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn return_statement(&mut self, return_val: &Option<Expr>) -> Result<(), String> {
+    fn return_statement(&mut self, return_val: &Option<Expr>) -> Result<(), SyntaxError> {
         if self.scope_depth == 0 {
             panic!("Return statement outside of a function");
         }
@@ -514,7 +509,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn break_statement(&mut self, _: &Span) -> Result<(), String> {
+    fn break_statement(&mut self, _: &Span) -> Result<(), SyntaxError> {
         let exit_jump = self.emit_jump(Opcode::Jump);
         self.emit_byte(Opcode::Del as u8);
 
@@ -524,7 +519,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn continue_statement(&mut self, _: &Span) -> Result<(), String> {
+    fn continue_statement(&mut self, _: &Span) -> Result<(), SyntaxError> {
         let loop_start = self.loops.last().unwrap().loop_start;
 
         self.emit_loop(loop_start);
@@ -532,7 +527,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn print(&mut self, expr: &Expr) -> Result<(), String> {
+    fn print(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         self.expression(&expr)?;
 
         self.emit_byte(Opcode::Print as u8);
@@ -540,7 +535,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) -> Result<(), String> {
+    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) -> Result<(), SyntaxError> {
         if self.scope_depth > 0 {
             if let Some(expr) = &init {
                 self.expression(&expr)?;
@@ -564,7 +559,12 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn assignment(&mut self, id: &Ident, op: &OpAssignment, expr: &Expr) -> Result<(), String> {
+    fn assignment(
+        &mut self,
+        id: &Ident,
+        op: &OpAssignment,
+        expr: &Expr,
+    ) -> Result<(), SyntaxError> {
         match op {
             OpAssignment::PlusEquals => {
                 self.load_variable(&id.name);
@@ -601,7 +601,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn expression_stmt(&mut self, expr: &Expr) -> Result<(), String> {
+    fn expression_stmt(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         self.expression(&expr)?;
 
         self.emit_byte(Opcode::Del as u8);
@@ -609,7 +609,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn binary_expression(&mut self, expr: &BinaryExpr) -> Result<(), String> {
+    fn binary_expression(&mut self, expr: &BinaryExpr) -> Result<(), SyntaxError> {
         self.expression(&expr.left)?;
         self.expression(&expr.right)?;
 
@@ -631,7 +631,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn logical_expr(&mut self, expr: &BinaryExpr) -> Result<(), String> {
+    fn logical_expr(&mut self, expr: &BinaryExpr) -> Result<(), SyntaxError> {
         self.expression(&expr.left)?;
 
         let op = match &expr.op {
@@ -650,7 +650,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn unary(&mut self, arg: &Expr, op: &Op) -> Result<(), String> {
+    fn unary(&mut self, arg: &Expr, op: &Op) -> Result<(), SyntaxError> {
         self.expression(&arg)?;
 
         match op {
@@ -662,7 +662,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) -> Result<(), String> {
+    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) -> Result<(), SyntaxError> {
         if args.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 arguments.");
         }
@@ -678,22 +678,22 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn identifier(&mut self, id: &Ident) -> Result<(), String> {
+    fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {
         self.load_variable(&id.name);
         Ok(())
     }
 
-    fn number(&mut self, val: &f64) -> Result<(), String> {
+    fn number(&mut self, val: &f64) -> Result<(), SyntaxError> {
         self.emit_constant(Value::Number(*val));
         Ok(())
     }
 
-    fn string(&mut self, val: &str) -> Result<(), String> {
+    fn string(&mut self, val: &str) -> Result<(), SyntaxError> {
         self.emit_constant(Value::from(val));
         Ok(())
     }
 
-    fn boolean(&mut self, val: &bool) -> Result<(), String> {
+    fn boolean(&mut self, val: &bool) -> Result<(), SyntaxError> {
         match val {
             true => self.emit_byte(Opcode::True as u8),
             false => self.emit_byte(Opcode::False as u8),
@@ -701,7 +701,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn nil(&mut self) -> Result<(), String> {
+    fn nil(&mut self) -> Result<(), SyntaxError> {
         self.emit_byte(Opcode::Nil as u8);
         Ok(())
     }
