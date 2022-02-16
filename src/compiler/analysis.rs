@@ -4,7 +4,7 @@ use std::fmt;
 
 use crate::compiler::{
     ast::*,
-    error::{SemanticError, SemanticErrorKind},
+    error::{SyntaxError, SyntaxErrorKind},
     table::{Symbol, SymbolTable},
     visitor::Visitor,
 };
@@ -148,30 +148,30 @@ impl Analyzer {
         }
     }
 
-    fn unresolved_err(&self, name: &str, span: &Span) -> SemanticError {
-        let err_kind = SemanticErrorKind::UnresolvedIdent {
+    fn unresolved_err(&self, name: &str, span: &Span) -> SyntaxError {
+        let err_kind = SyntaxErrorKind::UnresolvedIdent {
             item: Item::new(span, name),
         };
 
-        let err = SemanticError::new(err_kind);
+        let err = SyntaxError::new(err_kind);
 
         err
     }
 
-    fn duplicate_ids(&self, name: &str, pos: &Span, prev: &Span) -> SemanticError {
-        let err_kind = SemanticErrorKind::DuplicateIdent {
+    fn duplicate_ids(&self, name: &str, pos: &Span, prev: &Span) -> SyntaxError {
+        let err_kind = SyntaxErrorKind::DuplicateIdent {
             first: Item::new(prev, name),
             second: Item::new(pos, name),
         };
 
-        let err = SemanticError::new(err_kind);
+        let err = SyntaxError::new(err_kind);
 
         err
     }
 }
 
-impl Visitor<(), SemanticError> for Analyzer {
-    fn block(&mut self, body: &Vec<Stmt>) -> Result<(), SemanticError> {
+impl Visitor<(), SyntaxError> for Analyzer {
+    fn block(&mut self, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
         self.enter_scope();
 
         for node in body {
@@ -183,7 +183,7 @@ impl Visitor<(), SemanticError> for Analyzer {
         Ok(())
     }
 
-    fn function_declaration(&mut self, fun: &Function) -> Result<(), SemanticError> {
+    fn function_declaration(&mut self, fun: &Function) -> Result<(), SyntaxError> {
         let depth = self.scopes.len() - 1;
 
         if self.scopes.len() > 1 {
@@ -202,11 +202,11 @@ impl Visitor<(), SemanticError> for Analyzer {
                 .local_scope()
                 .add_local(&param.name, Symbol::var(&param.pos, depth))
             {
-                let err_kind = SemanticErrorKind::DuplicateParam {
+                let err_kind = SyntaxErrorKind::DuplicateParam {
                     param: Item::new(&param.pos, &param.name),
                 };
 
-                let err = SemanticError::new(err_kind);
+                let err = SyntaxError::new(err_kind);
 
                 return Err(err);
             }
@@ -223,7 +223,7 @@ impl Visitor<(), SemanticError> for Analyzer {
         Ok(())
     }
 
-    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) -> Result<(), SemanticError> {
+    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) -> Result<(), SyntaxError> {
         if let Some(expr) = &init {
             self.expression(&expr)?;
         }
@@ -252,14 +252,14 @@ impl Visitor<(), SemanticError> for Analyzer {
         id: &Ident,
         _: &OpAssignment,
         expr: &Expr,
-    ) -> Result<(), SemanticError> {
+    ) -> Result<(), SyntaxError> {
         self.expression(&expr)?;
         self.identifier(&id)?;
 
         Ok(())
     }
 
-    fn call_expr(&mut self, _: &Expr, args: &Vec<Box<Expr>>) -> Result<(), SemanticError> {
+    fn call_expr(&mut self, _: &Expr, args: &Vec<Box<Expr>>) -> Result<(), SyntaxError> {
         /*match callee {
             Expr::Identifier(id) => {
                 if let Some(symbol) = self.resolve_symbol(&id.name) {
@@ -296,7 +296,7 @@ impl Visitor<(), SemanticError> for Analyzer {
         Ok(())
     }
 
-    fn identifier(&mut self, id: &Ident) -> Result<(), SemanticError> {
+    fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {
         if self.resolve_symbol(&id.name) == None {
             // if its the global scope, then its an error.
             if self.scopes.len() == 1 {
@@ -311,7 +311,7 @@ impl Visitor<(), SemanticError> for Analyzer {
         Ok(())
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) -> Result<(), SemanticError> {
+    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
         self.expression(&expr)?;
 
         self.in_loop = true;
@@ -323,7 +323,7 @@ impl Visitor<(), SemanticError> for Analyzer {
         Ok(())
     }
 
-    fn loop_statement(&mut self, body: &Vec<Stmt>) -> Result<(), SemanticError> {
+    fn loop_statement(&mut self, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
         self.in_loop = true;
 
         self.block(&body)?;
@@ -333,17 +333,17 @@ impl Visitor<(), SemanticError> for Analyzer {
         Ok(())
     }
 
-    fn return_statement(&mut self, _: &Option<Expr>) -> Result<(), SemanticError> {
+    fn return_statement(&mut self, _: &Option<Expr>) -> Result<(), SyntaxError> {
         Ok(())
     }
 
-    fn break_statement(&mut self, pos: &Span) -> Result<(), SemanticError> {
+    fn break_statement(&mut self, pos: &Span) -> Result<(), SyntaxError> {
         if !self.in_loop {
-            let err_kind = SemanticErrorKind::BreakOutsideLoop {
+            let err_kind = SyntaxErrorKind::BreakOutsideLoop {
                 item: Item::new(pos, "break"),
             };
 
-            let err = SemanticError::new(err_kind);
+            let err = SyntaxError::new(err_kind);
 
             Err(err)
         } else {
@@ -351,32 +351,32 @@ impl Visitor<(), SemanticError> for Analyzer {
         }
     }
 
-    fn continue_statement(&mut self, pos: &Span) -> Result<(), SemanticError> {
+    fn continue_statement(&mut self, pos: &Span) -> Result<(), SyntaxError> {
         if !self.in_loop {
-            let err_kind = SemanticErrorKind::ContinueOutsideLoop {
+            let err_kind = SyntaxErrorKind::ContinueOutsideLoop {
                 item: Item::new(pos, "continue"),
             };
 
-            let err = SemanticError::new(err_kind);
+            let err = SyntaxError::new(err_kind);
 
             Err(err)
         } else {
             Ok(())
         }
     }
-    fn number(&mut self, _: &f64) -> Result<(), SemanticError> {
+    fn number(&mut self, _: &f64) -> Result<(), SyntaxError> {
         Ok(())
     }
 
-    fn string(&mut self, _: &str) -> Result<(), SemanticError> {
+    fn string(&mut self, _: &str) -> Result<(), SyntaxError> {
         Ok(())
     }
 
-    fn boolean(&mut self, _: &bool) -> Result<(), SemanticError> {
+    fn boolean(&mut self, _: &bool) -> Result<(), SyntaxError> {
         Ok(())
     }
 
-    fn nil(&mut self) -> Result<(), SemanticError> {
+    fn nil(&mut self) -> Result<(), SyntaxError> {
         Ok(())
     }
 }
