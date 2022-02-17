@@ -2,14 +2,18 @@ use assert_cmd::prelude::*;
 use predicates::prelude::*;
 use std::process::Command;
 
+use radish_lang::RadishError;
+
 #[test]
 fn file_doesnt_exist() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("radish-lang")?;
 
     cmd.arg("test/file/doesnt/exist");
-    cmd.assert()
-        .failure()
-        .stderr(predicate::str::contains("No such file or directory"));
+
+    cmd.assert().failure().stderr(
+        predicate::str::contains("No such file or directory")
+            .or(predicate::str::contains("cannot find the path")),
+    );
 
     Ok(())
 }
@@ -38,7 +42,12 @@ fn with_short_flags() -> Result<(), Box<dyn std::error::Error>> {
 fn with_long_flags() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("radish-lang")?;
 
-    cmd.args(&["--dump-ast", "--dump-bytecode", "--trace", "tests/snippets/binary_expr.rdsh"]);
+    cmd.args(&[
+        "--dump-ast",
+        "--dump-bytecode",
+        "--trace",
+        "tests/snippets/binary_expr.rdsh",
+    ]);
     cmd.assert().success();
 
     Ok(())
