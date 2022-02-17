@@ -1,11 +1,9 @@
 use std::{cell::RefCell, convert::TryInto, rc::Rc};
 
 use crate::{
-    common::{
-        disassembler::Disassembler, opcode::Opcode, value::Closure, value::Function, value::Module,
-        value::Value,
-    },
+    common::{value::Closure, value::Function, value::Module, value::Value, Disassembler, Opcode},
     vm::stack::Stack,
+    vm::trace::Trace,
 };
 
 use crate::RadishConfig;
@@ -13,7 +11,6 @@ use crate::RadishConfig;
 #[derive(Debug)]
 pub struct CallFrame {
     /// Call frame's function.
-    //pub function: Rc<Function>,
     pub closure: Closure,
     /// Track where we're at in the function's chunk.
     pub ip: usize,
@@ -44,16 +41,36 @@ impl VM {
         }
     }
 
-    pub fn interpret(&mut self, script: Function, module: Rc<RefCell<Module>>) {
+    pub fn interpret(
+        &mut self,
+        script: Function,
+        module: Rc<RefCell<Module>>,
+    ) -> Result<(), Trace> {
         self.last_module = module;
 
         let closure = Closure {
             function: Rc::new(script),
         };
         self.stack.push(Value::Closure(closure.clone()));
-        self.call_function(closure, 0);
+        self.call_function(closure, 0)?;
 
-        self.run();
+        Ok(self.run()?)
+    }
+
+    /// Create a new [`Trace`] with the given message, adding context to it.
+    #[inline]
+    fn error(&mut self, message: impl ToString) -> Trace {
+        let mut trace = Trace::new(message);
+
+        loop {
+            if let Some(frame) = self.frames.pop() {
+                trace.add_context(frame.closure.function.name.to_string());
+            } else {
+                break;
+            }
+        }
+
+        trace
     }
 
     #[inline]
@@ -83,17 +100,15 @@ impl VM {
 
     #[inline]
     fn read_long(&mut self) -> u32 {
-        //dbg!("...");
         let frame = &mut self.frames[self.frame_count - 1];
+
         frame.ip += 4;
+
         let bytes = frame.closure.function.chunk.code[frame.ip - 4..frame.ip]
             .try_into()
             .expect(&format!("Expected a slice of length {}.", 4));
-        //dbg!("why??");
 
         let bytes = u32::from_le_bytes(bytes);
-
-        //dbg!("did it get here?");
 
         bytes
     }
@@ -118,20 +133,22 @@ impl VM {
     }
 
     #[inline]
-    fn call_value(&mut self, callee: Value, arg_count: usize) {
+    fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), Trace> {
         match callee {
             Value::Closure(fun) => self.call_function(fun, arg_count),
             //Value::Function(fun) => self.call_function(fun, arg_count),
             //Value::Closure(closure) => self.call_closure(closure, arg_count),
             _ => {
-                println!("Value '{}' is not callable.", callee);
-                panic!("Attempt to call an uncallable value.");
+                // NOTE: could this be moved to semantic analysis?
+                let message = format!("'{}' is not callable", callee);
+                let trace = self.error(message);
+                Err(trace)
             }
         }
     }
 
     #[inline]
-    fn call_function(&mut self, closure: Closure, arg_count: usize) {
+    fn call_function(&mut self, closure: Closure, arg_count: usize) -> Result<(), Trace> {
         let offset = self.stack.stack.len() - arg_count;
         let frame = CallFrame {
             closure: Closure::from(Rc::clone(&closure.function)),
@@ -141,9 +158,11 @@ impl VM {
 
         self.frames.push(frame);
         self.frame_count += 1;
+
+        Ok(())
     }
 
-    fn run(&mut self) {
+    fn run(&mut self) -> Result<(), Trace> {
         loop {
             // TODO: store current frame in local variable
             // let frame = &mut self.frames[self.frame_count]
@@ -310,17 +329,14 @@ impl VM {
                 Opcode::Call => {
                     let arg_count = self.read_byte() as usize;
                     let callee = self.stack.peek_n(arg_count + 1).unwrap();
-                    self.call_value(callee, arg_count);
+                    self.call_value(callee, arg_count)?;
                 }
                 Opcode::Closure => {
                     let function = self.stack.pop().unwrap();
                     let closure = Closure {
                         function: match function {
                             Value::Function(f) => f,
-                            _ => {
-                                println!("{}", function);
-                                unreachable!("can only create a closure from a function");
-                            }
+                            _ => unreachable!("can only create a closure from a function"),
                         },
                     };
                     self.stack.push(Value::Closure(closure));
@@ -336,27 +352,27 @@ impl VM {
                     // | [fun] *pop* <-- store return_val
                     // | *pop*
                     // | [return_val]
-                    // 
+                    //
                     // however it has to go like this (or it'll break)
                     // | [fun][other_val][return_val]
                     // | [fun][other_val] *pop*
                     // | [fun] *pop*
                     // | *pop*
                     // | [return_val]
-                    //
+
                     let result = self.stack.pop().unwrap(); // pop return value
 
                     // if that was the last frame, exit the VM.
                     if self.frame_count - 1 == 0 {
                         self.stack.pop();
-                        return;
+                        return Ok(());
                     }
 
                     self.frame_count -= 1;
 
                     self.stack.pop(); // this is supposed to be the function being returned from.
                     self.stack.pop(); // why do we have to pop something twice?
-                    
+
                     self.stack.push(result); // push the result back onto the stack.
 
                     self.frames.pop();
