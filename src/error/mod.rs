@@ -1,69 +1,11 @@
-use std::io::{self};
-use termcolor::{Color, ColorSpec, WriteColor};
-
-use crate::common::span::Span;
-
 pub mod diagnostic;
+pub mod renderer;
+pub mod views;
 
-pub use diagnostic::{AsDiagnostic, Diagnostic, Label};
+use termcolor::WriteColor;
 
-pub struct Renderer<'writer> {
-    pub writer: &'writer mut dyn WriteColor,
-}
-/*
-impl<'writer> Renderer<'writer> {
-    pub fn new(writer: &'writer mut dyn WriteColor) -> Renderer<'writer> {
-        Renderer { writer }
-    }
-
-    pub fn render(&self, diagnostic: impl AsDiagnostic) {}
-
-    /// Render diagnostic's severity level and message
-    /// 
-    /// ```text
-    /// error: some error message
-    /// ```
-    fn render_header(&mut self, severity: Severity, message: &str) -> Result<(), String> {
-        // write severity level name
-        match severity {
-            Severity::Bug => write!(self, "bug"),
-            Severity::Error => write!(self, "error"),
-            Severity::Warning => write!(self, "warning"),
-            Severity::Help => write!(self, "help"),
-            Severity::Note => write!(self, "note"),
-        }
-
-        // write message
-        write!(self, ": {}", message);
-
-        writeln!(self);
-
-        Ok(())
-    }
-
-    /// Render diagnostic's location
-    /// 
-    /// ```text
-    ///  --> path/to/file.rdsh:12:3
-    /// ```
-    fn render_location(&mut self, span: Span, padding: usize) -> Result<(), String> {
-        let (line_num, col_num) = Span::get_line_index(&span.source.contents, span.start)
-            .expect("Could not find line and column numbers");
-
-        write!(
-            self,
-            "{} --> {name}:{line_num}:{col_num}",
-            " ".repeat(padding),
-            name = span.source.as_ref().clone().path.to_string_lossy(),
-            line_num = line_num,
-            col_num = col_num,
-        );
-
-        writeln!(self);
-
-        Ok(())
-    }
-}*/
+pub use diagnostic::{AsDiagnostic, Diagnostic, Label, LabelStyle};
+use crate::common::span::Span;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Item {
@@ -80,19 +22,19 @@ impl Item {
         }
     }
 }
-/*
-pub struct Emitter<'a> {
-    renderer: Renderer<'a>,
+
+/// Emit a diagnostic
+pub fn emit(
+    writer: &mut dyn WriteColor, 
+    diagnostic: &Diagnostic,
+    display_style: u8, // HACK make this an enum or something 
+) -> Result<(), String> {
+    use self::renderer::Renderer;
+    use self::views::{ShortDiagnostic, RichDiagnostic};
+
+    let mut renderer = Renderer::new(writer);
+    match display_style {
+        0 => ShortDiagnostic::new(&diagnostic).render(&mut renderer),
+        _ => RichDiagnostic::new(&diagnostic).render(&mut renderer),
+    }
 }
-
-impl<'a> Emitter<'a> {
-    pub fn new(writer: &'a mut dyn WriteColor) -> Emitter<'a> {
-        Emitter {
-            renderer: Renderer::new(writer)
-        }
-    }
-
-    pub fn render(&self, diagnostic: Diagnostic) {
-        self.renderer.render_header(diagnostic.severity, &diagnostic.message);
-    }
-}*/
