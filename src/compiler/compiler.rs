@@ -1,13 +1,10 @@
-use crate::{
-    common::{
-        chunk::Chunk, disassembler::Disassembler, opcode::Opcode, span::Span,
-        value::Function as FunctionValue, value::Module as ModuleValue, value::Value,
-    },
-    compiler::{ast::*, table::SymbolTable, visitor::Visitor},
+use crate::common::{
+    value::Function as FunctionValue, value::Module as ModuleValue, Chunk, Disassembler, Opcode,
+    Span, Value,
 };
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use crate::compiler::{ast::*, table::SymbolTable, visitor::Visitor, Rc, RefCell, SyntaxError};
+use crate::RadishConfig;
 
 #[derive(Debug)]
 pub struct Local {
@@ -65,6 +62,7 @@ impl Frame {
 }
 
 pub struct Compiler<'a> {
+    config: Rc<RadishConfig>,
     scope_depth: usize,
     locals: Vec<Local>,
     loops: Vec<Loop>,
@@ -76,8 +74,9 @@ pub struct Compiler<'a> {
 }
 
 impl<'a> Compiler<'a> {
-    pub fn new(scope: &'a SymbolTable) -> Compiler<'a> {
+    pub fn new(scope: &'a SymbolTable, config: &Rc<RadishConfig>) -> Compiler<'a> {
         Compiler {
+            config: Rc::clone(&config),
             scope_depth: 0,
             locals: vec![],
             loops: vec![],
@@ -92,7 +91,7 @@ impl<'a> Compiler<'a> {
         &mut self,
         ast: &AST,
         scope: &'a SymbolTable,
-    ) -> Result<(Rc<RefCell<ModuleValue>>, FunctionValue), String> {
+    ) -> Result<(Rc<RefCell<ModuleValue>>, FunctionValue), SyntaxError> {
         self.scope = scope;
 
         let script = FunctionValue {
@@ -250,11 +249,11 @@ impl<'a> Compiler<'a> {
     fn load_variable(&mut self, name: &str) {
         let arg = match self.resolve_local(name) {
             Some(index) => {
-                self.emit_byte(Opcode::GetLocal as u8);
+                self.emit_byte(Opcode::LoadLocal as u8);
                 index as u32
             }
             None => {
-                self.emit_byte(Opcode::GetGlobal as u8);
+                self.emit_byte(Opcode::LoadGlobal as u8);
                 let index = self.module.borrow().get_index(name).unwrap();
                 index as u32
             }
@@ -270,11 +269,11 @@ impl<'a> Compiler<'a> {
     fn save_variable(&mut self, name: &str) {
         let arg = match self.resolve_local(name) {
             Some(index) => {
-                self.emit_byte(Opcode::SetLocal as u8);
+                self.emit_byte(Opcode::SaveLocal as u8);
                 index as u32
             }
             None => {
-                self.emit_byte(Opcode::SetGlobal as u8);
+                self.emit_byte(Opcode::SaveGlobal as u8);
                 //self.identifier_constant(name)
 
                 let index = self.module.borrow().get_index(name).unwrap();
@@ -286,7 +285,7 @@ impl<'a> Compiler<'a> {
             self.emit_byte(byte);
         }
 
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
     }
 
     /// Resolve a local variable with the given name. Returns the variable's
@@ -317,7 +316,7 @@ impl<'a> Compiler<'a> {
         self.scope_depth -= 1;
 
         while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth {
-            self.emit_byte(Opcode::Pop as u8);
+            self.emit_byte(Opcode::Del as u8);
             self.locals.pop();
         }
     }
@@ -354,7 +353,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// Sort of foward declare all globally scoped functions.
-    fn declare_globals(&mut self, ast: &AST) -> Result<(), String> {
+    fn declare_globals(&mut self, ast: &AST) -> Result<(), SyntaxError> {
         // add all global declarations to the module with a value of nil.
         for (name, _) in self.scope.all().iter() {
             self.module.borrow_mut().add_var(name.clone());
@@ -378,7 +377,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// Compile a function declaration,
-    fn function(&mut self, fun: &Function) -> Result<(), String> {
+    fn function(&mut self, fun: &Function) -> Result<(), SyntaxError> {
         if fun.params.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 parameters");
         }
@@ -403,7 +402,9 @@ impl<'a> Compiler<'a> {
 
         let frame = self.leave_function();
 
-        Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
+        if self.config.dump_code {
+            Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
+        }
 
         self.emit_constant(Value::from(frame.function));
         self.emit_byte(Opcode::Closure as u8);
@@ -412,8 +413,8 @@ impl<'a> Compiler<'a> {
     }
 }
 
-impl Visitor<(), String> for Compiler<'_> {
-    fn function_declaration(&mut self, fun: &Function) -> Result<(), String> {
+impl Visitor<(), SyntaxError> for Compiler<'_> {
+    fn function_declaration(&mut self, fun: &Function) -> Result<(), SyntaxError> {
         // at this point all global functions have already been compiled,
         // so only locally scoped functions have to be handled.
         if self.scope_depth > 0 {
@@ -429,16 +430,16 @@ impl Visitor<(), String> for Compiler<'_> {
         expr: &Expr,
         body: &Vec<Stmt>,
         else_branch: &Option<Box<Stmt>>,
-    ) -> Result<(), String> {
+    ) -> Result<(), SyntaxError> {
         self.expression(&expr)?;
         let then_jump = self.emit_jump(Opcode::JumpIfFalse);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
         self.block(&body)?;
 
         let else_jump = self.emit_jump(Opcode::Jump);
 
         self.patch_jump(then_jump);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         if let Some(else_branch) = &else_branch {
             self.statement(&else_branch)?;
@@ -449,7 +450,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn loop_statement(&mut self, body: &Vec<Stmt>) -> Result<(), String> {
+    fn loop_statement(&mut self, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
         let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
@@ -461,13 +462,13 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) -> Result<(), String> {
+    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
         let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
         self.expression(&expr)?;
         let exit_jump = self.emit_jump(Opcode::JumpIfFalse);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         self.block(&body)?;
 
@@ -475,12 +476,12 @@ impl Visitor<(), String> for Compiler<'_> {
 
         self.patch_jump(exit_jump);
         self.leave_loop();
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         Ok(())
     }
 
-    fn block(&mut self, body: &Vec<Stmt>) -> Result<(), String> {
+    fn block(&mut self, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
         self.enter_scope();
 
         for node in body {
@@ -492,7 +493,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn return_statement(&mut self, return_val: &Option<Expr>) -> Result<(), String> {
+    fn return_statement(&mut self, return_val: &Option<Expr>) -> Result<(), SyntaxError> {
         if self.scope_depth == 0 {
             panic!("Return statement outside of a function");
         }
@@ -508,9 +509,9 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn break_statement(&mut self, _: &Span) -> Result<(), String> {
+    fn break_statement(&mut self, _: &Span) -> Result<(), SyntaxError> {
         let exit_jump = self.emit_jump(Opcode::Jump);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         let index = &self.loops.len() - 1;
         self.loops[index].jump_placeholders.push(exit_jump);
@@ -518,7 +519,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn continue_statement(&mut self, _: &Span) -> Result<(), String> {
+    fn continue_statement(&mut self, _: &Span) -> Result<(), SyntaxError> {
         let loop_start = self.loops.last().unwrap().loop_start;
 
         self.emit_loop(loop_start);
@@ -526,7 +527,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn print(&mut self, expr: &Expr) -> Result<(), String> {
+    fn print(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         self.expression(&expr)?;
 
         self.emit_byte(Opcode::Print as u8);
@@ -534,7 +535,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) -> Result<(), String> {
+    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) -> Result<(), SyntaxError> {
         if self.scope_depth > 0 {
             if let Some(expr) = &init {
                 self.expression(&expr)?;
@@ -558,7 +559,12 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn assignment(&mut self, id: &Ident, op: &OpAssignment, expr: &Expr) -> Result<(), String> {
+    fn assignment(
+        &mut self,
+        id: &Ident,
+        op: &OpAssignment,
+        expr: &Expr,
+    ) -> Result<(), SyntaxError> {
         match op {
             OpAssignment::PlusEquals => {
                 self.load_variable(&id.name);
@@ -568,22 +574,22 @@ impl Visitor<(), String> for Compiler<'_> {
             OpAssignment::MinusEquals => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
-                self.emit_byte(Opcode::Subtract as u8);
+                self.emit_byte(Opcode::Sub as u8);
             }
             OpAssignment::MultiplyEquals => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
-                self.emit_byte(Opcode::Multiply as u8);
+                self.emit_byte(Opcode::Mul as u8);
             }
             OpAssignment::DivideEquals => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
-                self.emit_byte(Opcode::Divide as u8);
+                self.emit_byte(Opcode::Div as u8);
             }
             OpAssignment::ModuloEquals => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
-                self.emit_byte(Opcode::Remainder as u8);
+                self.emit_byte(Opcode::Rem as u8);
             }
             OpAssignment::Equals => {
                 self.expression(&expr)?;
@@ -595,37 +601,37 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn expression_stmt(&mut self, expr: &Expr) -> Result<(), String> {
+    fn expression_stmt(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         self.expression(&expr)?;
 
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         Ok(())
     }
 
-    fn binary_expression(&mut self, expr: &BinaryExpr) -> Result<(), String> {
+    fn binary_expression(&mut self, expr: &BinaryExpr) -> Result<(), SyntaxError> {
         self.expression(&expr.left)?;
         self.expression(&expr.right)?;
 
         match &expr.op {
             Op::Add => self.emit_byte(Opcode::Add as u8),
-            Op::Subtract => self.emit_byte(Opcode::Subtract as u8),
-            Op::Multiply => self.emit_byte(Opcode::Multiply as u8),
-            Op::Divide => self.emit_byte(Opcode::Divide as u8),
-            Op::Remainder => self.emit_byte(Opcode::Remainder as u8),
-            Op::LessThan => self.emit_byte(Opcode::LessThan as u8),
-            Op::LessThanEquals => self.emit_byte(Opcode::LessThanEquals as u8),
-            Op::GreaterThan => self.emit_byte(Opcode::GreaterThan as u8),
-            Op::GreaterThanEquals => self.emit_byte(Opcode::GreaterThanEquals as u8),
-            Op::EqualsTo => self.emit_byte(Opcode::EqualsTo as u8),
-            Op::NotEqual => self.emit_byte(Opcode::NotEqual as u8),
+            Op::Subtract => self.emit_byte(Opcode::Sub as u8),
+            Op::Multiply => self.emit_byte(Opcode::Mul as u8),
+            Op::Divide => self.emit_byte(Opcode::Div as u8),
+            Op::Remainder => self.emit_byte(Opcode::Rem as u8),
+            Op::LessThan => self.emit_byte(Opcode::CmpLT as u8),
+            Op::LessThanEquals => self.emit_byte(Opcode::CmpLTEq as u8),
+            Op::GreaterThan => self.emit_byte(Opcode::CmpGT as u8),
+            Op::GreaterThanEquals => self.emit_byte(Opcode::CmpGTEq as u8),
+            Op::EqualsTo => self.emit_byte(Opcode::CmpEq as u8),
+            Op::NotEqual => self.emit_byte(Opcode::CmpNotEq as u8),
             _ => unreachable!("{:?} is not a binary operator.", &expr.op),
         }
 
         Ok(())
     }
 
-    fn logical_expr(&mut self, expr: &BinaryExpr) -> Result<(), String> {
+    fn logical_expr(&mut self, expr: &BinaryExpr) -> Result<(), SyntaxError> {
         self.expression(&expr.left)?;
 
         let op = match &expr.op {
@@ -635,7 +641,7 @@ impl Visitor<(), String> for Compiler<'_> {
         };
 
         let end_jump = self.emit_jump(op);
-        self.emit_byte(Opcode::Pop as u8);
+        self.emit_byte(Opcode::Del as u8);
 
         self.expression(&expr.right)?;
 
@@ -644,11 +650,11 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn unary(&mut self, arg: &Expr, op: &Op) -> Result<(), String> {
+    fn unary(&mut self, arg: &Expr, op: &Op) -> Result<(), SyntaxError> {
         self.expression(&arg)?;
 
         match op {
-            Op::Subtract => self.emit_byte(Opcode::Negate as u8),
+            Op::Subtract => self.emit_byte(Opcode::Neg as u8),
             Op::Bang => self.emit_byte(Opcode::Not as u8),
             _ => unreachable!("{:?} is not an unary operator.", &op),
         }
@@ -656,7 +662,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) -> Result<(), String> {
+    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) -> Result<(), SyntaxError> {
         if args.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 arguments.");
         }
@@ -672,22 +678,22 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn identifier(&mut self, id: &Ident) -> Result<(), String> {
+    fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {
         self.load_variable(&id.name);
         Ok(())
     }
 
-    fn number(&mut self, val: &f64) -> Result<(), String> {
+    fn number(&mut self, val: &f64) -> Result<(), SyntaxError> {
         self.emit_constant(Value::Number(*val));
         Ok(())
     }
 
-    fn string(&mut self, val: &str) -> Result<(), String> {
+    fn string(&mut self, val: &str) -> Result<(), SyntaxError> {
         self.emit_constant(Value::from(val));
         Ok(())
     }
 
-    fn boolean(&mut self, val: &bool) -> Result<(), String> {
+    fn boolean(&mut self, val: &bool) -> Result<(), SyntaxError> {
         match val {
             true => self.emit_byte(Opcode::True as u8),
             false => self.emit_byte(Opcode::False as u8),
@@ -695,7 +701,7 @@ impl Visitor<(), String> for Compiler<'_> {
         Ok(())
     }
 
-    fn nil(&mut self) -> Result<(), String> {
+    fn nil(&mut self) -> Result<(), SyntaxError> {
         self.emit_byte(Opcode::Nil as u8);
         Ok(())
     }
@@ -729,7 +735,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::Add as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -750,7 +756,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::Subtract as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -771,7 +777,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::Multiply as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -792,7 +798,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::Divide as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -813,7 +819,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::LessThan as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -834,7 +840,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::LessThanEquals as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -855,7 +861,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::GreaterThan as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -876,7 +882,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::GreaterThanEquals as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -897,7 +903,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::EqualsTo as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -918,7 +924,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 1,
                 Opcode::NotEqual as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -942,7 +948,7 @@ mod tests {
                 2,
                 Opcode::Multiply as u8,
                 Opcode::Add as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -961,7 +967,7 @@ mod tests {
                 Opcode::LoadConst as u8,
                 0,
                 Opcode::Negate as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             )
         );
@@ -976,7 +982,7 @@ mod tests {
             vec![
                 Opcode::True as u8,
                 Opcode::Not as u8,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8
             ]
         );
@@ -987,13 +993,13 @@ mod tests {
         let result = run_test_compiler("true");
         assert_eq!(
             result.chunk.code,
-            vec!(Opcode::True as u8, Opcode::Pop as u8, Opcode::Halt as u8)
+            vec!(Opcode::True as u8, Opcode::Del as u8, Opcode::Halt as u8)
         );
 
         let result = run_test_compiler("false");
         assert_eq!(
             result.chunk.code,
-            vec!(Opcode::False as u8, Opcode::Pop as u8, Opcode::Halt as u8)
+            vec!(Opcode::False as u8, Opcode::Del as u8, Opcode::Halt as u8)
         );
     }
 
@@ -1002,7 +1008,7 @@ mod tests {
         let result = run_test_compiler("nil");
         assert_eq!(
             result.chunk.code,
-            vec![Opcode::Nil as u8, Opcode::Pop as u8, Opcode::Halt as u8]
+            vec![Opcode::Nil as u8, Opcode::Del as u8, Opcode::Halt as u8]
         );
     }
 
@@ -1063,7 +1069,7 @@ mod tests {
             vec![
                 Opcode::LoadConst as u8,
                 0,
-                Opcode::Pop as u8,
+                Opcode::Del as u8,
                 Opcode::Halt as u8,
             ]
         );

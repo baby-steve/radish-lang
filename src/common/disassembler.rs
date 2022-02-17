@@ -13,8 +13,6 @@ impl<'a> Disassembler<'a> {
     pub fn disassemble_chunk(name: &str, function: &Function) {
         let dis = Disassembler::new(name, function);
 
-        dbg!(&function.chunk.code);
-
         println!("Disassembling \"{}\"...", dis.name);
         let mut offset = 0;
 
@@ -38,41 +36,34 @@ impl<'a> Disassembler<'a> {
         match Opcode::from(byte) {
             Opcode::LoadConst => self.byte_instruction("LoadConst", offset),
             Opcode::LoadConstLong => self.long_const_instruction("LoadConstLong", offset, true),
-            Opcode::Pop => self.simple_instruction("Pop", offset),
-
+            Opcode::Del => self.simple_instruction("Pop", offset),
             Opcode::DefGlobal => self.write_global("DefGlobal", offset),
-            Opcode::GetGlobal => self.write_global("GetGlobal", offset),
-            Opcode::SetGlobal => self.write_global("SetGlobal", offset),
-
-            Opcode::GetLocal => self.long_const_instruction("GetLocal", offset, false),
-            Opcode::SetLocal => self.long_const_instruction("SetLocal", offset, false),
-
+            Opcode::LoadGlobal => self.write_global("GetGlobal", offset),
+            Opcode::SaveGlobal => self.write_global("SetGlobal", offset),
+            Opcode::LoadLocal => self.long_const_instruction("GetLocal", offset, false),
+            Opcode::SaveLocal => self.long_const_instruction("SetLocal", offset, false),
             Opcode::GetCapture => self.long_const_instruction("GetCapture", offset, false),
             Opcode::SetCapture => self.long_const_instruction("SetCapture", offset, false),
-
             Opcode::True => self.simple_instruction("True", offset),
             Opcode::False => self.simple_instruction("False", offset),
             Opcode::Nil => self.simple_instruction("Nil", offset),
-
             Opcode::Add => self.simple_instruction("Add", offset),
-            Opcode::Subtract => self.simple_instruction("Subtract", offset),
-            Opcode::Multiply => self.simple_instruction("Multiply", offset),
-            Opcode::Divide => self.simple_instruction("Divide", offset),
-            Opcode::Remainder => self.simple_instruction("Remainder", offset),
-            Opcode::LessThan => self.simple_instruction("LessThan", offset),
-            Opcode::LessThanEquals => self.simple_instruction("LessThanEquals", offset),
-            Opcode::GreaterThan => self.simple_instruction("GreaterThan", offset),
-            Opcode::GreaterThanEquals => self.simple_instruction("GreaterThanEquals", offset),
-            Opcode::EqualsTo => self.simple_instruction("EqualsTo", offset),
-            Opcode::NotEqual => self.simple_instruction("NotEqual", offset),
-            Opcode::Negate => self.simple_instruction("Negate", offset),
+            Opcode::Sub => self.simple_instruction("Sub", offset),
+            Opcode::Mul => self.simple_instruction("Mul", offset),
+            Opcode::Div => self.simple_instruction("Div", offset),
+            Opcode::Rem => self.simple_instruction("Rem", offset),
+            Opcode::Neg => self.simple_instruction("Negate", offset),
             Opcode::Not => self.simple_instruction("Not", offset),
-
+            Opcode::CmpLT => self.simple_instruction("LessThan", offset),
+            Opcode::CmpLTEq => self.simple_instruction("LessThanEquals", offset),
+            Opcode::CmpGT => self.simple_instruction("GreaterThan", offset),
+            Opcode::CmpGTEq => self.simple_instruction("GreaterThanEquals", offset),
+            Opcode::CmpEq => self.simple_instruction("EqualsTo", offset),
+            Opcode::CmpNotEq => self.simple_instruction("NotEqual", offset),
             Opcode::JumpIfTrue => self.jump_instruction("JumpIfTrue", 1, offset),
             Opcode::JumpIfFalse => self.jump_instruction("JumpIfFalse", 1, offset),
             Opcode::Jump => self.jump_instruction("Jump", 1, offset),
             Opcode::Loop => self.jump_instruction("Loop", -1, offset),
-
             Opcode::Call => {
                 self.write_instruction("Call", offset);
 

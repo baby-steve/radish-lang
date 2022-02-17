@@ -7,3 +7,9 @@ pub mod opcode;
 pub mod source;
 pub mod span;
 pub mod value;
+
+pub use chunk::Chunk;
+pub use disassembler::Disassembler;
+pub use opcode::Opcode;
+pub use span::Span;
+pub use value::Value;

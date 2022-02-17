@@ -3,15 +3,18 @@ use std::rc::Rc;
 
 use crate::compiler::{
     ast::*,
-    error::{ParseError, ParseErrorKind},
+    error::{SyntaxError, SyntaxErrorKind},
     scanner::Scanner,
     token::{Token, TokenType},
 };
+
+use crate::RadishConfig;
 
 use crate::common::{source::Source, span::Span};
 use crate::error::Item;
 
 pub struct Parser {
+    config: Rc<RadishConfig>,
     source: Rc<Source>,
     scanner: Scanner,
     previous: Token,
@@ -19,8 +22,9 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(source: Rc<Source>) -> Parser {
+    pub fn new(source: Rc<Source>, config: &Rc<RadishConfig>) -> Parser {
         Parser {
+            config: Rc::clone(&config),
             source: Rc::clone(&source),
             scanner: Scanner::new(source),
             previous: Token::empty(),
@@ -28,13 +32,19 @@ impl Parser {
         }
     }
 
-    pub fn parse(&mut self) -> Result<AST, ParseError> {
+    pub fn parse(&mut self) -> Result<AST, SyntaxError> {
         self.advance();
 
-        match self.parse_body() {
+        let res = match self.parse_body() {
             Ok(items) => Ok(AST::new(items)),
             Err(err) => Err(err),
+        };
+
+        if self.config.dump_ast {
+            println!("{:#?}", &res);
         }
+
+        res
     }
 
     fn advance(&mut self) {
@@ -66,20 +76,20 @@ impl Parser {
         }
     }
 
-    fn error(&mut self, err_kind: ParseErrorKind) -> ParseError {
-        ParseError::new(err_kind)
+    fn error(&mut self, err_kind: SyntaxErrorKind) -> SyntaxError {
+        SyntaxError::new(err_kind)
     }
 
-    fn expect(&mut self, expected: TokenType) -> Result<(), ParseError> {
+    fn expect(&mut self, expected: TokenType) -> Result<(), SyntaxError> {
         if !self.match_token(&expected) {
             let actual = self.current.clone();
 
-            let err_kind = ParseErrorKind::Expected {
+            let err_kind = SyntaxErrorKind::Expected {
                 expected: Item::new(&Span::empty(), expected.syntax()),
                 actual: Item::new(&actual.span, actual.syntax()),
             };
 
-            let err = ParseError::new(err_kind);
+            let err = SyntaxError::new(err_kind);
 
             Err(err)
         } else {
@@ -87,7 +97,7 @@ impl Parser {
         }
     }
 
-    fn parse_body(&mut self) -> Result<Vec<Stmt>, ParseError> {
+    fn parse_body(&mut self) -> Result<Vec<Stmt>, SyntaxError> {
         let mut items = vec![];
 
         loop {
@@ -110,7 +120,7 @@ impl Parser {
     }
 
     /// Parse everything up to, but not including, a delimiter.
-    fn parse_block(&mut self) -> Result<Vec<Stmt>, ParseError> {
+    fn parse_block(&mut self) -> Result<Vec<Stmt>, SyntaxError> {
         let opening_delimiter = self.previous.clone();
 
         let mut body = vec![];
@@ -138,7 +148,7 @@ impl Parser {
             | (TokenType::Loop, TokenType::EndLoop)
             | (TokenType::LeftParen, TokenType::RightParen) => return Ok(body),
             _ => {
-                let err_kind = ParseErrorKind::MismatchedDelimiter {
+                let err_kind = SyntaxErrorKind::MismatchedDelimiter {
                     first: Item::new(&opening_delimiter.span, opening_delimiter.syntax()),
                     second: Item::new(&closing_delimiter.span, closing_delimiter.syntax()),
                 };
@@ -150,7 +160,7 @@ impl Parser {
         }
     }
 
-    fn parse_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_statement(&mut self) -> Result<Stmt, SyntaxError> {
         match self.current.token_type {
             // "{" ...
             TokenType::LeftBrace => {
@@ -190,7 +200,7 @@ impl Parser {
         }
     }
 
-    fn parse_fun_declaration(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_fun_declaration(&mut self) -> Result<Stmt, SyntaxError> {
         let start = self.current.span.clone();
 
         // fun ...
@@ -218,7 +228,7 @@ impl Parser {
         Ok(Stmt::FunDeclaration(function, span))
     }
 
-    fn parse_var_declaration(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_var_declaration(&mut self) -> Result<Stmt, SyntaxError> {
         // var ...
         let start = Span::from(&self.current.span);
 
@@ -242,7 +252,7 @@ impl Parser {
         Ok(Stmt::VarDeclaration(id, init, span))
     }
 
-    fn parse_if_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_if_statement(&mut self) -> Result<Stmt, SyntaxError> {
         // if ...
         let start = Span::from(&self.current.span);
         self.consume(TokenType::If);
@@ -284,7 +294,7 @@ impl Parser {
         ))
     }
 
-    fn parse_loop_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_loop_statement(&mut self) -> Result<Stmt, SyntaxError> {
         let start = self.current.span.clone();
 
         // loop ...
@@ -302,7 +312,7 @@ impl Parser {
         ))
     }
 
-    fn parse_while_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_while_statement(&mut self) -> Result<Stmt, SyntaxError> {
         let start = self.current.span.clone();
 
         // while ...
@@ -327,21 +337,21 @@ impl Parser {
         ))
     }
 
-    fn parse_break_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_break_statement(&mut self) -> Result<Stmt, SyntaxError> {
         // Todo: should be able to break to a label.
         self.consume(TokenType::Break);
 
         Ok(Stmt::BreakStmt(Span::from(&self.previous.span)))
     }
 
-    fn parse_continue_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_continue_statement(&mut self) -> Result<Stmt, SyntaxError> {
         // Todo: should be able to continue to a label.
         self.consume(TokenType::Continue);
 
         Ok(Stmt::ContinueStmt(Span::from(&self.previous.span)))
     }
 
-    fn parse_return_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_return_statement(&mut self) -> Result<Stmt, SyntaxError> {
         let start = self.current.span.clone();
 
         // return ...
@@ -361,7 +371,7 @@ impl Parser {
         Ok(Stmt::ReturnStmt(return_val, span))
     }
 
-    fn parse_print_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_print_statement(&mut self) -> Result<Stmt, SyntaxError> {
         let start = self.current.clone().span;
 
         self.consume(TokenType::Print);
@@ -373,11 +383,11 @@ impl Parser {
         Ok(Stmt::PrintStmt(expr, Span::combine(&start, end)))
     }
 
-    fn parse_expression_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_expression_statement(&mut self) -> Result<Stmt, SyntaxError> {
         Ok(Stmt::ExpressionStmt(Box::new(self.parse_expression()?)))
     }
 
-    fn parse_assignment_statement(&mut self) -> Result<Stmt, ParseError> {
+    fn parse_assignment_statement(&mut self) -> Result<Stmt, SyntaxError> {
         let node = self.parse_expression()?;
 
         let op = match self.current.token_type {
@@ -418,10 +428,10 @@ impl Parser {
         let id = match node {
             Expr::Identifier(id) => id,
             _ => {
-                let err_kind = ParseErrorKind::ExpectedIdent {
+                let err_kind = SyntaxErrorKind::ExpectedIdent {
                     actual: Item::new(&self.current.span, self.current.syntax()),
                 };
-                let err = ParseError::new(err_kind);
+                let err = SyntaxError::new(err_kind);
                 return Err(err);
             }
         };
@@ -433,17 +443,17 @@ impl Parser {
         Ok(Stmt::Assignment(id, op, right, span))
     }
 
-    fn parse_expression(&mut self) -> Result<Expr, ParseError> {
+    fn parse_expression(&mut self) -> Result<Expr, SyntaxError> {
         match self.parse_boolean_expression() {
             Ok(expr) => Ok(expr),
             Err(err) => match err.kind {
-                ParseErrorKind::Unexpected { found } => {
-                    let err_kind = ParseErrorKind::ExpectedExpression { actual: found };
+                SyntaxErrorKind::Unexpected { found } => {
+                    let err_kind = SyntaxErrorKind::ExpectedExpression { actual: found };
                     let err = self.error(err_kind);
                     return Err(err);
                 }
-                ParseErrorKind::UnexpectedEof { location } => {
-                    let err_kind = ParseErrorKind::ExpectedExpression {
+                SyntaxErrorKind::UnexpectedEof { location } => {
+                    let err_kind = SyntaxErrorKind::ExpectedExpression {
                         actual: Item::new(&location, "<eof>"),
                     };
                     let err = self.error(err_kind);
@@ -454,7 +464,7 @@ impl Parser {
         }
     }
 
-    fn parse_boolean_expression(&mut self) -> Result<Expr, ParseError> {
+    fn parse_boolean_expression(&mut self) -> Result<Expr, SyntaxError> {
         let mut node = self.parse_boolean_term()?;
 
         loop {
@@ -474,7 +484,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_boolean_term(&mut self) -> Result<Expr, ParseError> {
+    fn parse_boolean_term(&mut self) -> Result<Expr, SyntaxError> {
         let mut node = self.parse_boolean_factor()?;
 
         loop {
@@ -494,7 +504,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_boolean_factor(&mut self) -> Result<Expr, ParseError> {
+    fn parse_boolean_factor(&mut self) -> Result<Expr, SyntaxError> {
         let mut node = self.parse_sum()?;
 
         loop {
@@ -571,7 +581,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_sum(&mut self) -> Result<Expr, ParseError> {
+    fn parse_sum(&mut self) -> Result<Expr, SyntaxError> {
         // expr ...
         let mut node = self.parse_term()?;
 
@@ -604,7 +614,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_term(&mut self) -> Result<Expr, ParseError> {
+    fn parse_term(&mut self) -> Result<Expr, SyntaxError> {
         // expr ...
         let mut node = self.parse_member()?;
 
@@ -649,7 +659,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_member(&mut self) -> Result<Expr, ParseError> {
+    fn parse_member(&mut self) -> Result<Expr, SyntaxError> {
         let mut node = self.parse_factor()?;
 
         loop {
@@ -669,7 +679,7 @@ impl Parser {
         Ok(node)
     }
 
-    fn parse_factor(&mut self) -> Result<Expr, ParseError> {
+    fn parse_factor(&mut self) -> Result<Expr, SyntaxError> {
         loop {
             let current = self.current.clone();
 
@@ -742,7 +752,7 @@ impl Parser {
                 // <eof>
                 TokenType::Eof => {
                     // if an <eof> token is found here, it has to be an error.
-                    return Err(self.error(ParseErrorKind::UnexpectedEof {
+                    return Err(self.error(SyntaxErrorKind::UnexpectedEof {
                         location: self.current.span.clone(),
                     }));
                 }
@@ -759,12 +769,12 @@ impl Parser {
                 // lexer error
                 TokenType::Error(err) => {
                     let message = err.to_string();
-                    let err = self.error(ParseErrorKind::Custom { message });
+                    let err = self.error(SyntaxErrorKind::Custom { message });
                     return Err(err);
                 }
                 _ => {
                     let current = self.current.clone();
-                    let err_kind = ParseErrorKind::Unexpected {
+                    let err_kind = SyntaxErrorKind::Unexpected {
                         found: Item::new(&current.span, current.syntax()),
                     };
                     let err = self.error(err_kind);
@@ -774,7 +784,7 @@ impl Parser {
         }
     }
 
-    fn parse_identifier(&mut self) -> Result<Ident, ParseError> {
+    fn parse_identifier(&mut self) -> Result<Ident, SyntaxError> {
         let token = self.current.clone();
 
         match token.token_type {
@@ -789,16 +799,16 @@ impl Parser {
             }
             // <error>
             _ => {
-                let err_kind = ParseErrorKind::ExpectedIdent {
+                let err_kind = SyntaxErrorKind::ExpectedIdent {
                     actual: Item::new(&self.current.span, token.syntax()),
                 };
-                let err = ParseError::new(err_kind);
+                let err = SyntaxError::new(err_kind);
                 return Err(err);
             }
         }
     }
 
-    fn parse_arg_list(&mut self) -> Result<Vec<Box<Expr>>, ParseError> {
+    fn parse_arg_list(&mut self) -> Result<Vec<Box<Expr>>, SyntaxError> {
         self.consume(TokenType::LeftParen);
 
         let mut args = vec![];
@@ -817,7 +827,7 @@ impl Parser {
         Ok(args)
     }
 
-    fn parse_params(&mut self) -> Result<Vec<Ident>, ParseError> {
+    fn parse_params(&mut self) -> Result<Vec<Ident>, SyntaxError> {
         self.expect(TokenType::LeftParen)?;
 
         let mut args = vec![];
@@ -836,7 +846,7 @@ impl Parser {
         Ok(args)
     }
 
-    fn parse_paren(&mut self) -> Result<Expr, ParseError> {
+    fn parse_paren(&mut self) -> Result<Expr, SyntaxError> {
         let start = self.current.span.clone();
 
         // ( ...
@@ -1437,14 +1447,14 @@ mod tests {
         let mut parser = Parser::new(Source::source(""));
 
         // if the first error is Unexpected return the second error.
-        let first = ParseError::new(SyntaxError::UnexpectedError(UnexpectedEOF), &Span::empty());
+        let first = SyntaxError::new(SyntaxError::UnexpectedError(UnexpectedEOF), &Span::empty());
         let second = ExpectedError(ExpectedExpression(first.error.to_string()));
 
         let from = parser.make_error(first, second);
 
         assert_eq!(
             from,
-            ParseError::new(
+            SyntaxError::new(
                 ExpectedError(ExpectedExpression(
                     SyntaxError::UnexpectedError(UnexpectedEOF).to_string(),
                 )),
@@ -1453,7 +1463,7 @@ mod tests {
         );
 
         // If the first is expected, return the the first error.
-        let first = ParseError::new(
+        let first = SyntaxError::new(
             ExpectedError(ExpectedExpression("found error".to_string())),
             &Span::empty(),
         );
@@ -1463,14 +1473,14 @@ mod tests {
 
         assert_eq!(
             from,
-            ParseError::new(
+            SyntaxError::new(
                 ExpectedError(ExpectedExpression("found error".to_string())),
                 &Span::empty(),
             )
         );
 
         // if the both are expected, return the first error.
-        let first = ParseError::new(
+        let first = SyntaxError::new(
             ExpectedError(ExpectedExpression("found error".to_string())),
             &Span::empty(),
         );
@@ -1479,7 +1489,7 @@ mod tests {
 
         assert_eq!(
             from,
-            ParseError::new(
+            SyntaxError::new(
                 ExpectedError(ExpectedExpression("found error".to_string())),
                 &Span::empty(),
             )

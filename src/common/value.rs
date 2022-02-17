@@ -5,7 +5,7 @@ use std::fmt;
 use std::ops::{Add, Div, Mul, Neg, Not, Sub, Rem};
 use std::rc::{Rc, Weak};
 
-use crate::common::chunk::Chunk;
+use crate::common::Chunk;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum Value {
