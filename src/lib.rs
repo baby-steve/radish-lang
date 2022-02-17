@@ -8,12 +8,15 @@ pub use cli::Cli;
 
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::fmt;
 
 use common::{source::Source, value::Function, value::Module};
 use compiler::{
-    analysis::Analyzer, ast::AST, compiler::Compiler, parser::Parser, table::SymbolTable,
+    analysis::Analyzer, ast::AST, compiler::Compiler, error::SyntaxError, parser::Parser,
+    table::SymbolTable,
 };
-use vm::vm::VM;
+
+use vm::{trace::Trace, vm::VM};
 
 pub trait RadishFile {
     fn write(&self, msg: &str);
@@ -34,26 +37,106 @@ impl RadishFile for RadishIO {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct IOError(std::sync::Arc<std::io::Error>);
+
+impl fmt::Display for IOError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl Eq for IOError {}
+
+impl PartialEq for IOError {
+    fn eq(&self, other: &Self) -> bool {
+        std::ptr::eq(&*self.0, &*other.0)
+    }
+}
+
+impl From<std::io::Error> for IOError {
+    fn from(err: std::io::Error) -> IOError {
+        IOError(std::sync::Arc::new(err.into()))
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum RadishError {
-    CompilerError,
-    RuntimeError,
+    CompilerError(SyntaxError),
+    RuntimeError(Trace),
+    IOError(IOError),
+}
+
+impl From<SyntaxError> for RadishError {
+    fn from(err: SyntaxError) -> RadishError {
+        RadishError::CompilerError(err)
+    }
+}
+
+impl From<Trace> for RadishError {
+    fn from(err: Trace) -> RadishError {
+        RadishError::RuntimeError(err)
+    }
+}
+
+impl From<std::io::Error> for RadishError {
+    fn from(err: std::io::Error) -> RadishError {
+        RadishError::IOError(err.into())
+    }
+}
+
+impl RadishError {
+    pub fn emit(&self) {
+        match &self {
+            RadishError::CompilerError(err) => {
+                use termcolor::{ColorChoice, StandardStream};
+                let mut temp_stderr = StandardStream::stderr(ColorChoice::Always);
+                error::emit(&mut temp_stderr, &err.report(), 1).unwrap();
+            }
+            RadishError::RuntimeError(err) => print!("{}", err),
+            RadishError::IOError(err) => print!("{}", err),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub struct RadishConfig {
     stdout: Rc<dyn RadishFile>,
+    dump_ast: bool,
+    dump_code: bool,
+    trace: bool,
+}
+
+impl Default for RadishConfig {
+    fn default() -> RadishConfig {
+        RadishConfig {
+            stdout: Rc::new(RadishIO),
+            dump_ast: false,
+            dump_code: false,
+            trace: false,
+        }
+    }
 }
 
 impl RadishConfig {
     pub fn new() -> Rc<RadishConfig> {
-        Rc::new(RadishConfig {
-            stdout: Rc::new(RadishIO),
-        })
+        Rc::new(RadishConfig::default())
     }
 
     pub fn with_stdout(stdout: Rc<dyn RadishFile>) -> Rc<RadishConfig> {
-        Rc::new(RadishConfig { stdout })
+        Rc::new(RadishConfig {
+            stdout,
+            ..RadishConfig::default()
+        })
+    }
+
+    pub fn from_cli(cli: &Cli) -> Rc<RadishConfig> {
+        Rc::new(RadishConfig {
+            dump_ast: cli.dump_ast,
+            dump_code: cli.dump_code,
+            trace: cli.trace,
+            ..RadishConfig::default()
+        })
     }
 }
 
@@ -71,11 +154,19 @@ impl Radish {
         Radish { config }
     }
 
-    pub fn parse_source(&mut self, source: Rc<Source>) -> AST {
-        let mut parser = Parser::new(source);
+    pub fn parse_source(&mut self, source: Rc<Source>) -> Result<AST, RadishError> {
+        let mut parser = Parser::new(source, &self.config);
         match parser.parse() {
-            Ok(ast) => ast,
-            Err(_) => todo!(),
+            Ok(ast) => Ok(ast),
+            Err(err) => {
+                // TODO: replace this with config's own stderr.
+                //use termcolor::{ColorChoice, StandardStream};
+                //let mut temp_stderr = StandardStream::stderr(ColorChoice::Always);
+                //error::emit(&mut temp_stderr, &err.report(), 1).unwrap();
+
+                //panic!("error: failed to parse");
+                Err(RadishError::from(err))
+            }
         }
     }
 
@@ -92,28 +183,36 @@ impl Radish {
 
     pub fn compile(&mut self, ast: &AST, scope: &SymbolTable) -> (Rc<RefCell<Module>>, Function) {
         // TODO: why are we passing `scope` to the compiler twice?
-        let mut compiler = Compiler::new(&scope);
+        let mut compiler = Compiler::new(&scope, &self.config);
         match compiler.compile(&ast, &scope) {
             Ok(res) => res,
             Err(_) => todo!(),
         }
     }
 
-    pub fn interpret(&mut self, script: Function, module: Rc<RefCell<Module>>) {
+    pub fn interpret(
+        &mut self,
+        script: Function,
+        module: Rc<RefCell<Module>>,
+    ) -> Result<(), RadishError> {
         let mut vm = VM::new(&self.config);
 
-        vm.interpret(script, module);
+        let res = vm.interpret(script, module)?;
+
+        Ok(res)
     }
 
-    pub fn run_from_source(&mut self, src: Rc<Source>) {
-        let ast = self.parse_source(src.clone());
+    pub fn run_from_source(&mut self, src: Rc<Source>) -> Result<(), RadishError> {
+        let ast = self.parse_source(src.clone())?;
         let scope = self.check(&ast);
         //println!("{:#?}", &ast);
         let (module, script) = self.compile(&ast, &scope);
-        self.interpret(script, module);
+        let res = self.interpret(script, module)?;
+
+        Ok(res)
     }
 
-    pub fn read_file(&self, path: &str) -> Result<Rc<Source>, Box<dyn std::error::Error>> {
+    pub fn read_file(&self, path: &str) -> Result<Rc<Source>, RadishError> {
         let path_buf = std::path::PathBuf::from(path);
         let result = std::fs::read_to_string(&path_buf);
 
