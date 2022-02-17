@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use crate::common::value::Value;
 
 /// A chunk of bytecode and its associated data.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Chunk {
     /// An array where each byte is either an Opcode or a number-stream.
     pub code: Vec<u8>,

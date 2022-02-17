@@ -1,7 +1,7 @@
-use std::{cell::RefCell, convert::TryInto, rc::Rc};
+use std::{convert::TryInto, rc::Rc};
 
 use crate::{
-    common::{value::Closure, value::Function, value::Module, value::Value, Disassembler, Opcode},
+    common::{value::Closure, CompiledModule, Module, value::Value, Disassembler, Opcode},
     vm::stack::Stack,
     vm::trace::Trace,
 };
@@ -26,7 +26,8 @@ pub struct VM {
 
     pub config: Rc<RadishConfig>,
 
-    pub last_module: Rc<RefCell<Module>>,
+    //pub last_module: Module,
+    pub last_module: CompiledModule,
 }
 
 impl VM {
@@ -43,13 +44,13 @@ impl VM {
 
     pub fn interpret(
         &mut self,
-        script: Function,
-        module: Rc<RefCell<Module>>,
+        module: CompiledModule,
     ) -> Result<(), Trace> {
         self.last_module = module;
 
         let closure = Closure {
-            function: Rc::new(script),
+            //function: Rc::new(script),
+            function: self.last_module.borrow().entry(),
         };
         self.stack.push(Value::Closure(closure.clone()));
         self.call_function(closure, 0)?;
