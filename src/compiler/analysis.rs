@@ -24,7 +24,7 @@ pub struct Analyzer {
 
 impl Analyzer {
     pub fn new() -> Self {
-        Analyzer::with_scope(SymbolTable::new(0))
+        Analyzer::with_scope(SymbolTable::new())
     }
 
     pub fn with_scope(scope: SymbolTable) -> Analyzer {
@@ -64,7 +64,7 @@ impl Analyzer {
     }
 
     fn enter_scope(&mut self) {
-        self.scopes.push(SymbolTable::new(self.scopes.len()));
+        self.scopes.push(SymbolTable::with_depth(self.scopes.len()));
     }
 
     fn renter_scope(&mut self, scope: SymbolTable) {
