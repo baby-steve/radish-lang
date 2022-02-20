@@ -51,11 +51,20 @@ impl fmt::Display for Symbol {
 pub struct SymbolTable {
     pub locals: HashMap<String, Symbol>,
     pub non_locals: HashMap<String, Symbol>,
+    // TODO: do we really need this?
     pub depth: usize,
 }
 
 impl SymbolTable {
-    pub fn new(depth: usize) -> Self {
+    pub fn new() -> Self {
+        SymbolTable {
+            locals: HashMap::new(),
+            non_locals: HashMap::new(),
+            depth: 0,
+        }
+    }
+
+    pub fn with_depth(depth: usize) -> Self {
         SymbolTable {
             locals: HashMap::new(),
             non_locals: HashMap::new(),

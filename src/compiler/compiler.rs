@@ -1,9 +1,9 @@
 use crate::common::{
-    value::Function as FunctionValue, value::Module as ModuleValue, Chunk, Disassembler, Opcode,
-    Span, Value,
+    CompiledModule, value::Function as FunctionValue, Module, Chunk, Disassembler,
+    Opcode, Span, Value,
 };
 
-use crate::compiler::{ast::*, table::SymbolTable, visitor::Visitor, Rc, RefCell, SyntaxError};
+use crate::compiler::{ast::*, table::SymbolTable, visitor::Visitor, Rc, SyntaxError};
 use crate::RadishConfig;
 
 #[derive(Debug)]
@@ -64,13 +64,13 @@ impl Frame {
 pub struct Compiler<'a> {
     config: Rc<RadishConfig>,
     scope_depth: usize,
-    locals: Vec<Local>,
-    loops: Vec<Loop>,
+    scope: &'a SymbolTable,
     frame_count: usize,
     frame: Vec<Frame>,
-    scope: &'a SymbolTable,
+    locals: Vec<Local>,
+    loops: Vec<Loop>,
 
-    module: Rc<RefCell<ModuleValue>>,
+    module: CompiledModule,
 }
 
 impl<'a> Compiler<'a> {
@@ -83,7 +83,7 @@ impl<'a> Compiler<'a> {
             frame_count: 0,
             frame: vec![],
             scope,
-            module: ModuleValue::new("test"),
+            module: Module::new("test"),
         }
     }
 
@@ -91,7 +91,7 @@ impl<'a> Compiler<'a> {
         &mut self,
         ast: &AST,
         scope: &'a SymbolTable,
-    ) -> Result<(Rc<RefCell<ModuleValue>>, FunctionValue), SyntaxError> {
+    ) -> Result<CompiledModule, SyntaxError> {
         self.scope = scope;
 
         let script = FunctionValue {
@@ -118,7 +118,11 @@ impl<'a> Compiler<'a> {
 
         self.emit_return();
 
-        Ok((self.module.clone(), self.frame.pop().unwrap().function))
+        self.module
+            .borrow_mut()
+            .add_entry(self.frame.pop().unwrap().function);
+
+        Ok(Rc::clone(&self.module))
     }
 
     /// Write a unsigned byte to the current `[Chunk]` being compiled.

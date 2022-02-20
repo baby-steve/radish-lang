@@ -1,5 +1,5 @@
 //! Runs snippet tests.
-use radish_lang::{Radish, RadishFile, RadishConfig, common::source::Source};
+use radish_lang::{common::source::Source, Radish, RadishConfig, RadishFile};
 
 use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
 
@@ -60,14 +60,17 @@ impl TestSnippet {
 
         let mut radish = Radish::with_settings(config);
 
-        radish.run_from_source(self.source.clone());        
+        if let Err(err) = radish.run_from_source(self.source.clone()) {
+            err.emit();
+            panic!("test failed");
+        }
 
         for (i, value) in stdout.buffer.borrow().iter().enumerate() {
             let expected_value = &self.expected_values[i];
 
             if expected_value != value {
-                println!("Expected '{}', but got '{}'", expected_value, value);
-                panic!("Test failed");
+                println!("expected '{}', but got '{}'", expected_value, value);
+                panic!("test failed");
             }
         }
     }

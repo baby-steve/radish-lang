@@ -165,7 +165,7 @@ impl Function {
             id,
             params,
             body,
-            scope: std::cell::RefCell::new(SymbolTable::new(0)), // HACK
+            scope: std::cell::RefCell::new(SymbolTable::new()), // HACK
         }
     }
 
@@ -178,7 +178,7 @@ impl Function {
             self.scope.borrow_mut().add_non_local(non_local.0, non_local.1.clone());
         }
 
-        self.scope.borrow_mut().depth = replacement.depth;
+        //self.scope.borrow_mut().depth = replacement.depth;
     }
 }
 

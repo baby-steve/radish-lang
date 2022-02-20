@@ -6,11 +6,10 @@ pub mod vm;
 
 pub use cli::Cli;
 
-use std::cell::RefCell;
-use std::rc::Rc;
 use std::fmt;
+use std::rc::Rc;
 
-use common::{source::Source, value::Function, value::Module};
+use common::{source::Source, CompiledModule};
 use compiler::{
     analysis::Analyzer, ast::AST, compiler::Compiler, error::SyntaxError, parser::Parser,
     table::SymbolTable,
@@ -181,7 +180,7 @@ impl Radish {
         }
     }
 
-    pub fn compile(&mut self, ast: &AST, scope: &SymbolTable) -> (Rc<RefCell<Module>>, Function) {
+    pub fn compile(&mut self, ast: &AST, scope: &SymbolTable) -> CompiledModule {
         // TODO: why are we passing `scope` to the compiler twice?
         let mut compiler = Compiler::new(&scope, &self.config);
         match compiler.compile(&ast, &scope) {
@@ -190,24 +189,23 @@ impl Radish {
         }
     }
 
-    pub fn interpret(
-        &mut self,
-        script: Function,
-        module: Rc<RefCell<Module>>,
-    ) -> Result<(), RadishError> {
+    pub fn interpret(&mut self, module: CompiledModule) -> Result<(), RadishError> {
         let mut vm = VM::new(&self.config);
 
-        let res = vm.interpret(script, module)?;
+        let res = vm.interpret(module)?;
 
         Ok(res)
     }
 
     pub fn run_from_source(&mut self, src: Rc<Source>) -> Result<(), RadishError> {
-        let ast = self.parse_source(src.clone())?;
+        let ast = self.parse_source(src)?;
         let scope = self.check(&ast);
         //println!("{:#?}", &ast);
-        let (module, script) = self.compile(&ast, &scope);
-        let res = self.interpret(script, module)?;
+        let module = self.compile(&ast, &scope);
+
+        println!("{}", module.borrow());
+
+        let res = self.interpret(module)?;
 
         Ok(res)
     }

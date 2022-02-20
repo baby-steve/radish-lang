@@ -1,11 +1,10 @@
 use std::cell::RefCell;
 use std::cmp::{Ord, Ordering};
-use std::collections::HashMap;
-use std::fmt;
-use std::ops::{Add, Div, Mul, Neg, Not, Sub, Rem};
+use std::fmt::{self};
+use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use std::rc::{Rc, Weak};
 
-use crate::common::Chunk;
+use crate::common::{Chunk, Module};
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum Value {
@@ -51,7 +50,7 @@ impl Clone for Value {
             Self::Number(val) => Self::Number(*val),
             Self::String(val) => Self::String(Rc::clone(val)),
             Self::Function(val) => Self::Function(Rc::clone(val)),
-            Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))), 
+            Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
         }
     }
 }
@@ -145,7 +144,7 @@ impl Not for Value {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Function {
     pub arity: u8,
     pub chunk: Chunk,
@@ -219,84 +218,5 @@ impl Eq for Closure {}
 impl From<Rc<Function>> for Closure {
     fn from(function: Rc<Function>) -> Closure {
         Closure { function }
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct Module {
-    pub name: Box<str>,
-    pub variables: Vec<Value>,
-    pub symbols: HashMap<String, usize>,
-}
-
-impl Module {
-    pub fn new(name: &str) -> Rc<RefCell<Module>> {
-        let module = Module {
-            name: name.to_string().into_boxed_str(),
-            variables: Vec::new(),
-            symbols: HashMap::new(),
-        };
-        Rc::new(RefCell::new(module))
-    }
-
-    #[inline]
-    pub fn add_var(&mut self, name: String) -> usize {
-        let index = self.variables.len();
-        self.variables.push(Value::Nil);
-
-        self.symbols.insert(name, index);
-
-        index
-    }
-
-    #[inline]
-    pub fn get_index(&self, name: &str) -> Option<usize> {
-        if let Some(index) = self.symbols.get(name) {
-            Some(*index)
-        } else {
-            None
-        }
-    }
-
-    #[inline]
-    pub fn set_var(&mut self, index: usize, value: Value) {
-        self.variables[index] = value;
-    }
-
-    #[inline]
-    pub fn get_var(&self, index: usize) -> &Value {
-        &self.variables[index]
-    }
-}
-
-impl PartialEq for Module {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
-impl PartialOrd for Module {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Module {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.name.cmp(&other.name)
-    }
-}
-
-impl Eq for Module {}
-
-impl fmt::Display for Module {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "{:?}", self.variables)?;
-
-        for var in &self.variables {
-            write!(f, "[ {} ]", var)?;
-        }
-
-        writeln!(f, "")
     }
 }
