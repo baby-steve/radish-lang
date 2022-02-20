@@ -11,12 +11,11 @@ impl Stack {
     }
 
     pub fn push(&mut self, val: Value) {
-        //dbg!("did it get to here?");
         self.stack.push(val);
     }
 
-    pub fn pop(&mut self) -> Option<Value> {
-        self.stack.pop()
+    pub fn pop(&mut self) -> Value {
+        self.stack.pop().expect("stack should not be empty")
     }
 
     pub fn peek(&mut self) -> Option<Value> {

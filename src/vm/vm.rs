@@ -1,12 +1,11 @@
 use std::{convert::TryInto, rc::Rc};
 
 use crate::{
-    common::{value::Closure, CompiledModule, Module, value::Value, Disassembler, Opcode},
+    common::{value::Closure, value::Value, CompiledModule, Disassembler, Module, Opcode},
     vm::stack::Stack,
-    vm::trace::Trace,
+    vm::trace::Trace, RadishConfig,
 };
 
-use crate::RadishConfig;
 
 #[derive(Debug)]
 pub struct CallFrame {
@@ -26,7 +25,6 @@ pub struct VM {
 
     pub config: Rc<RadishConfig>,
 
-    //pub last_module: Module,
     pub last_module: CompiledModule,
 }
 
@@ -42,10 +40,9 @@ impl VM {
         }
     }
 
-    pub fn interpret(
-        &mut self,
-        module: CompiledModule,
-    ) -> Result<(), Trace> {
+    pub fn interpret(&mut self, module: CompiledModule) -> Result<(), Trace> {
+        use std::time::Instant;
+
         self.last_module = module;
 
         let closure = Closure {
@@ -55,11 +52,16 @@ impl VM {
         self.stack.push(Value::Closure(closure.clone()));
         self.call_function(closure, 0)?;
 
-        Ok(self.run()?)
+        let start = Instant::now();
+
+        let res = self.run()?;
+
+        println!("elapsed: {:?}", start.elapsed());
+
+        Ok(res)
     }
 
     /// Create a new [`Trace`] with the given message, adding context to it.
-    #[inline]
     fn error(&mut self, message: impl ToString) -> Trace {
         let mut trace = Trace::new(message);
 
@@ -74,22 +76,45 @@ impl VM {
         trace
     }
 
+    /// Return a reference to the top most frame on the call stack.
+    #[inline]
+    fn current_frame(&self) -> &CallFrame {
+        &self.frames[self.frame_count - 1]
+    }
+
+    /// Return a mutatable reference to the top most frame on the call stack.
+    #[inline] 
+    fn current_frame_mut(&mut self) -> &mut CallFrame {
+        &mut self.frames[self.frame_count - 1]
+    }
+
+    /// Get the current callframe's instruction pointer.
+    #[inline]
+    fn ip(&self) -> usize {
+        self.current_frame().ip
+    }
+
+    /// Create an [`Opcode`] from the next byte.
     #[inline]
     fn decode_opcode(&mut self) -> Opcode {
-        let chunk = &self.frames[self.frame_count - 1].closure.function.chunk;
-        let op = Opcode::from(chunk.code[self.frames[self.frame_count - 1].ip]);
+        let chunk = &self.current_frame().closure.function.chunk;
 
-        self.frames[self.frame_count - 1].ip += 1;
+        let op = Opcode::from(chunk.code[self.ip()]);
+
+        self.current_frame_mut().ip += 1;
+
         return op;
     }
 
+    /// Return the next `u8` sized byte from the bytecode stream.
     #[inline]
     fn read_byte(&mut self) -> u8 {
-        let frame = &mut self.frames[self.frame_count - 1];
-        frame.ip += 1;
-        frame.closure.function.chunk.code[frame.ip - 1]
+        //let frame = &mut self.frames[self.frame_count - 1];
+        self.current_frame_mut().ip += 1;
+        self.current_frame().closure.function.chunk.code[self.ip() - 1]
     }
 
+    /// Build a `u16` number from the bytecode stream.
     #[inline]
     fn read_short(&mut self) -> u16 {
         let frame = &mut self.frames[self.frame_count - 1];
@@ -99,6 +124,7 @@ impl VM {
         u16::from_le_bytes([byte1, byte2])
     }
 
+    /// Build a `u32` number from the bytecode stream.
     #[inline]
     fn read_long(&mut self) -> u32 {
         let frame = &mut self.frames[self.frame_count - 1];
@@ -107,7 +133,7 @@ impl VM {
 
         let bytes = frame.closure.function.chunk.code[frame.ip - 4..frame.ip]
             .try_into()
-            .expect(&format!("Expected a slice of length {}.", 4));
+            .unwrap();
 
         let bytes = u32::from_le_bytes(bytes);
 
@@ -125,6 +151,7 @@ impl VM {
             .clone()
     }
 
+    /// Check if the top [`Value`] on the stack is falsey. 
     #[inline]
     fn is_falsey(&mut self) -> bool {
         match self.stack.peek() {
@@ -163,11 +190,120 @@ impl VM {
         Ok(())
     }
 
-    fn run(&mut self) -> Result<(), Trace> {
-        loop {
-            // TODO: store current frame in local variable
-            // let frame = &mut self.frames[self.frame_count]
+    #[inline]
+    fn make_closure(&mut self) -> Result<(), Trace> {
+        let function = self.stack.pop();
+        let closure = Closure {
+            function: match function {
+                Value::Function(f) => f,
+                _ => unreachable!("can only create a closure from a function"),
+            },
+        };
 
+        self.stack.push(Value::Closure(closure));
+
+        Ok(())
+    }
+
+    #[inline]
+    fn print(&mut self) -> Result<(), Trace> {
+        let msg = self.stack.pop();
+        self.config.stdout.write(&format!("{}", msg));
+
+        Ok(())
+    }
+
+    #[inline]
+    fn load_local(&mut self) -> Result<(), Trace> {
+        let slot_index = self.read_long() as usize + self.current_frame().offset - 1;
+
+        self.stack
+            .push(self.stack.stack[slot_index as usize].clone());
+
+        Ok(())
+    }
+
+    #[inline]
+    fn save_local(&mut self) -> Result<(), Trace> {
+        let slot_index = self.read_long() as usize + self.current_frame().offset - 1;
+
+        self.stack.stack[slot_index as usize] = self.stack.peek().unwrap();
+
+        Ok(())
+    }
+
+    #[inline]
+    fn load_global(&mut self) -> Result<(), Trace> {
+        let index = self.read_long() as usize;
+        let value = self.last_module.borrow().get_var(index).clone();
+
+        self.stack.push(value);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn save_global(&mut self) -> Result<(), Trace> {
+        let index = self.read_long() as usize;
+
+        self.last_module
+            .borrow_mut()
+            .set_var(index, self.stack.peek().unwrap());
+
+        Ok(())
+    }
+
+    #[inline]
+    fn jump_if_true(&mut self) -> Result<(), Trace> {
+        let offset = self.read_short();
+        if !self.is_falsey() {
+            self.current_frame_mut().ip += offset as usize;
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn jump_if_false(&mut self) -> Result<(), Trace> {
+        let offset = self.read_short();
+        if self.is_falsey() {
+            self.current_frame_mut().ip += offset as usize;
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn jump(&mut self) -> Result<(), Trace> {
+        self.current_frame_mut().ip += self.read_short() as usize;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn loop_(&mut self) -> Result<(), Trace> {
+        self.current_frame_mut().ip -= self.read_short() as usize;
+
+        Ok(())
+    }
+
+    fn run(&mut self) -> Result<(), Trace> {
+        macro_rules! binary_op {
+            ($op:tt) => {{
+                let b = self.stack.pop();
+                let a = self.stack.pop();
+                self.stack.push(Value::from(a $op b));
+            }};
+        }
+
+        macro_rules! unary_op {
+            ($op:tt) => {{
+                let val = self.stack.pop();
+                self.stack.push(Value::from($op val));
+            }};
+        }
+
+        loop {
             if self.config.trace {
                 let dis = Disassembler::new(
                     "script",
@@ -210,6 +346,19 @@ impl VM {
                 Opcode::Del => {
                     self.stack.pop();
                 }
+                Opcode::Neg => unary_op!(-),
+                Opcode::Not => unary_op!(!),
+                Opcode::Add => binary_op!(+),
+                Opcode::Sub => binary_op!(-),
+                Opcode::Mul => binary_op!(*),
+                Opcode::Div => binary_op!(/),
+                Opcode::Rem => binary_op!(%),
+                Opcode::CmpLT => binary_op!(<),
+                Opcode::CmpGT => binary_op!(>),
+                Opcode::CmpEq => binary_op!(==),
+                Opcode::CmpLTEq => binary_op!(<=),
+                Opcode::CmpGTEq => binary_op!(>=),
+                Opcode::CmpNotEq => binary_op!(!=),
                 Opcode::DefGlobal => {
                     let index = self.read_long() as usize;
                     self.last_module
@@ -218,161 +367,39 @@ impl VM {
 
                     self.stack.pop();
                 }
-                Opcode::LoadGlobal => {
-                    let index = self.read_long() as usize;
-                    let value = self.last_module.borrow().get_var(index).clone();
-
-                    self.stack.push(value);
-                }
-                Opcode::SaveGlobal => {
-                    let index = self.read_long() as usize;
-
-                    self.last_module
-                        .borrow_mut()
-                        .set_var(index, self.stack.peek().unwrap());
-                }
-                Opcode::LoadLocal => {
-                    let slot_index =
-                        self.read_long() as usize + self.frames[self.frame_count - 1].offset - 1;
-
-                    self.stack
-                        .push(self.stack.stack[slot_index as usize].clone());
-                }
-                Opcode::SaveLocal => {
-                    let slot_index =
-                        self.read_long() as usize + self.frames[self.frame_count - 1].offset - 1;
-
-                    self.stack.stack[slot_index as usize] = self.stack.peek().unwrap();
-                }
+                Opcode::LoadGlobal => self.load_global()?,
+                Opcode::SaveGlobal => self.save_global()?,
+                Opcode::LoadLocal => self.load_local()?,
+                Opcode::SaveLocal => self.save_local()?,
                 Opcode::GetCapture => todo!(),
                 Opcode::SetCapture => todo!(),
-                Opcode::Neg => {
-                    let value = self.stack.pop().unwrap();
-                    self.stack.push(-value);
-                }
-                Opcode::Not => {
-                    let value = self.stack.pop().unwrap();
-                    self.stack.push(!value);
-                }
-                Opcode::Add => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(a + b);
-                }
-                Opcode::Sub => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(a - b);
-                }
-                Opcode::Mul => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(a * b);
-                }
-                Opcode::Div => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(a / b);
-                }
-                Opcode::Rem => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(a % b);
-                }
-                Opcode::CmpLT => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(Value::Boolean(a < b));
-                }
-                Opcode::CmpLTEq => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(Value::Boolean(a <= b));
-                }
-                Opcode::CmpGT => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(Value::Boolean(a > b));
-                }
-                Opcode::CmpGTEq => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(Value::Boolean(a >= b));
-                }
-                Opcode::CmpEq => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(Value::Boolean(a == b));
-                }
-                Opcode::CmpNotEq => {
-                    let b = self.stack.pop().unwrap();
-                    let a = self.stack.pop().unwrap();
-                    self.stack.push(Value::Boolean(a != b));
-                }
-                Opcode::JumpIfFalse => {
-                    let offset = self.read_short();
-                    if self.is_falsey() {
-                        self.frames[self.frame_count - 1].ip += offset as usize;
-                    }
-                }
-                Opcode::JumpIfTrue => {
-                    let offset = self.read_short();
-                    if !self.is_falsey() {
-                        self.frames[self.frame_count - 1].ip += offset as usize;
-                    }
-                }
-                Opcode::Jump => {
-                    self.frames[self.frame_count - 1].ip += self.read_short() as usize;
-                }
-                Opcode::Loop => {
-                    self.frames[self.frame_count - 1].ip -= self.read_short() as usize;
-                }
+                Opcode::JumpIfFalse => self.jump_if_false()?,
+                Opcode::JumpIfTrue => self.jump_if_true()?,
+                Opcode::Jump => self.jump()?,
+                Opcode::Loop => self.loop_()?,
+                Opcode::Closure => self.make_closure()?,
+                Opcode::Print => self.print()?,
                 Opcode::Call => {
                     let arg_count = self.read_byte() as usize;
                     let callee = self.stack.peek_n(arg_count + 1).unwrap();
                     self.call_value(callee, arg_count)?;
                 }
-                Opcode::Closure => {
-                    let function = self.stack.pop().unwrap();
-                    let closure = Closure {
-                        function: match function {
-                            Value::Function(f) => f,
-                            _ => unreachable!("can only create a closure from a function"),
-                        },
-                    };
-                    self.stack.push(Value::Closure(closure));
-                }
-                Opcode::Print => {
-                    let msg = self.stack.pop().unwrap();
-                    self.config.stdout.write(&format!("{}", msg));
-                }
                 Opcode::Return => {
-                    // FIXME: returns don't work right. Probably a compiler problem though.
-                    // they should go something like this:
-                    // | [fun][return_val]
-                    // | [fun] *pop* <-- store return_val
-                    // | *pop*
-                    // | [return_val]
-                    //
-                    // however it has to go like this (or it'll break)
-                    // | [fun][other_val][return_val]
-                    // | [fun][other_val] *pop*
-                    // | [fun] *pop*
-                    // | *pop*
-                    // | [return_val]
-
-                    let result = self.stack.pop().unwrap(); // pop return value
+                    let result = self.stack.pop(); // pop return value
 
                     // if that was the last frame, exit the VM.
                     if self.frame_count - 1 == 0 {
-                        self.stack.pop();
+                        //self.stack.pop();
                         return Ok(());
                     }
 
                     self.frame_count -= 1;
 
-                    self.stack.pop(); // this is supposed to be the function being returned from.
-                    self.stack.pop(); // why do we have to pop something twice?
+                    while &self.stack.stack.len() > &self.frames[self.frame_count].offset {
+                        self.stack.stack.pop();
+                    }
+
+                    self.stack.pop(); // the function being called
 
                     self.stack.push(result); // push the result back onto the stack.
 
