@@ -1,4 +1,6 @@
 # The Radish Programming Language
+[![Rust](https://github.com/accusatorySteve/radish-lang/actions/workflows/rust.yml/badge.svg)](https://github.com/accusatorySteve/radish-lang/actions/workflows/rust.yml)
+
 Radish is a small, embeddable scripting language, aiming to be simple, fast and practical.
 
 > **NOTE:**
