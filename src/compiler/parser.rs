@@ -178,7 +178,9 @@ impl Parser {
             // fun ...
             TokenType::Fun => self.parse_fun_declaration(),
             // var ...
-            TokenType::Var => self.parse_var_declaration(),
+            TokenType::Var => self.parse_var_declaration(false),
+            // fin ...
+            TokenType::Fin => self.parse_var_declaration(true),
             // if ...
             TokenType::If => self.parse_if_statement(),
             // loop ...
@@ -228,13 +230,17 @@ impl Parser {
         Ok(Stmt::FunDeclaration(function, span))
     }
 
-    fn parse_var_declaration(&mut self) -> Result<Stmt, SyntaxError> {
-        // var ...
+    fn parse_var_declaration(&mut self, constant: bool) -> Result<Stmt, SyntaxError> {
+        // var|fin ...
         let start = Span::from(&self.current.span);
 
-        self.consume(TokenType::Var);
+        if constant {
+            self.consume(TokenType::Fin);
+        } else {
+            self.consume(TokenType::Var);
+        }
 
-        // var id ...
+        // var|fin id ...
         let id = self.parse_identifier()?;
 
         let current = &self.current;
@@ -249,7 +255,9 @@ impl Parser {
             _ => (None, Span::combine(&start, &current.span)),
         };
 
-        Ok(Stmt::VarDeclaration(id, init, span))
+        let var_kind = if constant { VarKind::Fin } else { VarKind::Var };
+
+        Ok(Stmt::VarDeclaration(id, init, var_kind, span))
     }
 
     fn parse_if_statement(&mut self) -> Result<Stmt, SyntaxError> {

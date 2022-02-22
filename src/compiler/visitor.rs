@@ -1,5 +1,5 @@
-use crate::compiler::ast::*;
 use crate::common::span::Span;
+use crate::compiler::ast::*;
 
 // Todo: should only have defaults for some of these.
 pub trait Visitor<E, T> {
@@ -17,7 +17,7 @@ pub trait Visitor<E, T> {
             Stmt::BlockStmt(body, _) => self.block(&body),
             Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
             Stmt::FunDeclaration(fun, _) => self.function_declaration(&fun),
-            Stmt::VarDeclaration(id, init, _) => self.var_declaration(&id, &init),
+            Stmt::VarDeclaration(id, init, kind, _) => self.var_declaration(&id, &init, &kind),
             Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
             Stmt::IfStmt(expr, body, alt, _) => self.if_statement(&expr, &body, &alt),
             Stmt::LoopStmt(body, _) => self.loop_statement(&body),
@@ -33,7 +33,7 @@ pub trait Visitor<E, T> {
         self.block(&fun.body)
     }
 
-    fn var_declaration(&mut self, _: &Ident, init: &Option<Expr>) -> Result<E, T>;
+    fn var_declaration(&mut self, _: &Ident, init: &Option<Expr>, kind: &VarKind) -> Result<E, T>;
 
     fn expression_stmt(&mut self, expr: &Expr) -> Result<E, T> {
         self.expression(&expr)

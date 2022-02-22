@@ -45,7 +45,7 @@ pub enum SyntaxErrorKind {
     /// Expected end of file, found something else.
     ExpectedEof {
         actual: Item,
-    }, // should this use a Token?
+    },
     /// Expected an expression but found something else.
     ExpectedExpression {
         actual: Item,
@@ -67,13 +67,21 @@ pub enum SyntaxErrorKind {
     UnresolvedIdent {
         item: Item,
     },
+    /// Found more then one identifier in the current scope.
     DuplicateIdent {
         first: Item,
         second: Item,
     },
+    /// Used a name for a parameter more than once.
     DuplicateParam {
         param: Item,
     },
+    MissingConstInit {
+        item: Item,
+    },
+    AssignToConst {
+        item: Item,
+    }
 }
 
 impl SyntaxError {
@@ -164,6 +172,19 @@ impl SyntaxError {
                 ))
                 .with_labels(vec![Label::primary(param.span.clone())
                     .with_message("used as parameter more than once")]),
+            MissingConstInit { item } => Diagnostic::error()
+                .with_message("missing initalizer in constant declaration")
+                .with_labels(vec![
+                    Label::primary(item.span.clone())
+                        .with_message("missing initalizer")
+                ])
+                .with_notes(vec!["add a definition for the constant: `= <expr>`"]),
+            AssignToConst { item } => Diagnostic::error()
+                    .with_message(&format!("attempt to assign to constant variable: `{}`", &item.content))
+                    .with_labels(vec![
+                        Label::primary(item.span.clone())
+                            .with_message("cannot assign")
+                    ])
         }
     }
 }

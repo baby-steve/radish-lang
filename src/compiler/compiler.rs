@@ -1,6 +1,6 @@
 use crate::common::{
-    CompiledModule, value::Function as FunctionValue, Module, Chunk, Disassembler,
-    Opcode, Span, Value,
+    value::Function as FunctionValue, Chunk, CompiledModule, Disassembler, Module, Opcode, Span,
+    Value,
 };
 
 use crate::compiler::{ast::*, table::SymbolTable, visitor::Visitor, Rc, SyntaxError};
@@ -539,7 +539,12 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         Ok(())
     }
 
-    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) -> Result<(), SyntaxError> {
+    fn var_declaration(
+        &mut self,
+        id: &Ident,
+        init: &Option<Expr>,
+        _: &VarKind,
+    ) -> Result<(), SyntaxError> {
         if self.scope_depth > 0 {
             if let Some(expr) = &init {
                 self.expression(&expr)?;

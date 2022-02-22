@@ -36,7 +36,7 @@ impl Analyzer {
         }
     }
 
-    pub fn analyze(&mut self, ast: &AST) -> Result<SymbolTable, ()> {
+    pub fn analyze(&mut self, ast: &AST) -> Result<SymbolTable, SyntaxError> {
         self.foward_declare(&ast);
 
         //println!("{}", self.scopes[self.scopes.len() - 1]);
@@ -45,11 +45,11 @@ impl Analyzer {
             match self.statement(&node) {
                 Ok(_) => continue,
                 // TODO: handle errors.
-                Err(_) => continue,
+                Err(err) => return Err(err),
             }
         }
 
-        println!("{}", self.scopes[self.scopes.len() - 1]);
+        //println!("{}", self.scopes[self.scopes.len() - 1]);
 
         if !self.unresolved.is_empty() {
             for err in self.unresolved.iter() {
@@ -57,7 +57,11 @@ impl Analyzer {
                 println!("{:?}", err);
             }
 
-            return Err(());
+            let err_kind = SyntaxErrorKind::Custom {
+                message: "aborting due to previous errors".to_string(),
+            };
+
+            return Err(SyntaxError::new(err_kind));
         }
 
         Ok(self.scopes.pop().unwrap())
@@ -72,7 +76,7 @@ impl Analyzer {
     }
 
     fn exit_scope(&mut self) -> Option<SymbolTable> {
-        println!("{}", self.scopes[self.scopes.len() - 1]);
+        //println!("{}", self.scopes[self.scopes.len() - 1]);
         if self.scopes.len() == 1 {
             return None;
         }
@@ -223,11 +227,29 @@ impl Visitor<(), SyntaxError> for Analyzer {
         Ok(())
     }
 
-    fn var_declaration(&mut self, id: &Ident, init: &Option<Expr>) -> Result<(), SyntaxError> {
-        if let Some(expr) = &init {
-            self.expression(&expr)?;
+    fn var_declaration(
+        &mut self,
+        id: &Ident,
+        init: &Option<Expr>,
+        kind: &VarKind,
+    ) -> Result<(), SyntaxError> {
+        // check the right hand expression if it exists. If it doesn't exist and 
+        // this is a constant variable declaration return an error.
+        match &init {
+            Some(expr) => {
+                self.expression(expr)?;
+            }
+            None if kind == &VarKind::Fin => {
+                let err_kind = SyntaxErrorKind::MissingConstInit {
+                    item: Item::new(&id.pos, &id.name),
+                };
+
+                return Err(SyntaxError::new(err_kind));
+            }
+            _ => {},
         }
 
+        // check if this is the definition of a previously unresolved global variable.
         if self.scopes.len() == 1 {
             match self.unresolved.get(&id) {
                 Some(_) => {
@@ -237,9 +259,11 @@ impl Visitor<(), SyntaxError> for Analyzer {
             };
         }
 
+        // add this variable to the current scope, checking for duplicates.
         let depth = self.scopes.len() - 1;
-        if let Some(Symbol(_, prev_pos, _)) =
-            self.local_scope().add_local(&id.name, Symbol::var(&id.pos, depth))
+        if let Some(Symbol(_, prev_pos, _)) = self
+            .local_scope()
+            .add_local(&id.name, Symbol::var(&id.pos, depth))
         {
             return Err(self.duplicate_ids(&id.name, &id.pos, &prev_pos));
         }
@@ -247,12 +271,7 @@ impl Visitor<(), SyntaxError> for Analyzer {
         Ok(())
     }
 
-    fn assignment(
-        &mut self,
-        id: &Ident,
-        _: &OpAssignment,
-        expr: &Expr,
-    ) -> Result<(), SyntaxError> {
+    fn assignment(&mut self, id: &Ident, _: &OpAssignment, expr: &Expr) -> Result<(), SyntaxError> {
         self.expression(&expr)?;
         self.identifier(&id)?;
 

@@ -61,8 +61,10 @@ pub enum TokenType {
     False,
     // nil
     Nil,
-    // var (might change)
+    // var
     Var,
+    // fin
+    Fin,
     // print (only temporary)
     Print,
     // and
@@ -141,6 +143,7 @@ impl TokenType {
             False => "false",
             Nil => "nil",
             Var => "var",
+            Fin => "fin",
             Print => "print",
             And => "and",
             Or => "or",
@@ -237,6 +240,7 @@ impl Token {
             "false" => TokenType::False,
             "nil" => TokenType::Nil,
             "var" => TokenType::Var,
+            "fin" => TokenType::Fin,
             "print" => TokenType::Print,
             "and" => TokenType::And,
             "or" => TokenType::Or,

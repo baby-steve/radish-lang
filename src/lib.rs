@@ -169,14 +169,11 @@ impl Radish {
         }
     }
 
-    pub fn check(&mut self, ast: &AST) -> SymbolTable {
+    pub fn check(&mut self, ast: &AST) -> Result<SymbolTable, RadishError> {
         let mut analyzer = Analyzer::new();
         match analyzer.analyze(ast) {
-            Ok(table) => table,
-            Err(err) => {
-                println!("{:?}", err);
-                panic!("error: failed to compile");
-            }
+            Ok(table) => Ok(table),
+            Err(err) => Err(err.into())
         }
     }
 
@@ -199,11 +196,9 @@ impl Radish {
 
     pub fn run_from_source(&mut self, src: Rc<Source>) -> Result<(), RadishError> {
         let ast = self.parse_source(src)?;
-        let scope = self.check(&ast);
-        //println!("{:#?}", &ast);
-        let module = self.compile(&ast, &scope);
+        let scope = self.check(&ast)?;
 
-        println!("{}", module.borrow());
+        let module = self.compile(&ast, &scope);
 
         let res = self.interpret(module)?;
 

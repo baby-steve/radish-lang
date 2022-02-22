@@ -48,8 +48,8 @@ pub enum Stmt {
     ExpressionStmt(Box<Expr>),
     // <Function>
     FunDeclaration(Function, Span),
-    // 'var' <id> '=' <expr>
-    VarDeclaration(Ident, Option<Expr>, Span),
+    // 'var' <id> '=' <expr> kind
+    VarDeclaration(Ident, Option<Expr>, VarKind, Span),
     // <id> <op> <expr>
     Assignment(Ident, OpAssignment, Expr, Span),
     // if <expr> <block> <alternate> end
@@ -68,10 +68,16 @@ pub enum Stmt {
     PrintStmt(Expr, Span),
 }
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VarKind {
+    Var, 
+    Fin,
+}
+
 impl Stmt {
     pub fn position(&self) -> Span {
         match self {
-            Self::VarDeclaration(_, _, pos)
+            Self::VarDeclaration(_, _, _, pos)
             | Self::FunDeclaration(_, pos)
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
