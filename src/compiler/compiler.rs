@@ -1,3 +1,4 @@
+use crate::common::value::Class;
 use crate::common::{
     value::Function as FunctionValue, Chunk, CompiledModule, Disassembler, Module, Opcode, Span,
     Value,
@@ -118,9 +119,15 @@ impl<'a> Compiler<'a> {
 
         self.emit_return();
 
+        let script = self.frame.pop().unwrap().function;
+
+        if self.config.dump_code {
+            Disassembler::disassemble_chunk(&script.name, &script);
+        }
+
         self.module
             .borrow_mut()
-            .add_entry(self.frame.pop().unwrap().function);
+            .add_entry(script);
 
         Ok(Rc::clone(&self.module))
     }
@@ -363,6 +370,7 @@ impl<'a> Compiler<'a> {
             self.module.borrow_mut().add_var(name.clone());
         }
 
+        // next, go through and compile all global functions and classes.
         for node in &ast.items {
             match node {
                 Stmt::FunDeclaration(fun, _) => {
@@ -371,6 +379,14 @@ impl<'a> Compiler<'a> {
                     // compile the functions body.
                     self.function(&fun)?;
                     // set the location in the module's variable array to the function's body.
+                    self.define_global(index as u32);
+                }
+                Stmt::ClassDeclaration(class, _) => {
+                    // get the class's location in the module's variables array.
+                    let index = self.module.borrow_mut().get_index(&class.id.name).unwrap();
+                    // compile the class body.
+                    self.class(&class)?;
+                    // define the class in the global scope.
                     self.define_global(index as u32);
                 }
                 _ => continue,
@@ -415,6 +431,26 @@ impl<'a> Compiler<'a> {
 
         Ok(())
     }
+
+    /// Compile a class declaration
+    fn class(&mut self, class: &ClassDeclaration) -> Result<(), SyntaxError> {
+        // let class = Class {
+        //     name: class.id.name.clone().into_boxed_str(),
+        // };
+
+        // TODO: should classes be created at compile time or runtime?
+        // should we:
+        //  a) emit a `class` value now, or
+        //  b) emit the class's name as a string and create the class at runtime?
+        // I'm gonna go with option (b) for now, but could try (a)
+        
+        self.emit_constant(Value::from(&class.id.name));
+
+        // self.emit_constant(Value::from(class));
+        self.emit_byte(Opcode::Class as u8);
+
+        Ok(())
+    }
 }
 
 impl Visitor<(), SyntaxError> for Compiler<'_> {
@@ -424,6 +460,17 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         if self.scope_depth > 0 {
             self.function(fun)?;
             self.define_variable(&fun.id.name);
+        }
+
+        Ok(())
+    }
+
+    fn class_declaration(&mut self, class: &ClassDeclaration) -> Result<(), SyntaxError> {
+        // at this point all global classes have already been compiled,
+        // so only locally scoped classes have to be handled.
+        if self.scope_depth > 0 {
+            self.class(class)?;
+            self.define_variable(&class.id.name);
         }
 
         Ok(())

@@ -1,11 +1,11 @@
-use crate::common::Span;
-use std::collections::HashSet;
+use crate::{common::Span, RadishConfig};
+use std::{collections::HashSet, rc::Rc};
 use std::fmt;
 
 use crate::compiler::{
     ast::*,
     error::{SyntaxError, SyntaxErrorKind},
-    table::{Symbol, SymbolTable},
+    table::{Symbol, SymbolKind, SymbolTable},
     Visitor,
 };
 
@@ -13,6 +13,7 @@ use crate::error::Item;
 
 #[derive(Debug, Clone)]
 pub struct Analyzer {
+    config: Rc<RadishConfig>,
     /// Chain of enclosing scopes.
     pub scopes: Vec<SymbolTable>,
     /// Keep track of variables that where referenced before assignment
@@ -23,12 +24,13 @@ pub struct Analyzer {
 }
 
 impl Analyzer {
-    pub fn new() -> Self {
-        Analyzer::with_scope(SymbolTable::new())
+    pub fn new(config: &Rc<RadishConfig>) -> Self {
+        Analyzer::with_scope(SymbolTable::new(), config)
     }
 
-    pub fn with_scope(scope: SymbolTable) -> Analyzer {
+    pub fn with_scope(scope: SymbolTable, config: &Rc<RadishConfig>) -> Analyzer {
         Analyzer {
+            config: Rc::clone(config),
             scopes: vec![scope],
             unresolved: HashSet::new(),
             in_loop: false,
@@ -39,8 +41,6 @@ impl Analyzer {
     pub fn analyze(&mut self, ast: &AST) -> Result<SymbolTable, SyntaxError> {
         self.foward_declare(&ast);
 
-        //println!("{}", self.scopes[self.scopes.len() - 1]);
-
         for node in &ast.items {
             match self.statement(&node) {
                 Ok(_) => continue,
@@ -49,7 +49,9 @@ impl Analyzer {
             }
         }
 
-        //println!("{}", self.scopes[self.scopes.len() - 1]);
+        if self.config.dump_ast {
+            println!("{}", self.scopes[self.scopes.len() - 1]);
+        }
 
         if !self.unresolved.is_empty() {
             for err in self.unresolved.iter() {
@@ -76,7 +78,10 @@ impl Analyzer {
     }
 
     fn exit_scope(&mut self) -> Option<SymbolTable> {
-        //println!("{}", self.scopes[self.scopes.len() - 1]);
+        if self.config.dump_ast {
+            println!("{}", self.scopes[self.scopes.len() - 1]);
+        }
+
         if self.scopes.len() == 1 {
             return None;
         }
@@ -147,9 +152,31 @@ impl Analyzer {
                     self.local_scope()
                         .add_local(&fun.id.name, Symbol::from(fun));
                 }
+                Stmt::ClassDeclaration(class, _) => {
+                    self.local_scope()
+                        .add_local(&class.id.name, Symbol::from(class));
+                }
                 _ => continue,
             }
         }
+    }
+
+    /// Add a variable to the current scope, checking for duplicates.
+    fn declare_variable(
+        &mut self,
+        name: &str,
+        kind: SymbolKind,
+        span: &Span,
+    ) -> Result<(), SyntaxError> {
+        let depth = self.scopes.len() - 1;
+
+        let symbol = Symbol::new(kind, &span, depth);
+
+        if let Some(Symbol(_, prev_pos, _)) = self.local_scope().add_local(&name, symbol) {
+            return Err(self.duplicate_ids(&name, &span, &prev_pos));
+        }
+
+        Ok(())
     }
 
     fn unresolved_err(&self, name: &str, span: &Span) -> SyntaxError {
@@ -188,18 +215,19 @@ impl Visitor<(), SyntaxError> for Analyzer {
     }
 
     fn function_declaration(&mut self, fun: &Function) -> Result<(), SyntaxError> {
-        let depth = self.scopes.len() - 1;
-
         if self.scopes.len() > 1 {
-            if let Some(Symbol(_, prev_pos, _)) = self.local_scope().add_local(
+            self.declare_variable(
                 &fun.id.name,
-                Symbol::fun(fun.params.len(), &fun.id.pos, depth),
-            ) {
-                return Err(self.duplicate_ids(&fun.id.name, &fun.id.pos, &prev_pos));
-            }
+                SymbolKind::Fun {
+                    arg_count: fun.params.len(),
+                },
+                &fun.id.pos,
+            )?;
         }
 
         self.enter_scope();
+
+        let depth = self.scopes.len() - 1;
 
         for param in &fun.params {
             if let Some(_) = self
@@ -227,13 +255,21 @@ impl Visitor<(), SyntaxError> for Analyzer {
         Ok(())
     }
 
+    fn class_declaration(&mut self, class: &ClassDeclaration) -> Result<(), SyntaxError> {
+        if self.scopes.len() > 1 {
+            self.declare_variable(&class.id.name, SymbolKind::Class, &class.id.pos)?;
+        }
+
+        Ok(())
+    }
+
     fn var_declaration(
         &mut self,
         id: &Ident,
         init: &Option<Expr>,
         kind: &VarKind,
     ) -> Result<(), SyntaxError> {
-        // check the right hand expression if it exists. If it doesn't exist and 
+        // check the right hand expression if it exists. If it doesn't exist and
         // this is a constant variable declaration return an error.
         match &init {
             Some(expr) => {
@@ -246,7 +282,7 @@ impl Visitor<(), SyntaxError> for Analyzer {
 
                 return Err(SyntaxError::new(err_kind));
             }
-            _ => {},
+            _ => {}
         }
 
         // check if this is the definition of a previously unresolved global variable.
@@ -260,13 +296,7 @@ impl Visitor<(), SyntaxError> for Analyzer {
         }
 
         // add this variable to the current scope, checking for duplicates.
-        let depth = self.scopes.len() - 1;
-        if let Some(Symbol(_, prev_pos, _)) = self
-            .local_scope()
-            .add_local(&id.name, Symbol::var(&id.pos, depth))
-        {
-            return Err(self.duplicate_ids(&id.name, &id.pos, &prev_pos));
-        }
+        self.declare_variable(&id.name, SymbolKind::Var, &id.pos)?;
 
         Ok(())
     }

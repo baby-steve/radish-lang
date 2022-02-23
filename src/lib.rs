@@ -170,7 +170,7 @@ impl Radish {
     }
 
     pub fn check(&mut self, ast: &AST) -> Result<SymbolTable, RadishError> {
-        let mut analyzer = Analyzer::new();
+        let mut analyzer = Analyzer::new(&self.config);
         match analyzer.analyze(ast) {
             Ok(table) => Ok(table),
             Err(err) => Err(err.into())

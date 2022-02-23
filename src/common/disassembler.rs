@@ -91,6 +91,7 @@ impl<'a> Disassembler<'a> {
 
                 offset + 1
             }
+            Opcode::Class => self.simple_instruction("Class", offset),
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Return => self.simple_instruction("Return", offset),
         }

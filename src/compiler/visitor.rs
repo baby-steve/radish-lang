@@ -17,6 +17,7 @@ pub trait Visitor<E, T> {
             Stmt::BlockStmt(body, _) => self.block(&body),
             Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
             Stmt::FunDeclaration(fun, _) => self.function_declaration(&fun),
+            Stmt::ClassDeclaration(class, _) => self.class_declaration(class),
             Stmt::VarDeclaration(id, init, kind, _) => self.var_declaration(&id, &init, &kind),
             Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
             Stmt::IfStmt(expr, body, alt, _) => self.if_statement(&expr, &body, &alt),
@@ -29,9 +30,9 @@ pub trait Visitor<E, T> {
         }
     }
 
-    fn function_declaration(&mut self, fun: &Function) -> Result<E, T> {
-        self.block(&fun.body)
-    }
+    fn function_declaration(&mut self, fun: &Function) -> Result<E, T>;
+
+    fn class_declaration(&mut self, class: &ClassDeclaration) -> Result<E, T>;
 
     fn var_declaration(&mut self, _: &Ident, init: &Option<Expr>, kind: &VarKind) -> Result<E, T>;
 

@@ -12,8 +12,8 @@ pub enum Value {
     Boolean(bool),
     String(Rc<RefCell<String>>),
     Function(Rc<Function>),
-    //Closure(Rc<Closure>),
     Closure(Closure),
+    Class(Rc<Class>),
     Nil,
 }
 
@@ -35,10 +35,22 @@ impl From<&str> for Value {
     }
 }
 
+impl From<&String> for Value {
+    fn from(val: &String) -> Self {
+        Value::String(Rc::new(RefCell::new(val.to_string())))
+    }
+}
+
 impl From<Function> for Value {
     fn from(val: Function) -> Self {
         //Value::Function(Rc::new(RefCell::new(val)))
         Value::Function(Rc::new(val))
+    }
+}
+
+impl From<Class> for Value {
+    fn from(class: Class) -> Self {
+        Value::Class(Rc::new(class))
     }
 }
 
@@ -51,6 +63,7 @@ impl Clone for Value {
             Self::String(val) => Self::String(Rc::clone(val)),
             Self::Function(val) => Self::Function(Rc::clone(val)),
             Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
+            Self::Class(val) => Self::Class(Rc::clone(val)),
         }
     }
 }
@@ -64,6 +77,7 @@ impl fmt::Display for Value {
             Value::String(val) => f.write_str(&format!("\"{}\"", val.borrow())),
             Value::Function(val) => write!(f, "<fun {}>", val.format_name()),
             Value::Closure(val) => write!(f, "<fun {}>", val.function.format_name()),
+            Value::Class(val) => write!(f, "<class {}>", val.name.borrow()),
             Value::Nil => f.write_str("nil"),
         }
     }
@@ -219,4 +233,13 @@ impl From<Rc<Function>> for Closure {
     fn from(function: Rc<Function>) -> Closure {
         Closure { function }
     }
+}
+
+#[derive(Debug, PartialEq, PartialOrd, Eq)]
+pub struct Class {
+    /// the class name
+    // TODO: 
+    // this doesn't need to be wrapped in a reference counter and refcell
+    // its only so that it matches the value of Value::String. 
+    pub name: Rc<RefCell<String>>,
 }

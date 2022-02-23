@@ -48,6 +48,8 @@ pub enum Stmt {
     ExpressionStmt(Box<Expr>),
     // <Function>
     FunDeclaration(Function, Span),
+    // <Class>
+    ClassDeclaration(ClassDeclaration, Span),
     // 'var' <id> '=' <expr> kind
     VarDeclaration(Ident, Option<Expr>, VarKind, Span),
     // <id> <op> <expr>
@@ -70,7 +72,7 @@ pub enum Stmt {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum VarKind {
-    Var, 
+    Var,
     Fin,
 }
 
@@ -79,6 +81,7 @@ impl Stmt {
         match self {
             Self::VarDeclaration(_, _, _, pos)
             | Self::FunDeclaration(_, pos)
+            | Self::ClassDeclaration(_, pos)
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
             | Self::Assignment(_, _, _, pos)
@@ -181,10 +184,23 @@ impl Function {
         }
 
         for non_local in replacement.non_locals.iter() {
-            self.scope.borrow_mut().add_non_local(non_local.0, non_local.1.clone());
+            self.scope
+                .borrow_mut()
+                .add_non_local(non_local.0, non_local.1.clone());
         }
 
         //self.scope.borrow_mut().depth = replacement.depth;
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassDeclaration {
+    pub id: Ident,
+}
+
+impl ClassDeclaration {
+    pub fn new(id: Ident) -> ClassDeclaration {
+        ClassDeclaration { id }
     }
 }
 

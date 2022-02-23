@@ -1,0 +1,5 @@
+// Test classes
+
+class Cat {}
+
+print Cat // expect: <class Cat>

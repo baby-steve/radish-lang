@@ -1,7 +1,7 @@
 use std::{convert::TryInto, rc::Rc};
 
 use crate::{
-    common::{value::Closure, value::Value, CompiledModule, Disassembler, Module, Opcode},
+    common::{value::Closure, value::Value, value::Class, CompiledModule, Disassembler, Module, Opcode},
     vm::stack::Stack,
     vm::trace::Trace, RadishConfig,
 };
@@ -205,6 +205,22 @@ impl VM {
         Ok(())
     }
 
+    #[inline] 
+    fn make_class(&mut self) -> Result<(), Trace> {
+        let name = match self.stack.pop() {
+            Value::String(val) => val,
+            _ => unreachable!("class name must be string"),
+        };
+
+        let class = Class {
+            name,
+        };
+
+        self.stack.push(Value::Class(Rc::new(class)));
+
+        Ok(())
+    }
+
     #[inline]
     fn print(&mut self) -> Result<(), Trace> {
         let msg = self.stack.pop();
@@ -378,6 +394,7 @@ impl VM {
                 Opcode::Jump => self.jump()?,
                 Opcode::Loop => self.loop_()?,
                 Opcode::Closure => self.make_closure()?,
+                Opcode::Class => self.make_class()?,
                 Opcode::Print => self.print()?,
                 Opcode::Call => {
                     let arg_count = self.read_byte() as usize;

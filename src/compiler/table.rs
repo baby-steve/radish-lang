@@ -1,11 +1,12 @@
 use crate::common::span::Span;
-use crate::compiler::ast::Function;
+use crate::compiler::ast::{Function, ClassDeclaration};
 use std::{collections::HashMap, fmt};
 
 #[derive(Debug, PartialEq, Copy, Clone, Eq, Hash)]
 pub enum SymbolKind {
     Var,
     Fun { arg_count: usize },
+    Class,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -23,6 +24,10 @@ impl Symbol {
     pub fn fun(arg_count: usize, span: &Span, depth: usize) -> Symbol {
         Symbol(SymbolKind::Fun { arg_count }, Span::from(&span), depth)
     }
+
+    pub fn class(span: &Span, depth: usize) -> Symbol {
+        Symbol(SymbolKind::Class, Span::from(&span), depth)
+    }
 }
 
 impl From<&Function> for Symbol {
@@ -30,6 +35,13 @@ impl From<&Function> for Symbol {
         let kind = SymbolKind::Fun {
             arg_count: fun.params.len(),
         };
+        Symbol::new(kind, &fun.id.pos, 0)
+    }
+}
+
+impl From<&ClassDeclaration> for Symbol {
+    fn from(fun: &ClassDeclaration) -> Symbol {
+        let kind = SymbolKind::Class;
         Symbol::new(kind, &fun.id.pos, 0)
     }
 }

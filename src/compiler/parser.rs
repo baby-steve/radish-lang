@@ -175,29 +175,31 @@ impl Parser {
                     Span::combine(&start, &self.current.span),
                 ))
             }
-            // fun ...
+            // fun
             TokenType::Fun => self.parse_fun_declaration(),
-            // var ...
+            // class
+            TokenType::Class => self.parse_class_declaration(),
+            // var
             TokenType::Var => self.parse_var_declaration(false),
-            // fin ...
+            // fin
             TokenType::Fin => self.parse_var_declaration(true),
-            // if ...
+            // if
             TokenType::If => self.parse_if_statement(),
-            // loop ...
+            // loop
             TokenType::Loop => self.parse_loop_statement(),
-            // while ...
+            // while
             TokenType::While => self.parse_while_statement(),
-            // return ...
+            // return
             TokenType::Return => self.parse_return_statement(),
-            // break ...
+            // break
             TokenType::Break => self.parse_break_statement(),
             // continue
             TokenType::Continue => self.parse_continue_statement(),
-            // print ...
+            // print
             TokenType::Print => self.parse_print_statement(),
-            // id ...
+            // id
             TokenType::Ident(_) => self.parse_assignment_statement(),
-            // expr ...
+            // expr
             _ => self.parse_expression_statement(),
         }
     }
@@ -228,6 +230,28 @@ impl Parser {
         let function = Function::new(id, params, body);
 
         Ok(Stmt::FunDeclaration(function, span))
+    }
+
+    fn parse_class_declaration(&mut self) -> Result<Stmt, SyntaxError> {    
+        let start = self.current.span.clone();
+
+        // class ...
+        self.consume(TokenType::Class);
+
+        // class <id> ...
+        let id = self.parse_identifier()?;
+
+        // class <id> { ...
+        self.expect(TokenType::LeftBrace)?;
+
+        // parse class body
+
+        // class <id> { ... }
+        self.expect(TokenType::RightBrace)?;
+
+        let class = ClassDeclaration::new(id);
+        let span = Span::combine(&start, &self.current.span);
+        Ok(Stmt::ClassDeclaration(class, span))
     }
 
     fn parse_var_declaration(&mut self, constant: bool) -> Result<Stmt, SyntaxError> {

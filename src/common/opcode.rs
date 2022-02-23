@@ -168,6 +168,8 @@ pub enum Opcode {
     ///
     /// [Value::Function] -> [Value::Closure]
     Closure,
+    /// TODO:
+    Class,
     /// Remove the top `[Value]` from the stack and write it to standard out.
     ///
     /// **Note:** this is a temporary instruction and will eventually be replaced by
