@@ -35,16 +35,15 @@ impl Parser {
     pub fn parse(&mut self) -> Result<AST, SyntaxError> {
         self.advance();
 
-        let res = match self.parse_body() {
-            Ok(items) => Ok(AST::new(items)),
+        match self.parse_body() {
+            Ok(items) => { 
+                if self.config.dump_ast {
+                    println!("{:#?}", &items);
+                }
+                Ok(AST::new(items)) 
+            },
             Err(err) => Err(err),
-        };
-
-        if self.config.dump_ast {
-            println!("{:#?}", &res);
         }
-
-        res
     }
 
     fn advance(&mut self) {
@@ -227,13 +226,14 @@ impl Parser {
 
         let span = Span::combine(&start, &self.current.span);
 
-        let function = Function::new(id, params, body);
+        let function = FunctionDecl::new(id, params, body);
 
         Ok(Stmt::FunDeclaration(function, span))
     }
 
     fn parse_class_declaration(&mut self) -> Result<Stmt, SyntaxError> {    
         let start = self.current.span.clone();
+        let mut constructors = vec![];
 
         // class ...
         self.consume(TokenType::Class);
@@ -245,13 +245,48 @@ impl Parser {
         self.expect(TokenType::LeftBrace)?;
 
         // parse class body
+        while self.current.token_type != TokenType::RightBrace {
+            match self.current.token_type {
+                // \n or //...
+                TokenType::Newline | TokenType::Comment(_, false) => {
+                    // should single-line comments be parsed?
+                    self.advance();
+                    continue;
+                }
+                // a constructor
+                TokenType::Con => constructors.push(self.parse_constructor()?),
+                _ => {
+                    panic!("parsing a class");
+                    // break;
+                }
+            };
+        };
 
         // class <id> { ... }
         self.expect(TokenType::RightBrace)?;
 
-        let class = ClassDeclaration::new(id);
+        let class = ClassDecl::new(id, constructors);
         let span = Span::combine(&start, &self.current.span);
         Ok(Stmt::ClassDeclaration(class, span))
+    }
+
+    fn parse_constructor(&mut self) -> Result<ConstructorDecl, SyntaxError> {
+        // con ... 
+        self.consume(TokenType::Con);
+        // con <id> ...
+        let id = self.parse_identifier()?;
+        // con <id> '(' <params> ')' ...
+        let params = self.parse_params()?;
+        // con <id> '(' <params> ')' '{' ...
+        self.expect(TokenType::LeftBrace)?;
+        // con <id> '(' <params> ')' '{' <body> ...
+        let body = Box::new(self.parse_block()?);
+        // con <id> '(' <params> ')' '{' <body> '}'
+        self.expect(TokenType::RightBrace)?;
+
+        let constructor = ConstructorDecl::new(id, params, body);
+
+        Ok(constructor)
     }
 
     fn parse_var_declaration(&mut self, constant: bool) -> Result<Stmt, SyntaxError> {
@@ -696,13 +731,23 @@ impl Parser {
 
         loop {
             match &self.current.token_type {
-                // expr ( ...
+                // <expr> '(' ...
                 TokenType::LeftParen => {
                     let args = self.parse_arg_list()?;
 
                     let span = Span::combine(&node.position(), &self.current.span);
 
                     node = Expr::CallExpr(Box::new(node), args, span)
+                }
+                // <expr> '.' ...
+                TokenType::Dot => {
+                    self.consume(TokenType::Dot);
+
+                    let property = Box::new(self.parse_factor()?);
+
+                    let span = Span::combine(&node.position(), &self.current.span);
+
+                    node = Expr::MemberExpr(Box::new(node), property, span)
                 }
                 _ => break,
             }

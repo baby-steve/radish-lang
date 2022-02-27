@@ -82,16 +82,17 @@ impl<'a> Disassembler<'a> {
                 self.write_instruction("Closure", offset);
 
                 let index = &self.function.chunk.code[offset + 1];
-                let i_padding = " ".repeat(
+                let i_padding = " "/* .repeat(
                     self.function.chunk.constants.len().to_string().len() - index.to_string().len(),
-                );
+                )*/;
                 print!("{}{}", index, i_padding);
 
                 println!(" ({})", index);                
 
                 offset + 1
             }
-            Opcode::Class => self.simple_instruction("Class", offset),
+            Opcode::BuildClass => self.simple_instruction("Class", offset),
+            Opcode::BuildCon => self.simple_instruction("BuildCon", offset),
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Return => self.simple_instruction("Return", offset),
         }

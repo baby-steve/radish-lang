@@ -55,6 +55,8 @@ pub enum TokenType {
     RightBrace,
     // ,
     Comma,
+    // .
+    Dot,
     // true
     True,
     // false
@@ -93,6 +95,8 @@ pub enum TokenType {
     Fun,
     // class
     Class,
+    // con
+    Con,
     // return
     Return,
 
@@ -141,6 +145,7 @@ impl TokenType {
             LeftBrace => "{",
             RightBrace => "}",
             Comma => ",",
+            Dot => ".",
             True => "true",
             False => "false",
             Nil => "nil",
@@ -160,6 +165,7 @@ impl TokenType {
             Continue => "continue",
             Fun => "fun",
             Class => "class",
+            Con => "con",
             Return => "return",
 
             Eof => "<Eof>",
@@ -239,6 +245,7 @@ impl Token {
             "{" => TokenType::LeftBrace,
             "}" => TokenType::RightBrace,
             "," => TokenType::Comma,
+            "." => TokenType::Dot,
             "true" => TokenType::True,
             "false" => TokenType::False,
             "nil" => TokenType::Nil,
@@ -258,6 +265,7 @@ impl Token {
             "continue" => TokenType::Continue,
             "fun" => TokenType::Fun,
             "class" => TokenType::Class,
+            "con" => TokenType::Con,
             "return" => TokenType::Return,
             "<Eof>" => TokenType::Eof,
 

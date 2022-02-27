@@ -1,11 +1,13 @@
 use std::{convert::TryInto, rc::Rc};
 
 use crate::{
-    common::{value::Closure, value::Value, value::Class, CompiledModule, Disassembler, Module, Opcode},
+    common::{
+        value::Class, value::Closure, value::Value, CompiledModule, Disassembler, Module, Opcode,
+    },
     vm::stack::Stack,
-    vm::trace::Trace, RadishConfig,
+    vm::trace::Trace,
+    RadishConfig,
 };
-
 
 #[derive(Debug)]
 pub struct CallFrame {
@@ -83,7 +85,7 @@ impl VM {
     }
 
     /// Return a mutatable reference to the top most frame on the call stack.
-    #[inline] 
+    #[inline]
     fn current_frame_mut(&mut self) -> &mut CallFrame {
         &mut self.frames[self.frame_count - 1]
     }
@@ -151,7 +153,7 @@ impl VM {
             .clone()
     }
 
-    /// Check if the top [`Value`] on the stack is falsey. 
+    /// Check if the top [`Value`] on the stack is falsey.
     #[inline]
     fn is_falsey(&mut self) -> bool {
         match self.stack.peek() {
@@ -205,18 +207,35 @@ impl VM {
         Ok(())
     }
 
-    #[inline] 
+    #[inline]
     fn make_class(&mut self) -> Result<(), Trace> {
         let name = match self.stack.pop() {
             Value::String(val) => val,
             _ => unreachable!("class name must be string"),
         };
 
-        let class = Class {
-            name,
-        };
+        let class = Class::new(&name);
 
         self.stack.push(Value::Class(Rc::new(class)));
+
+        Ok(())
+    }
+
+    #[inline]
+    fn make_constructor(&mut self) -> Result<(), Trace> {
+        let constructor = self.stack.pop();
+        
+        let name = match &constructor {
+            Value::Closure(closure) => closure.function.name.to_string(),
+            _ => unreachable!("can only create a constructor from a closure"),
+        };
+        
+        let class = match self.stack.peek() {
+            Some(Value::Class(class)) => class,
+            _ => unreachable!("can only define a constructor on a class"),
+        };
+
+        class.constructors.borrow_mut().insert(name, constructor);
 
         Ok(())
     }
@@ -394,7 +413,8 @@ impl VM {
                 Opcode::Jump => self.jump()?,
                 Opcode::Loop => self.loop_()?,
                 Opcode::Closure => self.make_closure()?,
-                Opcode::Class => self.make_class()?,
+                Opcode::BuildClass => self.make_class()?,
+                Opcode::BuildCon => self.make_constructor()?,
                 Opcode::Print => self.print()?,
                 Opcode::Call => {
                     let arg_count = self.read_byte() as usize;

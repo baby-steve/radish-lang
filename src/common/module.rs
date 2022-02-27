@@ -74,6 +74,28 @@ impl Module {
             );
         }
     }
+
+    // Add a function to the current scope
+    // pub fn add_function(function: Function) {}
+
+    // Add a native function to the current scope
+    // pub fn add_native(native: Native) {}
+
+    // create a class 
+    // pub fn create_class(name: impl ToString) {}
+
+    // add a method to a class
+    // should we add the method directly to the class? like so:
+    //      let class = create_class_or_whatever();
+    //      let method = create_a_method();
+    //      class.add_method(method)
+    // or should we add the method to a class with a given name:
+    //      bind_method(method, "ClassName");
+    
+    // functions to:
+    //  a. declare a global
+    //  b. set a global's value
+    //  c. get a global's value
 }
 
 impl PartialEq for Module {

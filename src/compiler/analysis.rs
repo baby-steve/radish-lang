@@ -1,6 +1,6 @@
 use crate::{common::Span, RadishConfig};
-use std::{collections::HashSet, rc::Rc};
 use std::fmt;
+use std::{collections::HashSet, rc::Rc};
 
 use crate::compiler::{
     ast::*,
@@ -143,6 +143,25 @@ impl Analyzer {
         None
     }
 
+    fn resolve_member_expression(&mut self, object: &Expr) -> Result<(), SyntaxError> {
+        // Because the fields, methods, and constructors on a Class cannot be
+        // know at compile time, we can't really resolve them. We can however
+        // resolve the base expression. given something along the lines of: `a.b.c` we
+        // can ensure that `a` is in the current scope.
+
+        match object {
+            Expr::Identifier(id) => {
+                self.identifier(id)?;
+            },
+            Expr::MemberExpr(object, _, _) => {
+                self.resolve_member_expression(object)?;
+            }
+            _ => unimplemented!(),
+        };
+
+        Ok(())
+    }
+
     /// Add all functions declared in the global scope to
     /// the current symbol table.
     fn foward_declare(&mut self, ast: &AST) {
@@ -199,6 +218,27 @@ impl Analyzer {
 
         err
     }
+
+    fn param_list(&mut self, params: &Vec<Ident>) -> Result<(), SyntaxError> {
+        let depth = self.scopes.len() - 1;
+
+        for param in params {
+            if let Some(_) = self
+                .local_scope()
+                .add_local(&param.name, Symbol::var(&param.pos, depth))
+            {
+                let err_kind = SyntaxErrorKind::DuplicateParam {
+                    param: Item::new(&param.pos, &param.name),
+                };
+
+                let err = SyntaxError::new(err_kind);
+
+                return Err(err);
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl Visitor<(), SyntaxError> for Analyzer {
@@ -214,7 +254,7 @@ impl Visitor<(), SyntaxError> for Analyzer {
         Ok(())
     }
 
-    fn function_declaration(&mut self, fun: &Function) -> Result<(), SyntaxError> {
+    fn function_declaration(&mut self, fun: &FunctionDecl) -> Result<(), SyntaxError> {
         if self.scopes.len() > 1 {
             self.declare_variable(
                 &fun.id.name,
@@ -227,135 +267,46 @@ impl Visitor<(), SyntaxError> for Analyzer {
 
         self.enter_scope();
 
-        let depth = self.scopes.len() - 1;
-
-        for param in &fun.params {
-            if let Some(_) = self
-                .local_scope()
-                .add_local(&param.name, Symbol::var(&param.pos, depth))
-            {
-                let err_kind = SyntaxErrorKind::DuplicateParam {
-                    param: Item::new(&param.pos, &param.name),
-                };
-
-                let err = SyntaxError::new(err_kind);
-
-                return Err(err);
-            }
-        }
+        self.param_list(&fun.params)?;
 
         for node in fun.body.iter() {
             self.statement(&node)?;
         }
 
         let scope = self.exit_scope().unwrap();
-
         fun.replace_scope(scope);
 
         Ok(())
     }
 
-    fn class_declaration(&mut self, class: &ClassDeclaration) -> Result<(), SyntaxError> {
+    fn class_declaration(&mut self, class: &ClassDecl) -> Result<(), SyntaxError> {
         if self.scopes.len() > 1 {
             self.declare_variable(&class.id.name, SymbolKind::Class, &class.id.pos)?;
         }
 
-        Ok(())
-    }
+        self.enter_scope();
 
-    fn var_declaration(
-        &mut self,
-        id: &Ident,
-        init: &Option<Expr>,
-        kind: &VarKind,
-    ) -> Result<(), SyntaxError> {
-        // check the right hand expression if it exists. If it doesn't exist and
-        // this is a constant variable declaration return an error.
-        match &init {
-            Some(expr) => {
-                self.expression(expr)?;
-            }
-            None if kind == &VarKind::Fin => {
-                let err_kind = SyntaxErrorKind::MissingConstInit {
-                    item: Item::new(&id.pos, &id.name),
-                };
-
-                return Err(SyntaxError::new(err_kind));
-            }
-            _ => {}
+        for constructor in class.constructors.iter() {
+            self.constructor_declaration(constructor)?;
         }
 
-        // check if this is the definition of a previously unresolved global variable.
-        if self.scopes.len() == 1 {
-            match self.unresolved.get(&id) {
-                Some(_) => {
-                    self.unresolved.remove(&id);
-                }
-                None => {}
-            };
-        }
-
-        // add this variable to the current scope, checking for duplicates.
-        self.declare_variable(&id.name, SymbolKind::Var, &id.pos)?;
+        self.exit_scope();
 
         Ok(())
     }
 
-    fn assignment(&mut self, id: &Ident, _: &OpAssignment, expr: &Expr) -> Result<(), SyntaxError> {
-        self.expression(&expr)?;
-        self.identifier(&id)?;
+    fn constructor_declaration(&mut self, con: &ConstructorDecl) -> Result<(), SyntaxError> {
+        self.declare_variable(&con.id.name, SymbolKind::Con, &con.id.pos)?;
 
-        Ok(())
-    }
+        self.enter_scope();
 
-    fn call_expr(&mut self, _: &Expr, args: &Vec<Box<Expr>>) -> Result<(), SyntaxError> {
-        /*match callee {
-            Expr::Identifier(id) => {
-                if let Some(symbol) = self.resolve_symbol(&id.name) {
-                    if let (SymbolKind::Fun { arg_count }, _) = symbol {
-                        if args.len() != arg_count {
-                            panic!(
-                                "The function '{}' takes {} argument{}, but got {}.",
-                                &id.name,
-                                &arg_count,
-                                if arg_count == 1 { "" } else { "s" },
-                                &args.len(),
-                            )
-                        }
-                    }
-                } else {
-                    // if its the global scope, then its an error.
-                    if self.scopes.len() == 1 {
-                        let err = self.unresolved_err(&id.name, &id.pos);
-                        return Err(err);
-                    }
+        self.param_list(&con.params)?;
 
-                    // if we're in a local scope, it could be declared
-                    // later in the global scope.
-                    self.unresolved.insert(id.clone());
-                }
-            }
-            _ => unimplemented!("Can only call identifiers currently."),
-        };*/
-
-        for arg in args {
-            self.expression(&arg)?;
+        for node in con.body.iter() {
+            self.statement(&node)?;
         }
 
-        Ok(())
-    }
-
-    fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {
-        if self.resolve_symbol(&id.name) == None {
-            // if its the global scope, then its an error.
-            if self.scopes.len() == 1 {
-                return Err(self.unresolved_err(&id.name, &id.pos));
-            }
-
-            // if we're in a local scope, it could be declared
-            // later in global scope.
-            self.unresolved.insert(id.clone());
-        }
+        self.exit_scope().unwrap();
 
         Ok(())
     }
@@ -413,6 +364,83 @@ impl Visitor<(), SyntaxError> for Analyzer {
             Ok(())
         }
     }
+
+    fn var_declaration(
+        &mut self,
+        id: &Ident,
+        init: &Option<Expr>,
+        kind: &VarKind,
+    ) -> Result<(), SyntaxError> {
+        // check the right hand expression if it exists. If it doesn't exist and
+        // this is a constant variable declaration return an error.
+        match &init {
+            Some(expr) => {
+                self.expression(expr)?;
+            }
+            None if kind == &VarKind::Fin => {
+                let err_kind = SyntaxErrorKind::MissingConstInit {
+                    item: Item::new(&id.pos, &id.name),
+                };
+
+                return Err(SyntaxError::new(err_kind));
+            }
+            _ => {}
+        }
+
+        // check if this is the definition of a previously unresolved global variable.
+        if self.scopes.len() == 1 {
+            match self.unresolved.get(&id) {
+                Some(_) => {
+                    self.unresolved.remove(&id);
+                }
+                None => {}
+            };
+        }
+
+        // add this variable to the current scope, checking for duplicates.
+        self.declare_variable(&id.name, SymbolKind::Var, &id.pos)?;
+
+        Ok(())
+    }
+
+    fn assignment(&mut self, id: &Ident, _: &OpAssignment, expr: &Expr) -> Result<(), SyntaxError> {
+        self.expression(&expr)?;
+        self.identifier(&id)?;
+
+        Ok(())
+    }
+
+    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) -> Result<(), SyntaxError> {
+        self.expression(callee)?;
+
+        for arg in args {
+            self.expression(&arg)?;
+        }
+
+        Ok(())
+    }
+
+    fn member_expr(&mut self, object: &Expr, _: &Expr) -> Result<(), SyntaxError> {
+        self.resolve_member_expression(object)?;
+
+        Ok(())
+    }
+
+    fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {
+        if self.resolve_symbol(&id.name) == None {
+            // if its the global scope, then its an error.
+            if self.scopes.len() == 1 {
+                return Err(self.unresolved_err(&id.name, &id.pos));
+            }
+
+            // if we're in a local scope, it could be declared
+            // later in global scope.
+            self.unresolved.insert(id.clone());
+        }
+
+        Ok(())
+    }
+
     fn number(&mut self, _: &f64) -> Result<(), SyntaxError> {
         Ok(())
     }

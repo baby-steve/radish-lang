@@ -1,4 +1,3 @@
-use crate::common::value::Class;
 use crate::common::{
     value::Function as FunctionValue, Chunk, CompiledModule, Disassembler, Module, Opcode, Span,
     Value,
@@ -31,17 +30,18 @@ impl Loop {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
-enum FunctionType {
+#[derive(Debug, Copy, Clone, PartialEq)]
+enum CompilerTarget {
     Function,
     Script,
+    Constructor,
 }
 
 /// Track the state of the current `[Function]` being compiled.
 #[derive(Debug)]
 struct Frame {
     pub function: FunctionValue,
-    pub function_type: FunctionType,
+    pub function_type: CompilerTarget,
 }
 
 impl Frame {
@@ -49,7 +49,7 @@ impl Frame {
     pub fn function(fun: FunctionValue) -> Frame {
         Frame {
             function: fun,
-            function_type: FunctionType::Function,
+            function_type: CompilerTarget::Function,
         }
     }
 
@@ -57,7 +57,15 @@ impl Frame {
     pub fn script(script: FunctionValue) -> Frame {
         Frame {
             function: script,
-            function_type: FunctionType::Script,
+            function_type: CompilerTarget::Script,
+        }
+    }
+
+    /// Helper method for creating a frame with a constructor type
+    pub fn constructor(con: FunctionValue) -> Frame {
+        Frame {
+            function: con,
+            function_type: CompilerTarget::Constructor,
         }
     }
 }
@@ -125,9 +133,7 @@ impl<'a> Compiler<'a> {
             Disassembler::disassemble_chunk(&script.name, &script);
         }
 
-        self.module
-            .borrow_mut()
-            .add_entry(script);
+        self.module.borrow_mut().add_entry(script);
 
         Ok(Rc::clone(&self.module))
     }
@@ -352,6 +358,12 @@ impl<'a> Compiler<'a> {
         self.frame.push(frame);
         self.frame_count += 1;
         self.enter_scope();
+
+        if self.frame[self.frame_count].function_type == CompilerTarget::Constructor {
+            self.add_local("this");
+        } else {
+            //self.add_local("");
+        }
     }
 
     /// Leave the current function body.
@@ -397,7 +409,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// Compile a function declaration,
-    fn function(&mut self, fun: &Function) -> Result<(), SyntaxError> {
+    fn function(&mut self, fun: &FunctionDecl) -> Result<(), SyntaxError> {
         if fun.params.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 parameters");
         }
@@ -433,7 +445,7 @@ impl<'a> Compiler<'a> {
     }
 
     /// Compile a class declaration
-    fn class(&mut self, class: &ClassDeclaration) -> Result<(), SyntaxError> {
+    fn class(&mut self, class: &ClassDecl) -> Result<(), SyntaxError> {
         // let class = Class {
         //     name: class.id.name.clone().into_boxed_str(),
         // };
@@ -443,18 +455,32 @@ impl<'a> Compiler<'a> {
         //  a) emit a `class` value now, or
         //  b) emit the class's name as a string and create the class at runtime?
         // I'm gonna go with option (b) for now, but could try (a)
-        
+
+        // emit the class's name
         self.emit_constant(Value::from(&class.id.name));
 
         // self.emit_constant(Value::from(class));
-        self.emit_byte(Opcode::Class as u8);
+        // emit build instruction
+        self.emit_byte(Opcode::BuildClass as u8);
+
+        // load the class's name back onto the stack (needed by methods)
+        // self.identifier(&class.id)?;
+
+        // self.enter_scope();
+
+        // compile each class constructor
+        for constructor in class.constructors.iter() {
+            self.constructor_declaration(constructor)?;
+        }
+
+        // self.leave_scope();
 
         Ok(())
     }
 }
 
 impl Visitor<(), SyntaxError> for Compiler<'_> {
-    fn function_declaration(&mut self, fun: &Function) -> Result<(), SyntaxError> {
+    fn function_declaration(&mut self, fun: &FunctionDecl) -> Result<(), SyntaxError> {
         // at this point all global functions have already been compiled,
         // so only locally scoped functions have to be handled.
         if self.scope_depth > 0 {
@@ -465,13 +491,59 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         Ok(())
     }
 
-    fn class_declaration(&mut self, class: &ClassDeclaration) -> Result<(), SyntaxError> {
+    fn class_declaration(&mut self, class: &ClassDecl) -> Result<(), SyntaxError> {
         // at this point all global classes have already been compiled,
         // so only locally scoped classes have to be handled.
         if self.scope_depth > 0 {
             self.class(class)?;
             self.define_variable(&class.id.name);
         }
+
+        Ok(())
+    }
+
+    fn constructor_declaration(&mut self, con: &ConstructorDecl) -> Result<(), SyntaxError> {
+        // the constructor body
+        // FIXME: a lot of duplicate code between constructors and functions.
+        if con.params.len() > u8::MAX.into() {
+            panic!("Cannot have more than 255 parameters");
+        }
+
+        let frame = FunctionValue {
+            arity: con.params.len() as u8,
+            name: con.id.name.clone().into_boxed_str(),
+            chunk: Chunk::default(),
+            module: Rc::downgrade(&self.module),
+        };
+
+        self.enter_function(Frame::constructor(frame));
+        {
+            for param in &con.params {
+                self.define_variable(&param.name);
+            }
+
+            for stmt in con.body.iter() {
+                self.statement(stmt)?;
+            }
+        }
+
+        let frame = self.leave_function();
+
+        if self.config.dump_code {
+            Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
+        }
+
+        // emit the constructor's body
+        self.emit_constant(Value::from(frame.function));
+
+        // create a closure from the constructor's body
+        self.emit_byte(Opcode::Closure as u8);
+
+        // emit the name of the constructor
+        // self.define_variable(&con.id.name); // nvm
+
+        // build the constructor
+        self.emit_byte(Opcode::BuildCon as u8);
 
         Ok(())
     }
@@ -732,6 +804,12 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         self.emit_bytes(Opcode::Call as u8, args.len() as u8);
 
         Ok(())
+    }
+
+    fn member_expr(&mut self, _object: &Expr, _property: &Expr) -> Result<(), SyntaxError> {
+        //let object = self.expression(object)?;
+
+        todo!();
     }
 
     fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {

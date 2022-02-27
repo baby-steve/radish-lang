@@ -1,5 +1,5 @@
 use crate::common::span::Span;
-use crate::compiler::ast::{Function, ClassDeclaration};
+use crate::compiler::ast::{FunctionDecl, ClassDecl};
 use std::{collections::HashMap, fmt};
 
 #[derive(Debug, PartialEq, Copy, Clone, Eq, Hash)]
@@ -7,6 +7,7 @@ pub enum SymbolKind {
     Var,
     Fun { arg_count: usize },
     Class,
+    Con,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -30,8 +31,8 @@ impl Symbol {
     }
 }
 
-impl From<&Function> for Symbol {
-    fn from(fun: &Function) -> Symbol {
+impl From<&FunctionDecl> for Symbol {
+    fn from(fun: &FunctionDecl) -> Symbol {
         let kind = SymbolKind::Fun {
             arg_count: fun.params.len(),
         };
@@ -39,8 +40,8 @@ impl From<&Function> for Symbol {
     }
 }
 
-impl From<&ClassDeclaration> for Symbol {
-    fn from(fun: &ClassDeclaration) -> Symbol {
+impl From<&ClassDecl> for Symbol {
+    fn from(fun: &ClassDecl) -> Symbol {
         let kind = SymbolKind::Class;
         Symbol::new(kind, &fun.id.pos, 0)
     }

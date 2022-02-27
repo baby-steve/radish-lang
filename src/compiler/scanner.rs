@@ -94,6 +94,7 @@ impl Scanner {
             Some("{") => self.make_token(TokenType::LeftBrace),
             Some("}") => self.make_token(TokenType::RightBrace),
             Some(",") => self.make_token(TokenType::Comma),
+            Some(".") => self.make_token(TokenType::Dot),
             Some("\"") => self.scan_string(),
             None => self.make_token(TokenType::Eof),
             _ if is_alpha(c.unwrap()) => self.identifier(),
@@ -305,6 +306,7 @@ impl Scanner {
             "continue" => TokenType::Continue,
             "fun" => TokenType::Fun,
             "class" => TokenType::Class,
+            "con" => TokenType::Con,
             "return" => TokenType::Return,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
@@ -428,6 +430,7 @@ mod tests {
             ("{", TokenType::LeftBrace),
             ("}", TokenType::RightBrace),
             (",", TokenType::Comma),
+            (".", TokenType::Dot),
             ("true", TokenType::True),
             ("false", TokenType::False),
             ("nil", TokenType::Nil),
@@ -447,6 +450,7 @@ mod tests {
             ("continue", TokenType::Continue),
             ("fun", TokenType::Fun),
             ("class", TokenType::Class),
+            ("con", TokenType::Con),
             ("return", TokenType::Return),
         ];
 

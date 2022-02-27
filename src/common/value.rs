@@ -3,6 +3,7 @@ use std::cmp::{Ord, Ordering};
 use std::fmt::{self};
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use std::rc::{Rc, Weak};
+use std::collections::HashMap;
 
 use crate::common::{Chunk, Module};
 
@@ -14,6 +15,7 @@ pub enum Value {
     Function(Rc<Function>),
     Closure(Closure),
     Class(Rc<Class>),
+    Instance(Instance),
     Nil,
 }
 
@@ -64,6 +66,8 @@ impl Clone for Value {
             Self::Function(val) => Self::Function(Rc::clone(val)),
             Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
             Self::Class(val) => Self::Class(Rc::clone(val)),
+            // TODO: when do we clone instances?
+            Self::Instance(_) => unimplemented!(),
         }
     }
 }
@@ -78,6 +82,7 @@ impl fmt::Display for Value {
             Value::Function(val) => write!(f, "<fun {}>", val.format_name()),
             Value::Closure(val) => write!(f, "<fun {}>", val.function.format_name()),
             Value::Class(val) => write!(f, "<class {}>", val.name.borrow()),
+            Value::Instance(val) => write!(f, "<{} instance>", val.class.name.borrow()),
             Value::Nil => f.write_str("nil"),
         }
     }
@@ -235,11 +240,74 @@ impl From<Rc<Function>> for Closure {
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Eq)]
+#[derive(Debug)]
 pub struct Class {
     /// the class name
-    // TODO: 
+    // TODO:
     // this doesn't need to be wrapped in a reference counter and refcell
-    // its only so that it matches the value of Value::String. 
+    // its only so that it matches the type of Value::String.
     pub name: Rc<RefCell<String>>,
+    pub constructors: RefCell<HashMap<String, Value>>,
+}
+
+impl Class {
+    pub fn new(name: &Rc<RefCell<String>>) -> Self {
+        Class {
+            name: Rc::clone(name),
+            constructors: RefCell::new(HashMap::new()),
+        }
+    }
+}
+
+impl PartialEq for Class {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+    }
+}
+
+impl PartialOrd for Class {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Class {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.name.cmp(&other.name)
+    }
+}
+
+impl Eq for Class {}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub enum MethodType {
+    Method,
+    Constructor,
+}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub struct Method {
+    pub ty: MethodType,
+    pub receiver: Instance,
+    pub method: Rc<Closure>,
+}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub struct Instance {
+    /// A reference to the class this is an instance of.
+    class: Rc<Class>,
+    /// This instance's fields.
+    fields: Vec<Value>,
+}
+
+impl Instance {
+    pub fn new(class: &Rc<Class>) -> Self {
+        Instance {
+            class: Rc::clone(class),
+            // TODO: 
+            // do we know how many fields an instance has?
+            // if so we could instead do `Vec::with_capacity(num_fields)`
+            fields: Vec::new(),
+        }
+    }
 }
