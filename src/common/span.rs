@@ -66,12 +66,12 @@ impl Span {
         string.split('\n').map(|l| l.to_string()).collect()
     }
 
-    pub fn get_line_index(string: &str, index: usize) -> Option<(usize, usize)> {
+    pub fn get_line_index(string: &str, index: usize) -> (usize, usize) {
         let lines = Span::lines_newline(&string[..index]);
         let line = lines.len() - 1;
         let col = lines.last().unwrap().chars().count() - 1;
 
-        Some((line, col))
+        (line, col)
     }
 }
 
@@ -112,9 +112,9 @@ impl fmt::Display for Span {
         let contents = self.source.contents.clone();
         let lines = Span::lines(&contents);
 
-        let (start_line, start_col) = Span::get_line_index(&contents, self.start).unwrap();
+        let (start_line, start_col) = Span::get_line_index(&contents, self.start);
 
-        let (end_line, _end_col) = Span::get_line_index(&contents, self.end).unwrap();
+        let (end_line, _end_col) = Span::get_line_index(&contents, self.end);
 
         let readable_start_line = (start_line + 1).to_string();
         let readable_end_line = (end_line + 1).to_string();
@@ -176,12 +176,12 @@ mod tests {
         let test_source = "hello, world!";
         //                        ^------ get this position (0:7)
         let pos = Span::get_line_index(test_source, 7);
-        assert_eq!(pos, Some((0, 7)));
+        assert_eq!(pos, (0, 7));
 
         let test_source = "hello,\n world!";
         //                          ^------ get this position (1:1)
         let pos = Span::get_line_index(test_source, 8);
-        assert_eq!(pos, Some((1, 1)));
+        assert_eq!(pos, (1, 1));
     }
 
     #[test]

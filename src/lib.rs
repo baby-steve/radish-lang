@@ -90,7 +90,12 @@ impl RadishError {
             RadishError::CompilerError(err) => {
                 use termcolor::{ColorChoice, StandardStream};
                 let mut temp_stderr = StandardStream::stderr(ColorChoice::Always);
-                error::emit(&mut temp_stderr, &err.report(), 1).unwrap();
+                error::emit(
+                    &mut temp_stderr,
+                    &err.report(),
+                    error::DisplayStyle::Verbose,
+                )
+                .unwrap();
             }
             RadishError::RuntimeError(err) => print!("{}", err),
             RadishError::IOError(err) => print!("{}", err),
@@ -173,7 +178,7 @@ impl Radish {
         let mut analyzer = Analyzer::new(&self.config);
         match analyzer.analyze(ast) {
             Ok(table) => Ok(table),
-            Err(err) => Err(err.into())
+            Err(err) => Err(err.into()),
         }
     }
 

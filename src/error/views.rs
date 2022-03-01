@@ -1,5 +1,6 @@
 use crate::common::span::Span;
-use crate::error::{renderer::Renderer, Diagnostic, LabelStyle};
+use crate::error::{renderer::Renderer, Diagnostic, Label, LabelStyle};
+use std::io;
 
 pub struct RichDiagnostic<'diagnostic> {
     diagnostic: &'diagnostic Diagnostic,
@@ -10,37 +11,99 @@ impl<'diagnostic> RichDiagnostic<'diagnostic> {
         RichDiagnostic { diagnostic }
     }
 
-    pub fn render(&self, renderer: &mut Renderer) -> Result<(), String> {
+    pub fn render(&self, renderer: &mut Renderer) -> io::Result<()> {
         renderer.render_header(self.diagnostic.severity, &self.diagnostic.message)?;
-        //let labels = self.diagnostic.labels.iter();
 
-        for label in self.diagnostic.labels.iter() {
-            let start = label.span.start;
-            let end = label.span.end;
+        // sort the labels based on their line number so that they get 
+        // rendered in the correct order.
+        let mut sorted_labels = self.diagnostic.labels.clone();
+        sorted_labels.sort_by(|a, b| a.span.start.cmp(&b.span.start));
 
-            let contents = label.span.source.contents.clone();
-            //let lines = Span::lines(&contents);
+        let mut primary_label: Option<&Label> = None;
 
-            let (start_line, _start_col) = Span::get_line_index(&contents, start).unwrap();
-            let (end_line, _end_col) = Span::get_line_index(&contents, end).unwrap();
+        // the line that we've seen
+        let mut last_line: Option<usize> = None;
 
-            //let readable_start_line = (start_line + 1).to_string();
-            let readable_end_line = (end_line + 1).to_string();
-            //let readable_start_col = (start_col + 1).to_string();
-            let padding = readable_end_line.len(); // FIXME: calculate from last label.
+        // keep track of which line has which labels
+        let mut all_labels: Vec<Vec<&Label>> = vec![];
+        let mut current: Vec<&Label> = vec![];
 
+        for label in sorted_labels.iter() {
             if label.style == LabelStyle::Primary {
-                renderer.render_location(&label.span, padding)?;
+                primary_label = Some(&label);
             }
 
-            // render some lines before snippet source for context?
+            // get the label's line number. For now just persume its single lined.
+            let start = label.span.start;
+            let (start_line, _start_col) =
+                Span::get_line_index(&label.span.source.contents, start);
+
+            // have we seen this line before?
+            if last_line == None || last_line.unwrap() == start_line {
+                // yup we've seen it before, so go ahead and just add it to the current
+                // group of labels.
+                current.push(label);
+            } else {
+                // nope, haven't seen it before.
+                // add the last group of labels to the collection of all labels
+                all_labels.push(current);
+                // add this label to a new group of labels.
+                current = vec![label];
+            }
+
+            last_line = Some(start_line);
+        }
+
+        // push the last group of labels to the collection of all labels
+        all_labels.push(current);
+
+        let padding = last_line.unwrap().to_string().len();
+
+        // render this diagnostics's location
+        if let Some(label) = primary_label {
+            renderer.render_location(&label.span, padding)?;
+        } else {
+            // TODO: handle when a diagnostic doesn't have a primary 
+            // label (or any label for that matter).
+            unimplemented!("couldn't find a primary label");
+        }
+
+        renderer.render_empty_line(padding + 1)?;
+
+        // render each source line and their labels
+        let mut previous_group: Option<&Vec<&Label>> = None;
+        for group in all_labels.iter() {
+            let start = group[0].span.start;
+            let (start_line, _) =
+                Span::get_line_index(&group[0].span.source.contents, start);
+
+            // if there was a gap between this line and the last, render a line break.
+            if let Some(prev) = previous_group {
+                let prev_start = prev[0].span.start;
+                let (prev_start_line, _) =
+                    Span::get_line_index(&prev[0].span.source.contents, prev_start);
+
+                if prev_start_line + 1 != start_line {
+                    renderer.render_line_break(padding)?;
+                }
+            };
 
             renderer.render_snippet_source(
-                padding, 
-                start_line, 
-                &contents, 
+                padding,
+                start_line,
+                &group[0].span.source.contents,
+                group,
                 self.diagnostic.severity,
             )?;
+
+            previous_group = Some(group);
+        }
+
+        renderer.render_empty_line(padding + 1)?;
+
+        // render any notes this diagnostic may have.
+        for note in self.diagnostic.notes.iter() {
+            renderer.render_snippet_note(note, padding)?;
         }
 
         Ok(())
@@ -64,12 +127,12 @@ impl<'diagnostic> ShortDiagnostic<'diagnostic> {
         }
     }
 
-    pub fn render(&self, renderer: &mut Renderer<'_>) -> Result<(), String> {
-        // Located header/s
+    pub fn render(&self, renderer: &mut Renderer<'_>) -> io::Result<()> {
+        // Located header
         //
         // ```text
-        // error: some e/rror me/ssag/e
-        // ```/
+        // error: some error message
+        // ```
         let mut primary_labels_encountered = 0;
         let labels = self.diagnostic.labels.iter();
         for label in labels.filter(|label| label.style == LabelStyle::Primary) {
@@ -131,74 +194,74 @@ mod tests {
         fn supports_color(&self) -> bool {
             true
         }
-    
+
         fn set_color(&mut self, spec: &ColorSpec) -> io::Result<()> {
             #![allow(unused_assignments)]
-    
+
             if self.color == *spec {
                 return Ok(());
             } else {
                 self.color = spec.clone();
             }
-    
+
             if spec.is_none() {
                 write!(self, "{{/}}")?;
                 return Ok(());
             } else {
                 write!(self, "{{")?;
             }
-    
+
             let mut first = true;
-    
+
             fn write_first(first: bool, write: &mut TestWriter) -> io::Result<bool> {
                 if !first {
                     write!(write, " ")?;
                 }
-    
+
                 Ok(false)
             }
-    
+
             if let Some(fg) = spec.fg() {
                 first = write_first(first, self)?;
                 write!(self, "fg:{:?}", fg)?;
             }
-    
+
             if let Some(bg) = spec.bg() {
                 first = write_first(first, self)?;
                 write!(self, "bg:{:?}", bg)?;
             }
-    
+
             if spec.bold() {
                 first = write_first(first, self)?;
                 write!(self, "bold")?;
             }
-    
+
             if spec.underline() {
                 first = write_first(first, self)?;
                 write!(self, "underline")?;
             }
-    
+
             if spec.intense() {
                 first = write_first(first, self)?;
                 write!(self, "bright")?;
             }
-    
+
             write!(self, "}}")?;
-    
+
             Ok(())
         }
-    
+
         fn reset(&mut self) -> io::Result<()> {
             let color = self.color.clone();
-    
+
             if color != ColorSpec::new() {
                 write!(self, "{{/}}")?;
                 self.color = ColorSpec::new();
             }
-    
+
             Ok(())
         }
     }
 
-    
+
 }*/

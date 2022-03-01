@@ -51,7 +51,7 @@ impl fmt::Display for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let contents = &self.1.source.contents;
         let start = self.1.start;
-        let (start_line, start_col) = Span::get_line_index(&contents, start).unwrap();
+        let (start_line, start_col) = Span::get_line_index(&contents, start);
         write!(
             f,
             "Symbol<type=\"{:?}\", pos=({},{})>",
