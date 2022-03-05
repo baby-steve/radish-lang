@@ -1,10 +1,7 @@
-pub mod cli;
 pub mod common;
 pub mod compiler;
 pub mod error;
 pub mod vm;
-
-pub use cli::Cli;
 
 use std::fmt;
 use std::rc::Rc;
@@ -55,7 +52,7 @@ impl PartialEq for IOError {
 
 impl From<std::io::Error> for IOError {
     fn from(err: std::io::Error) -> IOError {
-        IOError(std::sync::Arc::new(err.into()))
+        IOError(std::sync::Arc::new(err))
     }
 }
 
@@ -105,10 +102,10 @@ impl RadishError {
 
 #[derive(Debug)]
 pub struct RadishConfig {
-    stdout: Rc<dyn RadishFile>,
-    dump_ast: bool,
-    dump_code: bool,
-    trace: bool,
+    pub stdout: Rc<dyn RadishFile>,
+    pub dump_ast: bool,
+    pub dump_code: bool,
+    pub trace: bool,
 }
 
 impl Default for RadishConfig {
@@ -130,15 +127,6 @@ impl RadishConfig {
     pub fn with_stdout(stdout: Rc<dyn RadishFile>) -> Rc<RadishConfig> {
         Rc::new(RadishConfig {
             stdout,
-            ..RadishConfig::default()
-        })
-    }
-
-    pub fn from_cli(cli: &Cli) -> Rc<RadishConfig> {
-        Rc::new(RadishConfig {
-            dump_ast: cli.dump_ast,
-            dump_code: cli.dump_code,
-            trace: cli.trace,
             ..RadishConfig::default()
         })
     }
