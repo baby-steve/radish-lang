@@ -111,7 +111,6 @@ impl VM {
     /// Return the next `u8` sized byte from the bytecode stream.
     #[inline]
     fn read_byte(&mut self) -> u8 {
-        //let frame = &mut self.frames[self.frame_count - 1];
         self.current_frame_mut().ip += 1;
         self.current_frame().closure.function.chunk.code[self.ip() - 1]
     }
@@ -166,8 +165,6 @@ impl VM {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), Trace> {
         match callee {
             Value::Closure(fun) => self.call_function(fun, arg_count),
-            //Value::Function(fun) => self.call_function(fun, arg_count),
-            //Value::Closure(closure) => self.call_closure(closure, arg_count),
             _ => {
                 // NOTE: could this be moved to semantic analysis?
                 let message = format!("'{}' is not callable", callee);
@@ -192,27 +189,21 @@ impl VM {
         Ok(())
     }
 
+    /// Create a closure from the value on top of the stack.
     #[inline]
     fn make_closure(&mut self) -> Result<(), Trace> {
-        let function = self.stack.pop();
-        let closure = Closure {
-            function: match function {
-                Value::Function(f) => f,
-                _ => unreachable!("can only create a closure from a function"),
-            },
-        };
+        let function = self.stack.pop().into_function().unwrap();
+        let closure = Closure { function };
 
         self.stack.push(Value::Closure(closure));
 
         Ok(())
     }
 
+    /// Create a class from the value on top of the stack.
     #[inline]
     fn make_class(&mut self) -> Result<(), Trace> {
-        let name = match self.stack.pop() {
-            Value::String(val) => val,
-            _ => unreachable!("class name must be string"),
-        };
+        let name = self.stack.pop().into_string().unwrap();
 
         let class = Class::new(&name);
 
@@ -221,19 +212,17 @@ impl VM {
         Ok(())
     }
 
+    /// Create a constructor from the value on top of the stack.
     #[inline]
     fn make_constructor(&mut self) -> Result<(), Trace> {
         let constructor = self.stack.pop();
-        
+
         let name = match &constructor {
             Value::Closure(closure) => closure.function.name.to_string(),
             _ => unreachable!("can only create a constructor from a closure"),
         };
-        
-        let class = match self.stack.peek() {
-            Some(Value::Class(class)) => class,
-            _ => unreachable!("can only define a constructor on a class"),
-        };
+
+        let class = self.stack.peek().unwrap().into_class().unwrap();
 
         class.constructors.borrow_mut().insert(name, constructor);
 
@@ -454,6 +443,7 @@ impl VM {
         }
     }
 }
+
 /*
 #[cfg(test)]
 mod tests {

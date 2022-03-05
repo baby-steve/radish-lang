@@ -15,8 +15,42 @@ pub enum Value {
     Function(Rc<Function>),
     Closure(Closure),
     Class(Rc<Class>),
-    Instance(Instance),
+    Instance(Rc<Instance>),
     Nil,
+}
+
+impl Value {
+    #[inline]
+    pub fn into_string(self) -> Result<Rc<RefCell<String>>, String> {
+        match self {
+            Value::String(s) => Ok(s),
+            _ => Err("expected a string".to_string()),
+        }
+    }
+
+    #[inline]
+    pub fn into_function(self) -> Result<Rc<Function>, String> {
+        match self {
+            Value::Function(f) => Ok(f),
+            _ => Err("expected a function".to_string()),
+        }
+    }
+
+    #[inline]
+    pub fn into_class(self) -> Result<Rc<Class>, String> {
+        match self {
+            Value::Class(class) => Ok(class),
+            _ => Err("expected a class".to_string()),
+        }
+    }
+
+    #[inline]
+    pub fn into_closure(self) -> Result<Closure, String> {
+        match self {
+            Value::Closure(closure) => Ok(closure),
+            _ => Err("expected a closure".to_string()),
+        }
+    }
 }
 
 impl From<f64> for Value {
@@ -59,15 +93,21 @@ impl From<Class> for Value {
 impl Clone for Value {
     fn clone(&self) -> Value {
         match self {
+            Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
+            Self::Function(val) => Self::Function(Rc::clone(&val)),
+
             Self::Nil => Self::Nil,
             Self::Boolean(val) => Self::Boolean(*val),
             Self::Number(val) => Self::Number(*val),
+
             Self::String(val) => Self::String(Rc::clone(val)),
-            Self::Function(val) => Self::Function(Rc::clone(val)),
-            Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
+
+            //Self::Function(val) => Self::Function(Rc::clone(&val)),
+            //Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
+
             Self::Class(val) => Self::Class(Rc::clone(val)),
-            // TODO: when do we clone instances?
-            Self::Instance(_) => unimplemented!(),
+            Self::Instance(inst) => Self::Instance(Rc::clone(inst)),
+            //Self::Test(val) => Self::Test(Rc::clone(&val)),
         }
     }
 }
@@ -78,12 +118,15 @@ impl fmt::Display for Value {
             Value::Number(num) => f.write_str(&format!("{}", num.to_string())),
             Value::Boolean(false) => f.write_str("false"),
             Value::Boolean(true) => f.write_str("true"),
+            //Value::Obj(obj) => f.write_str("OBJECT"),
             Value::String(val) => f.write_str(&format!("\"{}\"", val.borrow())),
             Value::Function(val) => write!(f, "<fun {}>", val.format_name()),
             Value::Closure(val) => write!(f, "<fun {}>", val.function.format_name()),
+            //Value::Class(val) => write!(f, "<class>"),
             Value::Class(val) => write!(f, "<class {}>", val.name.borrow()),
-            Value::Instance(val) => write!(f, "<{} instance>", val.class.name.borrow()),
+            Value::Instance(val) => write!(f, "<{:?} instance>", val.class.name.borrow()),
             Value::Nil => f.write_str("nil"),
+            //Value::Test(val) => write!(f, "<test {}>", val.borrow()),
         }
     }
 }
@@ -278,7 +321,7 @@ impl Ord for Class {
 }
 
 impl Eq for Class {}
-
+/*
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum MethodType {
     Method,
@@ -290,13 +333,13 @@ pub struct Method {
     pub ty: MethodType,
     pub receiver: Instance,
     pub method: Rc<Closure>,
-}
+}*/
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub struct Instance {
-    /// A reference to the class this is an instance of.
+    // A reference to the class this is an instance of.
     class: Rc<Class>,
-    /// This instance's fields.
+    // This instance's fields.
     fields: Vec<Value>,
 }
 
@@ -309,5 +352,18 @@ impl Instance {
             // if so we could instead do `Vec::with_capacity(num_fields)`
             fields: Vec::new(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Value;
+
+    #[test]
+    fn test_size() {
+        assert_eq! {
+            std::mem::size_of::<Value>(),
+            16,
+        };
     }
 }
