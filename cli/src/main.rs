@@ -1,3 +1,5 @@
+use radish::{RadishConfig, Radish, RadishError};
+
 use clap::{App, Arg};
 
 #[derive(Debug)]
@@ -71,4 +73,25 @@ impl Cli {
             trace,
         }
     }
+}
+
+fn main() -> Result<(), RadishError> {
+    let args = Cli::new();
+
+    let config = RadishConfig {
+        dump_ast: args.dump_ast,
+        dump_code: args.dump_code,
+        trace: args.trace,
+        ..RadishConfig::default()
+    };
+
+    let mut radish = Radish::with_settings(std::rc::Rc::new(config));
+
+    let source = radish.read_file(&args.path)?;
+
+    if let Err(err) = radish.run_from_source(source) {        
+        err.emit();
+    } 
+
+    Ok(())
 }

@@ -1,0 +1,11 @@
+// Test constant variable declarations.
+fin a = 23
+
+print a // expect: 23
+
+// Illegal reassignment.
+fin b = 2
+b += 4
+
+// Constant without an inital value.
+// fin c

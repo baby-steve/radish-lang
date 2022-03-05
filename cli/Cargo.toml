@@ -1,0 +1,11 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2018"
+description = """
+A command line interface for the Radish programming langauge
+"""
+
+[dependencies]
+clap = "2.34.0"
+radish = { path = "../radish" }

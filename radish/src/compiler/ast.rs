@@ -42,37 +42,49 @@ impl ASTNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
-    // <expr>*
+    /// '{' <expr>... '}'
     BlockStmt(Box<Vec<Stmt>>, Span),
-    // <expr>
+    /// <expr>
     ExpressionStmt(Box<Expr>),
-    // <Function>
-    FunDeclaration(Function, Span),
-    // 'var' <id> '=' <expr>
-    VarDeclaration(Ident, Option<Expr>, Span),
-    // <id> <op> <expr>
+    /// <FunctionDecl>
+    FunDeclaration(FunctionDecl, Span),
+    /// <ConstructorDecl>
+    ConDeclaration(ConstructorDecl, Span),
+    /// <Class>
+    ClassDeclaration(ClassDecl, Span),
+    /// 'var' <id> '=' <expr> kind
+    VarDeclaration(Ident, Option<Expr>, VarKind, Span),
+    /// <id> <op> <expr>
     Assignment(Ident, OpAssignment, Expr, Span),
-    // if <expr> <block> <alternate> end
+    /// if <expr> <block> <alternate> end
     IfStmt(Expr, Box<Vec<Stmt>>, Option<Box<Stmt>>, Span),
-    // loop <block> endloop
+    /// loop <block> endloop
     LoopStmt(Box<Vec<Stmt>>, Span),
-    // while <expr> loop <block> endloop
+    /// while <expr> loop <block> endloop
     WhileStmt(Expr, Box<Vec<Stmt>>, Span),
-    // break
+    /// break
     BreakStmt(Span),
-    // continue
+    /// continue
     ContinueStmt(Span),
-    // return <expr>?
+    /// return <expr>?
     ReturnStmt(Option<Expr>, Span),
-    // 'print' <expr>
+    /// 'print' <expr>
     PrintStmt(Expr, Span),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum VarKind {
+    Var,
+    Fin,
 }
 
 impl Stmt {
     pub fn position(&self) -> Span {
         match self {
-            Self::VarDeclaration(_, _, pos)
+            Self::VarDeclaration(_, _, _, pos)
             | Self::FunDeclaration(_, pos)
+            | Self::ConDeclaration(_, pos)
+            | Self::ClassDeclaration(_, pos)
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
             | Self::Assignment(_, _, _, pos)
@@ -89,15 +101,48 @@ impl Stmt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
+    /// A binary expression
+    /// ```txt
+    /// <expr> <op> <expr>
+    /// ```
     BinaryExpr(Box<BinaryExpr>, Span),
+    /// A grouping expression
+    /// ```txt
+    /// '(' <expr> ')'
+    /// ```
     ParenExpr(Box<Expr>, Span),
+    /// An unary expression
+    /// ```txt
+    /// <op> <expr>
+    /// ```
     UnaryExpr(Op, Box<Expr>, Span),
+    /// A logical expression
+    /// ```txt
+    /// <expr> 'and'|'or' <expr>
+    /// ```
     LogicalExpr(Box<BinaryExpr>, Span),
+    /// A call expression
+    /// ```txt
+    /// <callee> '(' <args> ')'
+    /// ```
     CallExpr(Box<Expr>, Vec<Box<Expr>>, Span),
+    /// A member expression
+    /// ```txt
+    /// <object> '.' <property>
+    /// ```
+    MemberExpr(Box<Expr>, Box<Expr>, Span),
+    /// An identifier
     Identifier(Ident),
+    /// A number literal
     Number(f64, Span),
+    /// A boolean literal
+    /// ```txt
+    /// true | false
+    /// ```
     Bool(bool, Span),
+    /// A string literal
     String(String, Span),
+    /// `nil` literal. 
     Nil(Span),
 }
 
@@ -109,6 +154,7 @@ impl Expr {
             | Self::UnaryExpr(_, _, pos)
             | Self::LogicalExpr(_, pos)
             | Self::CallExpr(_, _, pos)
+            | Self::MemberExpr(_, _, pos)
             | Self::Number(_, pos)
             | Self::Bool(_, pos)
             | Self::String(_, pos)
@@ -151,7 +197,7 @@ impl BinaryExpr {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Function {
+pub struct FunctionDecl {
     pub id: Ident,
     pub params: Vec<Ident>,
     pub body: Box<Vec<Stmt>>,
@@ -159,9 +205,9 @@ pub struct Function {
     pub scope: std::cell::RefCell<SymbolTable>,
 }
 
-impl Function {
-    pub fn new(id: Ident, params: Vec<Ident>, body: Box<Vec<Stmt>>) -> Function {
-        Function {
+impl FunctionDecl {
+    pub fn new(id: Ident, params: Vec<Ident>, body: Box<Vec<Stmt>>) -> FunctionDecl {
+        FunctionDecl {
             id,
             params,
             body,
@@ -175,10 +221,47 @@ impl Function {
         }
 
         for non_local in replacement.non_locals.iter() {
-            self.scope.borrow_mut().add_non_local(non_local.0, non_local.1.clone());
+            self.scope
+                .borrow_mut()
+                .add_non_local(non_local.0, non_local.1.clone());
         }
 
         //self.scope.borrow_mut().depth = replacement.depth;
+    }
+}
+
+/// A class declaration.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassDecl {
+    /// the name of the class
+    pub id: Ident,
+    /// this class's constructors
+    pub constructors: Vec<ConstructorDecl>,
+}
+
+impl ClassDecl {
+    pub fn new(id: Ident, constructors: Vec<ConstructorDecl>) -> ClassDecl {
+        ClassDecl { id, constructors }
+    }
+}
+
+/// A constructor declaration
+/// ```text
+/// 'con' <id> '(' <params> ')' '{' <body> '}'
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct ConstructorDecl {
+    /// constructor name
+    pub id: Ident,
+    /// constructor's parameter list
+    pub params: Vec<Ident>,
+    /// body of the constructor
+    pub body: Box<Vec<Stmt>>,
+}
+
+impl ConstructorDecl {
+    pub fn new(id: Ident, params: Vec<Ident>, body: Box<Vec<Stmt>>) -> Self {
+        ConstructorDecl { id, params, body }
     }
 }
 

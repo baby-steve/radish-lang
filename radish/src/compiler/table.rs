@@ -1,11 +1,13 @@
 use crate::common::span::Span;
-use crate::compiler::ast::Function;
+use crate::compiler::ast::{FunctionDecl, ClassDecl};
 use std::{collections::HashMap, fmt};
 
 #[derive(Debug, PartialEq, Copy, Clone, Eq, Hash)]
 pub enum SymbolKind {
     Var,
     Fun { arg_count: usize },
+    Class,
+    Con,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -23,13 +25,24 @@ impl Symbol {
     pub fn fun(arg_count: usize, span: &Span, depth: usize) -> Symbol {
         Symbol(SymbolKind::Fun { arg_count }, Span::from(&span), depth)
     }
+
+    pub fn class(span: &Span, depth: usize) -> Symbol {
+        Symbol(SymbolKind::Class, Span::from(&span), depth)
+    }
 }
 
-impl From<&Function> for Symbol {
-    fn from(fun: &Function) -> Symbol {
+impl From<&FunctionDecl> for Symbol {
+    fn from(fun: &FunctionDecl) -> Symbol {
         let kind = SymbolKind::Fun {
             arg_count: fun.params.len(),
         };
+        Symbol::new(kind, &fun.id.pos, 0)
+    }
+}
+
+impl From<&ClassDecl> for Symbol {
+    fn from(fun: &ClassDecl) -> Symbol {
+        let kind = SymbolKind::Class;
         Symbol::new(kind, &fun.id.pos, 0)
     }
 }
@@ -38,7 +51,7 @@ impl fmt::Display for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let contents = &self.1.source.contents;
         let start = self.1.start;
-        let (start_line, start_col) = Span::get_line_index(&contents, start).unwrap();
+        let (start_line, start_col) = Span::get_line_index(&contents, start);
         write!(
             f,
             "Symbol<type=\"{:?}\", pos=({},{})>",

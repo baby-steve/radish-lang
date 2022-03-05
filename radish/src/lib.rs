@@ -1,10 +1,7 @@
-pub mod cli;
 pub mod common;
 pub mod compiler;
 pub mod error;
 pub mod vm;
-
-pub use cli::Cli;
 
 use std::fmt;
 use std::rc::Rc;
@@ -55,7 +52,7 @@ impl PartialEq for IOError {
 
 impl From<std::io::Error> for IOError {
     fn from(err: std::io::Error) -> IOError {
-        IOError(std::sync::Arc::new(err.into()))
+        IOError(std::sync::Arc::new(err))
     }
 }
 
@@ -90,7 +87,12 @@ impl RadishError {
             RadishError::CompilerError(err) => {
                 use termcolor::{ColorChoice, StandardStream};
                 let mut temp_stderr = StandardStream::stderr(ColorChoice::Always);
-                error::emit(&mut temp_stderr, &err.report(), 1).unwrap();
+                error::emit(
+                    &mut temp_stderr,
+                    &err.report(),
+                    error::DisplayStyle::Verbose,
+                )
+                .unwrap();
             }
             RadishError::RuntimeError(err) => print!("{}", err),
             RadishError::IOError(err) => print!("{}", err),
@@ -100,10 +102,10 @@ impl RadishError {
 
 #[derive(Debug)]
 pub struct RadishConfig {
-    stdout: Rc<dyn RadishFile>,
-    dump_ast: bool,
-    dump_code: bool,
-    trace: bool,
+    pub stdout: Rc<dyn RadishFile>,
+    pub dump_ast: bool,
+    pub dump_code: bool,
+    pub trace: bool,
 }
 
 impl Default for RadishConfig {
@@ -125,15 +127,6 @@ impl RadishConfig {
     pub fn with_stdout(stdout: Rc<dyn RadishFile>) -> Rc<RadishConfig> {
         Rc::new(RadishConfig {
             stdout,
-            ..RadishConfig::default()
-        })
-    }
-
-    pub fn from_cli(cli: &Cli) -> Rc<RadishConfig> {
-        Rc::new(RadishConfig {
-            dump_ast: cli.dump_ast,
-            dump_code: cli.dump_code,
-            trace: cli.trace,
             ..RadishConfig::default()
         })
     }
@@ -169,14 +162,11 @@ impl Radish {
         }
     }
 
-    pub fn check(&mut self, ast: &AST) -> SymbolTable {
-        let mut analyzer = Analyzer::new();
+    pub fn check(&mut self, ast: &AST) -> Result<SymbolTable, RadishError> {
+        let mut analyzer = Analyzer::new(&self.config);
         match analyzer.analyze(ast) {
-            Ok(table) => table,
-            Err(err) => {
-                println!("{:?}", err);
-                panic!("error: failed to compile");
-            }
+            Ok(table) => Ok(table),
+            Err(err) => Err(err.into()),
         }
     }
 
@@ -199,11 +189,9 @@ impl Radish {
 
     pub fn run_from_source(&mut self, src: Rc<Source>) -> Result<(), RadishError> {
         let ast = self.parse_source(src)?;
-        let scope = self.check(&ast);
-        //println!("{:#?}", &ast);
-        let module = self.compile(&ast, &scope);
+        let scope = self.check(&ast)?;
 
-        println!("{}", module.borrow());
+        let module = self.compile(&ast, &scope);
 
         let res = self.interpret(module)?;
 

@@ -7,6 +7,8 @@ use termcolor::WriteColor;
 pub use diagnostic::{AsDiagnostic, Diagnostic, Label, LabelStyle};
 use crate::common::span::Span;
 
+use std::io;
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Item {
     pub span: Span,
@@ -23,18 +25,24 @@ impl Item {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DisplayStyle {
+    Verbose,
+    Short,
+}
+
 /// Emit a diagnostic
 pub fn emit(
     writer: &mut dyn WriteColor, 
     diagnostic: &Diagnostic,
-    display_style: u8, // HACK make this an enum or something 
-) -> Result<(), String> {
+    display_style: DisplayStyle,
+) -> io::Result<()> {
     use self::renderer::Renderer;
     use self::views::{ShortDiagnostic, RichDiagnostic};
 
     let mut renderer = Renderer::new(writer);
     match display_style {
-        0 => ShortDiagnostic::new(&diagnostic).render(&mut renderer),
-        _ => RichDiagnostic::new(&diagnostic).render(&mut renderer),
+        DisplayStyle::Short => ShortDiagnostic::new(&diagnostic).render(&mut renderer),
+        DisplayStyle::Verbose => RichDiagnostic::new(&diagnostic).render(&mut renderer),
     }
 }
