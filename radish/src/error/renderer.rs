@@ -129,7 +129,7 @@ impl<'writer> Renderer<'writer> {
         outer_padding: usize,
         line_number: usize,
         source: &str,
-        labels: &Vec<&Label>,
+        labels: &[&Label],
         _severity: Severity,
     ) -> io::Result<()> {
         // Write source line

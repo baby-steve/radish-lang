@@ -42,7 +42,7 @@ impl VM {
         }
     }
 
-    pub fn interpret(&mut self, module: CompiledModule) -> Result<(), Trace> {
+    pub fn interpret(&mut self, module: CompiledModule) -> Result<Value, Trace> {
         use std::time::Instant;
 
         self.last_module = module;
@@ -67,12 +67,8 @@ impl VM {
     fn error(&mut self, message: impl ToString) -> Trace {
         let mut trace = Trace::new(message);
 
-        loop {
-            if let Some(frame) = self.frames.pop() {
-                trace.add_context(frame.closure.function.name.to_string());
-            } else {
-                break;
-            }
+        while let Some(frame) = self.frames.pop() {
+            trace.add_context(frame.closure.function.name.to_string());
         }
 
         trace
@@ -105,7 +101,7 @@ impl VM {
 
         self.current_frame_mut().ip += 1;
 
-        return op;
+        op
     }
 
     /// Return the next `u8` sized byte from the bytecode stream.
@@ -136,9 +132,7 @@ impl VM {
             .try_into()
             .unwrap();
 
-        let bytes = u32::from_le_bytes(bytes);
-
-        bytes
+        u32::from_le_bytes(bytes)
     }
 
     #[inline]
@@ -155,10 +149,10 @@ impl VM {
     /// Check if the top [`Value`] on the stack is falsey.
     #[inline]
     fn is_falsey(&mut self) -> bool {
-        match self.stack.peek() {
-            Some(Value::Nil) | Some(Value::Boolean(false)) => true,
-            _ => false,
-        }
+        matches!(
+            self.stack.peek(),
+            Some(Value::Nil) | Some(Value::Boolean(false))
+        )
     }
 
     #[inline]
@@ -311,7 +305,7 @@ impl VM {
         Ok(())
     }
 
-    fn run(&mut self) -> Result<(), Trace> {
+    fn run(&mut self) -> Result<Value, Trace> {
         macro_rules! binary_op {
             ($op:tt) => {{
                 let b = self.stack.pop();
@@ -416,12 +410,12 @@ impl VM {
                     // if that was the last frame, exit the VM.
                     if self.frame_count - 1 == 0 {
                         //self.stack.pop();
-                        return Ok(());
+                        return Ok(result);
                     }
 
                     self.frame_count -= 1;
 
-                    while &self.stack.stack.len() > &self.frames[self.frame_count].offset {
+                    while self.stack.stack.len() > self.frames[self.frame_count].offset {
                         self.stack.stack.pop();
                     }
 
@@ -440,7 +434,7 @@ impl VM {
                 }
                 print!("\n");
             }
-        }
+        };
     }
 }
 
