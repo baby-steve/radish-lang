@@ -6,10 +6,10 @@ pub mod vm;
 use std::fmt;
 use std::rc::Rc;
 
-use common::{source::Source, CompiledModule};
+use common::{source::Source, CompiledModule, Value};
 use compiler::{
-    analysis::Analyzer, ast::AST, compiler::Compiler, error::SyntaxError, parser::Parser,
-    table::SymbolTable,
+    ast::AST, compiler::Compiler, error::SyntaxError, parser::Parser,
+    scope::ScopeMap,
 };
 
 use vm::{trace::Trace, vm::VM};
@@ -61,6 +61,7 @@ pub enum RadishError {
     CompilerError(SyntaxError),
     RuntimeError(Trace),
     IOError(IOError),
+    Other(String),
 }
 
 impl From<SyntaxError> for RadishError {
@@ -81,6 +82,18 @@ impl From<std::io::Error> for RadishError {
     }
 }
 
+impl From<String> for RadishError {
+    fn from(err: String) -> Self {
+        RadishError::Other(err)
+    }
+}
+
+impl From<&str> for RadishError {
+    fn from(err: &str) -> Self {
+        RadishError::Other(err.to_string())
+    }
+}
+
 impl RadishError {
     pub fn emit(&self) {
         match &self {
@@ -96,13 +109,16 @@ impl RadishError {
             }
             RadishError::RuntimeError(err) => print!("{}", err),
             RadishError::IOError(err) => print!("{}", err),
+            RadishError::Other(err) => print!("{}", err),
         }
     }
 }
 
+// TODO: move debug info to its own struct.
 #[derive(Debug)]
 pub struct RadishConfig {
     pub stdout: Rc<dyn RadishFile>,
+    pub repl: bool,
     pub dump_ast: bool,
     pub dump_code: bool,
     pub trace: bool,
@@ -112,6 +128,7 @@ impl Default for RadishConfig {
     fn default() -> RadishConfig {
         RadishConfig {
             stdout: Rc::new(RadishIO),
+            repl: false,
             dump_ast: false,
             dump_code: false,
             trace: false,
@@ -130,7 +147,13 @@ impl RadishConfig {
             ..RadishConfig::default()
         })
     }
+
+    pub fn set_repl(&mut self, repl: bool) {
+        self.repl = repl;
+    }
 }
+
+type RadishResult<T> = Result<T, RadishError>;
 
 /// The rudimentary wrapper of sorts for the Radish language.
 pub struct Radish {
@@ -146,60 +169,87 @@ impl Radish {
         Radish { config }
     }
 
-    pub fn parse_source(&mut self, source: Rc<Source>) -> Result<AST, RadishError> {
-        let mut parser = Parser::new(source, &self.config);
-        match parser.parse() {
-            Ok(ast) => Ok(ast),
-            Err(err) => {
-                // TODO: replace this with config's own stderr.
-                //use termcolor::{ColorChoice, StandardStream};
-                //let mut temp_stderr = StandardStream::stderr(ColorChoice::Always);
-                //error::emit(&mut temp_stderr, &err.report(), 1).unwrap();
+    // pub fn compile(&mut self, ast: &AST, scope: &SymbolTable) -> CompiledModule {
+    //     // TODO: why are we passing `scope` to the compiler twice?
+    //     let mut compiler = Compiler::new(&scope, &self.config);
+    //     match compiler.compile(&ast, &scope) {
+    //         Ok(res) => res,
+    //         Err(_) => todo!(),
+    //     }
+    // }
 
-                //panic!("error: failed to parse");
-                Err(RadishError::from(err))
-            }
-        }
+    //pub fn interpret(&mut self, module: CompiledModule) -> Result<Value, RadishError> {
+    //    let mut vm = VM::new(&self.config);
+
+    //    let res = vm.interpret(module)?;
+
+    //    Ok(res)
+    //}
+
+    //pub fn run_from_source(&mut self, src: Rc<Source>) -> Result<Value, RadishError> {
+    //    let ast = self.parse_source(src)?;
+    //    let scope = self.check(&ast)?;
+
+    //    let module = self.compile(&ast, &scope);
+
+    //    let res = self.interpret(module)?;
+
+    //    Ok(res)
+    //}
+
+    //pub fn read_file(&self, path: &str) -> Result<Rc<Source>, RadishError> {
+    //    let path_buf = std::path::PathBuf::from(path);
+    //    let result = std::fs::read_to_string(&path_buf);
+
+    //    let content = match result {
+    //        Ok(res) => res,
+    //        Err(error) => return Err(error.into()),
+    //    };
+
+    //    Ok(Source::new(&content, path_buf.to_string_lossy()))
+    //}
+
+    // parse a string
+    pub fn parse_str(&mut self, filename: &str, source: &str) -> RadishResult<AST> {
+        let src = Source::new(source, filename);
+        let mut parser = Parser::new(src, &self.config);
+
+        Ok(parser.parse()?)
     }
 
-    pub fn check(&mut self, ast: &AST) -> Result<SymbolTable, RadishError> {
-        let mut analyzer = Analyzer::new(&self.config);
-        match analyzer.analyze(ast) {
-            Ok(table) => Ok(table),
-            Err(err) => Err(err.into()),
-        }
+
+    pub fn check(&mut self, ast: &mut AST) -> RadishResult<()> {
+        Ok(compiler::check(ast)?)
     }
 
-    pub fn compile(&mut self, ast: &AST, scope: &SymbolTable) -> CompiledModule {
-        // TODO: why are we passing `scope` to the compiler twice?
-        let mut compiler = Compiler::new(&scope, &self.config);
-        match compiler.compile(&ast, &scope) {
-            Ok(res) => res,
-            Err(_) => todo!(),
-        }
+    pub fn compile_script(&mut self, filename: &str, input: &str) -> RadishResult<CompiledModule> {
+        let mut ast = self.parse_str(filename, input)?;
+
+        Ok(self.compile_ast(&mut ast)?)
     }
 
-    pub fn interpret(&mut self, module: CompiledModule) -> Result<(), RadishError> {
-        let mut vm = VM::new(&self.config);
+    pub fn compile_file(&mut self, filename: &str) -> RadishResult<CompiledModule> {
+        let path_buf = std::path::PathBuf::from(filename);
+        let result = std::fs::read_to_string(&path_buf);
 
-        let res = vm.interpret(module)?;
-
-        Ok(res)
+        Ok(self.compile_script(filename, &result?)?)
     }
 
-    pub fn run_from_source(&mut self, src: Rc<Source>) -> Result<(), RadishError> {
-        let ast = self.parse_source(src)?;
-        let scope = self.check(&ast)?;
+    pub fn compile_ast(&mut self, ast: &mut AST) -> RadishResult<CompiledModule> {
+        self.check(ast)?;
+        let mut compiler = Compiler::new(&self.config);
 
-        let module = self.compile(&ast, &scope);
-
-        let res = self.interpret(module)?;
-
-        Ok(res)
+        Ok(compiler.compile(&ast)?)
     }
 
-    pub fn read_file(&self, path: &str) -> Result<Rc<Source>, RadishError> {
-        let path_buf = std::path::PathBuf::from(path);
+    // load a string (and compile it?)
+    fn _load_script(&mut self, _filename: &str, _input: &str) -> RadishResult<()> {
+        todo!();
+    }
+
+    // load a string by reading a file with the given name (and compile it?)
+    fn _load_file(&mut self, filename: &str) -> RadishResult<()> {
+        let path_buf = std::path::PathBuf::from(filename);
         let result = std::fs::read_to_string(&path_buf);
 
         let content = match result {
@@ -207,6 +257,19 @@ impl Radish {
             Err(error) => return Err(error.into()),
         };
 
-        Ok(Source::new(&content, path_buf.to_string_lossy()))
+        self._load_script(filename, &content)
+    }
+
+    // run an expr, returning the result
+    pub fn run_expr(&mut self, name: &str, expr_str: &str) -> RadishResult<Value> {
+        let module = self.compile_script(name, expr_str)?;
+
+        Ok(self.run_module(module)?)
+    }
+
+    pub fn run_module(&mut self, module: CompiledModule) -> RadishResult<Value> {
+        let mut vm = VM::new(&self.config);
+
+        Ok(vm.interpret(module)?)
     }
 }

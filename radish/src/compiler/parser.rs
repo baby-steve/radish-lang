@@ -166,10 +166,10 @@ impl Parser {
                 let start = self.current.span.clone();
                 self.consume(TokenType::LeftBrace);
 
-                let block = Box::new(self.parse_block()?);
+                let block = self.parse_block()?;
                 self.expect(TokenType::RightBrace)?;
 
-                Ok(Stmt::BlockStmt(
+                Ok(AST::block_stmt(
                     block,
                     Span::combine(&start, &self.current.span),
                 ))
@@ -219,7 +219,7 @@ impl Parser {
         self.expect(TokenType::LeftBrace)?;
 
         // fun id '(' <params> ')' '{' <body> ...
-        let body = Box::new(self.parse_block()?);
+        let body = self.parse_block()?;
 
         // fun id '(' <params> ')' '{' <body> '}'
         self.expect(TokenType::RightBrace)?;
@@ -228,7 +228,7 @@ impl Parser {
 
         let function = FunctionDecl::new(id, params, body);
 
-        Ok(Stmt::FunDeclaration(function, span))
+        Ok(AST::fun_decl(function, span))
     }
 
     fn parse_class_declaration(&mut self) -> Result<Stmt, SyntaxError> {    
@@ -267,7 +267,7 @@ impl Parser {
 
         let class = ClassDecl::new(id, constructors);
         let span = Span::combine(&start, &self.current.span);
-        Ok(Stmt::ClassDeclaration(class, span))
+        Ok(AST::class_decl(class, span))
     }
 
     fn parse_constructor(&mut self) -> Result<ConstructorDecl, SyntaxError> {
@@ -316,7 +316,7 @@ impl Parser {
 
         let var_kind = if constant { VarKind::Fin } else { VarKind::Var };
 
-        Ok(Stmt::VarDeclaration(id, init, var_kind, span))
+        Ok(AST::var_decl(id, init, var_kind, span))
     }
 
     fn parse_if_statement(&mut self) -> Result<Stmt, SyntaxError> {
@@ -331,7 +331,7 @@ impl Parser {
         self.expect(TokenType::Then)?;
 
         // if <expr> then <block> ...
-        let block = Box::new(self.parse_block()?);
+        let block = self.parse_block()?;
 
         let alt = if self.match_token(&TokenType::Else) {
             // if <expr> then <block> else ...
@@ -340,9 +340,9 @@ impl Parser {
                 Some(Box::new(self.parse_if_statement()?))
             } else {
                 // if <expr> then <block> else <block> endif
-                let alternate = Box::new(self.parse_block()?);
+                let alternate = self.parse_block()?;
                 self.expect(TokenType::EndIf)?;
-                Some(Box::new(Stmt::BlockStmt(
+                Some(Box::new(AST::block_stmt(
                     alternate,
                     Span::combine(&start, &self.current.span),
                 )))
@@ -353,7 +353,7 @@ impl Parser {
             None
         };
 
-        Ok(Stmt::IfStmt(
+        Ok(AST::if_stmt(
             expr,
             block,
             alt,
@@ -368,12 +368,12 @@ impl Parser {
         self.consume(TokenType::Loop);
 
         // loop <body> ...
-        let loop_body = Box::new(self.parse_block()?);
+        let loop_body = self.parse_block()?;
 
         // loop <body> endloop
         self.expect(TokenType::EndLoop)?;
 
-        Ok(Stmt::LoopStmt(
+        Ok(AST::loop_stmt(
             loop_body,
             Span::combine(&start, &self.current.span),
         ))
@@ -392,12 +392,12 @@ impl Parser {
         self.expect(TokenType::Loop)?;
 
         // while <expr> loop <body> ...
-        let loop_body = Box::new(self.parse_block()?);
+        let loop_body = self.parse_block()?;
 
         // while <expr> loop <body> endloop
         self.expect(TokenType::EndLoop)?;
 
-        Ok(Stmt::WhileStmt(
+        Ok(AST::while_stmt(
             condition,
             loop_body,
             Span::combine(&start, &self.current.span),
@@ -408,14 +408,14 @@ impl Parser {
         // Todo: should be able to break to a label.
         self.consume(TokenType::Break);
 
-        Ok(Stmt::BreakStmt(Span::from(&self.previous.span)))
+        Ok(AST::break_stmt(Span::from(&self.previous.span)))
     }
 
     fn parse_continue_statement(&mut self) -> Result<Stmt, SyntaxError> {
         // Todo: should be able to continue to a label.
         self.consume(TokenType::Continue);
 
-        Ok(Stmt::ContinueStmt(Span::from(&self.previous.span)))
+        Ok(AST::continue_stmt(Span::from(&self.previous.span)))
     }
 
     fn parse_return_statement(&mut self) -> Result<Stmt, SyntaxError> {
@@ -435,7 +435,7 @@ impl Parser {
             }
         };
 
-        Ok(Stmt::ReturnStmt(return_val, span))
+        Ok(AST::return_stmt(return_val, span))
     }
 
     fn parse_print_statement(&mut self) -> Result<Stmt, SyntaxError> {
@@ -447,11 +447,11 @@ impl Parser {
         let expr = self.parse_expression()?;
         let end = &expr.position();
 
-        Ok(Stmt::PrintStmt(expr, Span::combine(&start, end)))
+        Ok(AST::print_stmt(expr, Span::combine(&start, end)))
     }
 
     fn parse_expression_statement(&mut self) -> Result<Stmt, SyntaxError> {
-        Ok(Stmt::ExpressionStmt(Box::new(self.parse_expression()?)))
+        Ok(AST::expr_stmt(Box::new(self.parse_expression()?)))
     }
 
     fn parse_assignment_statement(&mut self) -> Result<Stmt, SyntaxError> {
@@ -466,27 +466,27 @@ impl Parser {
             // expr += ...
             TokenType::PlusEquals => {
                 self.consume(TokenType::PlusEquals);
-                OpAssignment::PlusEquals
+                OpAssignment::AddAssign
             }
             // expr -= ...
             TokenType::MinusEquals => {
                 self.consume(TokenType::MinusEquals);
-                OpAssignment::MinusEquals
+                OpAssignment::SubAssign
             }
             // expr *= ...
             TokenType::MultiplyEquals => {
                 self.consume(TokenType::MultiplyEquals);
-                OpAssignment::MultiplyEquals
+                OpAssignment::MulAssign
             }
             // expr /= ...
             TokenType::DivideEquals => {
                 self.consume(TokenType::DivideEquals);
-                OpAssignment::DivideEquals
+                OpAssignment::DivAssign
             }
             // expr %= ...
             TokenType::ModuloEquals => {
                 self.consume(TokenType::ModuloEquals);
-                OpAssignment::ModuloEquals
+                OpAssignment::RemAssign
             }
             // expr
             _ => return Ok(Stmt::ExpressionStmt(Box::new(node))),
@@ -507,7 +507,7 @@ impl Parser {
         let right = self.parse_expression()?;
 
         let span = Span::combine(&id.pos, &right.position());
-        Ok(Stmt::Assignment(id, op, right, span))
+        Ok(AST::assignment(id, op, right, span))
     }
 
     fn parse_expression(&mut self) -> Result<Expr, SyntaxError> {
@@ -519,12 +519,12 @@ impl Parser {
                     let err = self.error(err_kind);
                     return Err(err);
                 }
-                SyntaxErrorKind::UnexpectedEof { location } => {
+                SyntaxErrorKind::UnexpectedEof { ref location } => {
                     let err_kind = SyntaxErrorKind::ExpectedExpression {
                         actual: Item::new(&location, "<eof>"),
                     };
-                    let err = self.error(err_kind);
-                    return Err(err);
+                    let expected_expr = self.error(err_kind).set_cause(err);
+                    return Err(expected_expr);
                 }
                 _ => return Err(err),
             },
@@ -542,7 +542,7 @@ impl Parser {
                     let right = self.parse_boolean_term()?;
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::LogicalExpr(Box::new(BinaryExpr::new(Op::Or, node, right)), span)
+                    node = AST::logical_expr(Box::new(BinaryExpr::new(Op::Or, node, right)), span)
                 }
                 _ => break,
             }
@@ -562,7 +562,7 @@ impl Parser {
                     let right = self.parse_boolean_factor()?;
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::LogicalExpr(Box::new(BinaryExpr::new(Op::And, node, right)), span)
+                    node = AST::logical_expr(Box::new(BinaryExpr::new(Op::And, node, right)), span)
                 }
                 _ => break,
             }
@@ -584,7 +584,7 @@ impl Parser {
 
                     let span = Span::combine(&node.position(), &right.position());
                     node =
-                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::LessThan, node, right)), span)
+                        AST::binary_expr(Box::new(BinaryExpr::new(Op::LessThan, node, right)), span)
                 }
                 // expr <= ...
                 TokenType::LessThanEquals => {
@@ -593,7 +593,7 @@ impl Parser {
                     let right = self.parse_sum()?;
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(
+                    node = AST::binary_expr(
                         Box::new(BinaryExpr::new(Op::LessThanEquals, node, right)),
                         span,
                     )
@@ -605,7 +605,7 @@ impl Parser {
                     let right = self.parse_sum()?;
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(
+                    node = AST::binary_expr(
                         Box::new(BinaryExpr::new(Op::GreaterThan, node, right)),
                         span,
                     )
@@ -617,7 +617,7 @@ impl Parser {
                     let right = self.parse_sum()?;
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(
+                    node = AST::binary_expr(
                         Box::new(BinaryExpr::new(Op::GreaterThanEquals, node, right)),
                         span,
                     )
@@ -629,7 +629,7 @@ impl Parser {
                     let right = self.parse_sum()?;
                     let span = Span::combine(&node.position(), &right.position());
                     node =
-                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::EqualsTo, node, right)), span)
+                        AST::binary_expr(Box::new(BinaryExpr::new(Op::EqualsTo, node, right)), span)
                 }
                 // expr != ...
                 TokenType::NotEqual => {
@@ -639,7 +639,7 @@ impl Parser {
 
                     let span = Span::combine(&node.position(), &right.position());
                     node =
-                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::NotEqual, node, right)), span)
+                        AST::binary_expr(Box::new(BinaryExpr::new(Op::NotEqual, node, right)), span)
                 }
                 _ => break,
             }
@@ -661,7 +661,7 @@ impl Parser {
                     let right = self.parse_term()?;
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Add, node, right)), span)
+                    node = AST::binary_expr(Box::new(BinaryExpr::new(Op::Add, node, right)), span)
                 }
                 // expr - ...
                 TokenType::Minus => {
@@ -672,7 +672,7 @@ impl Parser {
                     let span = Span::combine(&node.position(), &right.position());
 
                     node =
-                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Subtract, node, right)), span)
+                        AST::binary_expr(Box::new(BinaryExpr::new(Op::Subtract, node, right)), span)
                 }
                 _ => break,
             }
@@ -695,7 +695,7 @@ impl Parser {
 
                     let span = Span::combine(&node.position(), &right.position());
                     node =
-                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Multiply, node, right)), span)
+                        AST::binary_expr(Box::new(BinaryExpr::new(Op::Multiply, node, right)), span)
                 }
                 // expr / ...
                 TokenType::Slash => {
@@ -705,7 +705,7 @@ impl Parser {
 
                     let span = Span::combine(&node.position(), &right.position());
                     node =
-                        Expr::BinaryExpr(Box::new(BinaryExpr::new(Op::Divide, node, right)), span)
+                        AST::binary_expr(Box::new(BinaryExpr::new(Op::Divide, node, right)), span)
                 }
                 // expr % ...
                 TokenType::Percent => {
@@ -714,7 +714,7 @@ impl Parser {
                     let right = self.parse_member()?;
 
                     let span = Span::combine(&node.position(), &right.position());
-                    node = Expr::BinaryExpr(
+                    node = AST::binary_expr(
                         Box::new(BinaryExpr::new(Op::Remainder, node, right)),
                         span,
                     )
@@ -734,20 +734,15 @@ impl Parser {
                 // <expr> '(' ...
                 TokenType::LeftParen => {
                     let args = self.parse_arg_list()?;
-
                     let span = Span::combine(&node.position(), &self.current.span);
-
-                    node = Expr::CallExpr(Box::new(node), args, span)
+                    node = AST::call_expr(Box::new(node), args, span)
                 }
                 // <expr> '.' ...
                 TokenType::Dot => {
                     self.consume(TokenType::Dot);
-
                     let property = Box::new(self.parse_factor()?);
-
                     let span = Span::combine(&node.position(), &self.current.span);
-
-                    node = Expr::MemberExpr(Box::new(node), property, span)
+                    node = AST::member_expr(Box::new(node), property, span)
                 }
                 _ => break,
             }
@@ -764,14 +759,14 @@ impl Parser {
                 // <number>
                 TokenType::Number(val) => {
                     let span = Span::from(&current.span);
-                    let node = Expr::Number(val, span);
+                    let node = AST::number(val, span);
                     self.consume(TokenType::Number(val));
                     return Ok(node);
                 }
                 // <string>
                 TokenType::String(val) => {
                     let span = Span::from(&current.span);
-                    let node = Expr::String(val.to_string(), span);
+                    let node = AST::string(val.to_string(), span);
                     self.consume(TokenType::String(val));
                     return Ok(node);
                 }
@@ -783,7 +778,7 @@ impl Parser {
                     let arg = self.parse_factor()?;
                     let span = Span::combine(&current.span, &arg.position());
 
-                    let node = Expr::UnaryExpr(Op::Subtract, Box::new(arg), span);
+                    let node = AST::unary_expr(Op::Subtract, Box::new(arg), span);
                     return Ok(node);
                 }
                 // ! ...
@@ -793,37 +788,40 @@ impl Parser {
                     let arg = self.parse_factor()?;
                     let span = Span::combine(&current.span, &arg.position());
 
-                    let node = Expr::UnaryExpr(Op::Bang, Box::new(arg), span);
+                    let node = AST::unary_expr(Op::Bang, Box::new(arg), span);
                     return Ok(node);
                 }
                 // "true"
                 TokenType::True => {
                     let span = Span::from(&current.span);
-                    let node = Expr::Bool(true, span);
+                    let node = AST::bool(true, span);
                     self.consume(TokenType::True);
                     return Ok(node);
                 }
                 // "false"
                 TokenType::False => {
                     let span = Span::from(&current.span);
-                    let node = Expr::Bool(false, span);
+                    let node = AST::bool(false, span);
                     self.consume(TokenType::False);
                     return Ok(node);
                 }
                 // "nil"
                 TokenType::Nil => {
                     let span = Span::from(&current.span);
-                    let node = Expr::Nil(span);
+                    let node = AST::nil(span);
                     self.consume(TokenType::Nil);
                     return Ok(node);
                 }
                 // <id>
-                TokenType::Ident(id) => {
-                    let node = Expr::Identifier(Ident {
-                        name: id.to_string(),
+                TokenType::Ident(name) => {
+                    let id = Ident {
+                        name: name.to_string(),
                         pos: Span::from(&current.span),
-                    });
-                    self.consume(TokenType::Ident(id));
+                    };
+
+                    let node = AST::identifier(id);
+                    
+                    self.consume(TokenType::Ident(name));
                     return Ok(node);
                 }
                 // <eof>
@@ -885,14 +883,14 @@ impl Parser {
         }
     }
 
-    fn parse_arg_list(&mut self) -> Result<Vec<Box<Expr>>, SyntaxError> {
+    fn parse_arg_list(&mut self) -> Result<Vec<Expr>, SyntaxError> {
         self.consume(TokenType::LeftParen);
 
         let mut args = vec![];
 
         if !self.check(&TokenType::RightParen) {
             loop {
-                args.push(Box::new(self.parse_expression()?));
+                args.push(self.parse_expression()?);
                 if !self.match_token(&TokenType::Comma) {
                     break;
                 }
@@ -940,7 +938,7 @@ impl Parser {
             expr.position().end + 1,
         );
 
-        Ok(Expr::ParenExpr(Box::new(expr), span))
+        Ok(AST::paren_expr(Box::new(expr), span))
     }
 }
 /*
