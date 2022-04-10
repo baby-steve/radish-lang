@@ -1,6 +1,10 @@
 [workspace]
 
-members = [
-    "radish",
-    "cli",
+members = [ 
+    "radish", 
+    "cli", 
+    
+    "tests" 
 ]
+
+default-members = ["radish", "cli"]
