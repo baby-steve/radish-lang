@@ -44,6 +44,8 @@ impl<'a> Disassembler<'a> {
             Opcode::SaveLocal => self.long_const_instruction("SetLocal", offset, false),
             Opcode::GetCapture => self.long_const_instruction("GetCapture", offset, false),
             Opcode::SetCapture => self.long_const_instruction("SetCapture", offset, false),
+            Opcode::LoadField => self.simple_instruction("LoadField", offset),
+            Opcode::SaveField => self.long_const_instruction("SaveField", offset, false),
             Opcode::True => self.simple_instruction("True", offset),
             Opcode::False => self.simple_instruction("False", offset),
             Opcode::Nil => self.simple_instruction("Nil", offset),
@@ -78,23 +80,12 @@ impl<'a> Disassembler<'a> {
                 offset + 2
             }
 
-            Opcode::Closure => {
-                self.write_instruction("Closure", offset);
-
-                let index = &self.function.chunk.code[offset + 1];
-                let i_padding = " "/* .repeat(
-                    self.function.chunk.constants.len().to_string().len() - index.to_string().len(),
-                )*/;
-                print!("{}{}", index, i_padding);
-
-                println!(" ({})", index);                
-
-                offset + 1
-            }
+            Opcode::Closure => self.simple_instruction("Closure", offset),
             Opcode::BuildClass => self.simple_instruction("Class", offset),
             Opcode::BuildCon => self.simple_instruction("BuildCon", offset),
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Return => self.simple_instruction("Return", offset),
+            Opcode::Import => self.simple_instruction("Import", offset),
         }
     }
 

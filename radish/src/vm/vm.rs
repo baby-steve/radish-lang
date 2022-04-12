@@ -2,7 +2,11 @@ use std::{convert::TryInto, rc::Rc};
 
 use crate::{
     common::{
-        value::Class, value::Closure, value::Value, CompiledModule, Disassembler, Module, Opcode,
+        resolver::{FileResolver, Resolver},
+        value::Class,
+        value::Closure,
+        value::Value,
+        CompiledModule, Disassembler, Module, Opcode,
     },
     vm::stack::Stack,
     vm::trace::Trace,
@@ -28,6 +32,13 @@ pub struct VM {
     pub config: Rc<RadishConfig>,
 
     pub last_module: CompiledModule,
+
+    pub modules: Vec<CompiledModule>,
+
+    pub resolver: FileResolver,
+
+    //HACK
+    source: Option<String>,
 }
 
 impl VM {
@@ -37,8 +48,10 @@ impl VM {
             frames: Vec::new(),
             frame_count: 0,
             config: Rc::clone(&config),
-            // HACK: this needs to be refactored.
-            last_module: Module::new(""),
+            last_module: Module::empty(),
+            resolver: FileResolver::new(),
+            modules: Vec::new(),
+            source: config.source.clone(),
         }
     }
 
@@ -160,7 +173,6 @@ impl VM {
         match callee {
             Value::Closure(fun) => self.call_function(fun, arg_count),
             _ => {
-                // NOTE: could this be moved to semantic analysis?
                 let message = format!("'{}' is not callable", callee);
                 let trace = self.error(message);
                 Err(trace)
@@ -233,7 +245,27 @@ impl VM {
 
     #[inline]
     fn load_local(&mut self) -> Result<(), Trace> {
-        let slot_index = self.read_long() as usize + self.current_frame().offset - 1;
+        // This is the locals position on the stack relative to the
+        // function being called. So for example when the stack looks like:
+        // ```
+        // [fun script][fun call]["hello"]["world"]
+        // ^ script     ^ function being called  ^ local being loaded
+        // ```
+        // the local being loaded will have a relative index of (1).
+        let relative_index = self.read_long() as usize;
+
+        //dbg!(&relative_index);
+
+        // The stack position of the current function being called.
+        let offset = self.current_frame().offset;
+
+        //dbg!(&offset);
+
+        // To get the locals position on the stack, we then have to add the locals
+        // relative position to the function's position.
+        let slot_index = relative_index + offset - 1;
+
+        //dbg!(&slot_index);
 
         self.stack
             .push(self.stack.stack[slot_index as usize].clone());
@@ -253,7 +285,18 @@ impl VM {
     #[inline]
     fn load_global(&mut self) -> Result<(), Trace> {
         let index = self.read_long() as usize;
-        let value = self.last_module.borrow().get_var(index).clone();
+        //let value = self.last_module.borrow().get_var(index).clone();
+
+        let value = self
+            .current_frame()
+            .closure
+            .function
+            .module
+            .upgrade()
+            .expect("something broke")
+            .borrow()
+            .get_var(index)
+            .clone();
 
         self.stack.push(value);
 
@@ -264,11 +307,47 @@ impl VM {
     fn save_global(&mut self) -> Result<(), Trace> {
         let index = self.read_long() as usize;
 
-        self.last_module
+        //self.last_module
+        //    .borrow_mut()
+        //    .set_var(index, self.stack.peek().unwrap());
+
+        self.current_frame()
+            .closure
+            .function
+            .module
+            .upgrade()
+            .expect("something broke")
             .borrow_mut()
             .set_var(index, self.stack.peek().unwrap());
 
         Ok(())
+    }
+
+    #[inline]
+    fn load_field(&mut self) -> Result<(), Trace> {
+        let from = self.stack.pop();
+        let field_name = self.stack.pop();
+
+        match from {
+            Value::Module(module) => {
+                let index = module
+                    .borrow()
+                    .get_index(&field_name.into_string().unwrap().borrow())
+                    .expect("no value at index");
+
+                let val = module.borrow().get_var(index).clone();
+
+                self.stack.push(val);
+            }
+            _ => unimplemented!("field access on {} is unsupported", from),
+        }
+
+        Ok(())
+    }
+
+    #[inline]
+    fn save_field(&mut self) -> Result<(), Trace> {
+        todo!()
     }
 
     #[inline]
@@ -301,6 +380,70 @@ impl VM {
     #[inline]
     fn loop_(&mut self) -> Result<(), Trace> {
         self.current_frame_mut().ip -= self.read_short() as usize;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn import(&mut self) -> Result<(), Trace> {
+        let path = self
+            .stack
+            .pop()
+            .into_string()
+            .expect("path is not a string");
+
+        // TODO: find a better way to get this.
+        // let source = self.config.source.clone();
+
+        // TODO: figure out import semantics.
+        // currently any import will only ever be runned once. While this seems
+        // to be a common trend, I'm not sure if its the best choice.
+        if self
+            .resolver
+            .is_cached(&*path.borrow(), self.source.as_ref())
+        {
+            return Ok(());
+        };
+
+        let module =
+            match self
+                .resolver
+                .resolve(self.source.clone(), &path.borrow(), self.config.clone())
+            {
+                Ok(m) => m,
+                Err(e) => {
+                    e.emit();
+                    return Err(self.error("failed to load module"));
+                    //panic!("failed to load module");
+                }
+            };
+
+        // swap out the last module with the new one.
+        let last_module = std::mem::replace(&mut self.last_module, module);
+
+        let source = std::path::PathBuf::from(&path.borrow().to_string())
+            .parent()
+            .unwrap_or(&std::path::Path::new(""))
+            .to_string_lossy()
+            .to_string();
+
+        let mut src = self.source.clone().unwrap();
+
+        src.extend([source]);
+
+        self.source = Some(src);
+
+        dbg!(&self.source);
+
+        // store the last module.
+        self.modules.push(last_module);
+
+        // load and run the module's top level code.
+        let closure = Closure {
+            function: self.last_module.borrow().entry(),
+        };
+        self.stack.push(Value::Closure(closure.clone()));
+        self.call_function(closure, 0)?;
 
         Ok(())
     }
@@ -391,6 +534,8 @@ impl VM {
                 Opcode::SaveLocal => self.save_local()?,
                 Opcode::GetCapture => todo!(),
                 Opcode::SetCapture => todo!(),
+                Opcode::LoadField => self.load_field()?,
+                Opcode::SaveField => self.save_field()?,
                 Opcode::JumpIfFalse => self.jump_if_false()?,
                 Opcode::JumpIfTrue => self.jump_if_true()?,
                 Opcode::Jump => self.jump()?,
@@ -399,6 +544,7 @@ impl VM {
                 Opcode::BuildClass => self.make_class()?,
                 Opcode::BuildCon => self.make_constructor()?,
                 Opcode::Print => self.print()?,
+                Opcode::Import => self.import()?,
                 Opcode::Call => {
                     let arg_count = self.read_byte() as usize;
                     let callee = self.stack.peek_n(arg_count + 1).unwrap();
@@ -419,22 +565,47 @@ impl VM {
                         self.stack.stack.pop();
                     }
 
-                    self.stack.pop(); // the function being called
+                    // pop the function being called.
+                    self.stack.pop();
 
-                    self.stack.push(result); // push the result back onto the stack.
+                    // push the result back onto the stack.
+                    self.stack.push(result);
 
                     self.frames.pop();
+
+                    if !self.modules.is_empty() {
+                        // The previous module
+                        let last_module = self.modules.pop().unwrap();
+
+                        let current_module = std::mem::replace(&mut self.last_module, last_module);
+
+                        // FIXME: needlessly push and pop the `nil` value returned by the module.
+                        self.stack.pop();
+
+                        self.stack.push(Value::Module(current_module));
+                    }
                 }
             }
 
             if self.config.trace {
+                let mut width = 0;
+
                 print!("    ");
                 for slot in &self.stack.stack {
+                    width += 4 + &slot.to_string().len();
+
                     print!("[ {} ]", &slot);
                 }
+
+                let spacing = " ".repeat(100_usize.checked_sub(width).unwrap_or(10));
+
+                let module_name = &self.last_module.borrow().name;
+
+                print!("{}{}", spacing, module_name);
+
                 print!("\n");
             }
-        };
+        }
     }
 }
 

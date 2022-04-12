@@ -21,6 +21,10 @@ impl Module {
         Rc::new(RefCell::new(module))
     }
 
+    pub fn empty() -> Rc<RefCell<Module>> {
+        Module::new("")
+    }
+
     #[inline]
     pub fn add_var(&mut self, name: String) -> usize {
         let index = self.variables.len();

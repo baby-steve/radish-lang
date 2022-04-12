@@ -8,6 +8,7 @@ pub mod source;
 pub mod span;
 pub mod value;
 pub mod module;
+pub mod resolver;
 
 pub use chunk::Chunk;
 pub use disassembler::Disassembler;

@@ -3,14 +3,11 @@ pub mod compiler;
 pub mod error;
 pub mod vm;
 
-use std::fmt;
 use std::rc::Rc;
+use std::{fmt, path::PathBuf};
 
 use common::{source::Source, CompiledModule, Value};
-use compiler::{
-    ast::AST, compiler::Compiler, error::SyntaxError, parser::Parser,
-    scope::ScopeMap,
-};
+use compiler::{ast::AST, compiler::Compiler, error::SyntaxError, parser::Parser, scope::ScopeMap};
 
 use vm::{trace::Trace, vm::VM};
 
@@ -122,6 +119,8 @@ pub struct RadishConfig {
     pub dump_ast: bool,
     pub dump_code: bool,
     pub trace: bool,
+    // HACK
+    pub source: Option<String>,
 }
 
 impl Default for RadishConfig {
@@ -132,6 +131,7 @@ impl Default for RadishConfig {
             dump_ast: false,
             dump_code: false,
             trace: false,
+            source: None,
         }
     }
 }
@@ -150,6 +150,11 @@ impl RadishConfig {
 
     pub fn set_repl(&mut self, repl: bool) {
         self.repl = repl;
+    }
+
+    // HACK
+    pub fn set_source(&mut self, source: impl ToString) {
+        self.source = Some(source.to_string());
     }
 }
 
@@ -217,15 +222,14 @@ impl Radish {
         Ok(parser.parse()?)
     }
 
-
     pub fn check(&mut self, ast: &mut AST) -> RadishResult<()> {
         Ok(compiler::check(ast)?)
     }
 
-    pub fn compile_script(&mut self, filename: &str, input: &str) -> RadishResult<CompiledModule> {
-        let mut ast = self.parse_str(filename, input)?;
+    pub fn compile_script(&mut self, file_name: &str, input: &str) -> RadishResult<CompiledModule> {
+        let mut ast = self.parse_str(file_name, input)?;
 
-        Ok(self.compile_ast(&mut ast)?)
+        Ok(self.compile_ast(file_name, &mut ast)?)
     }
 
     pub fn compile_file(&mut self, filename: &str) -> RadishResult<CompiledModule> {
@@ -235,11 +239,23 @@ impl Radish {
         Ok(self.compile_script(filename, &result?)?)
     }
 
-    pub fn compile_ast(&mut self, ast: &mut AST) -> RadishResult<CompiledModule> {
+    pub fn compile_file_with_path(&mut self, path: &PathBuf) -> RadishResult<CompiledModule> {
+        let filename = path
+            .file_name()
+            .expect("expected file name")
+            .to_str()
+            .expect("file name was not valid unicode");
+
+        let result = std::fs::read_to_string(&path);
+
+        Ok(self.compile_script(filename, &result?)?)
+    }
+
+    pub fn compile_ast(&mut self, file_name: &str, ast: &mut AST) -> RadishResult<CompiledModule> {
         self.check(ast)?;
         let mut compiler = Compiler::new(&self.config);
 
-        Ok(compiler.compile(&ast)?)
+        Ok(compiler.compile(file_name, &ast)?)
     }
 
     // load a string (and compile it?)
