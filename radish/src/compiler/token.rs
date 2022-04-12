@@ -99,7 +99,10 @@ pub enum TokenType {
     Con,
     // return
     Return,
-
+    // for
+    For,
+    // import
+    Import,
     // number
     Number(f64),
     // id
@@ -167,6 +170,8 @@ impl TokenType {
             Class => "class",
             Con => "con",
             Return => "return",
+            For => "for",
+            Import => "import",
 
             Eof => "<Eof>",
 
@@ -267,6 +272,8 @@ impl Token {
             "class" => TokenType::Class,
             "con" => TokenType::Con,
             "return" => TokenType::Return,
+            "for" => TokenType::For,
+            "import" => TokenType::Import,
             "<Eof>" => TokenType::Eof,
 
             _ => return None,

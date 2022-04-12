@@ -61,16 +61,16 @@ impl fmt::Display for Symbol {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct SymbolTable {
+pub struct ScopeMap {
     pub locals: HashMap<String, Symbol>,
     pub non_locals: HashMap<String, Symbol>,
     // TODO: do we really need this?
     pub depth: usize,
 }
 
-impl SymbolTable {
+impl ScopeMap {
     pub fn new() -> Self {
-        SymbolTable {
+        ScopeMap {
             locals: HashMap::new(),
             non_locals: HashMap::new(),
             depth: 0,
@@ -78,23 +78,28 @@ impl SymbolTable {
     }
 
     pub fn with_depth(depth: usize) -> Self {
-        SymbolTable {
+        ScopeMap {
             locals: HashMap::new(),
             non_locals: HashMap::new(),
             depth,
         }
     }
 
+    pub fn extend(&mut self, other: ScopeMap) {
+        self.locals.extend(other.locals);
+        self.non_locals.extend(other.non_locals);
+    }
+
     pub fn add_local(&mut self, key: &str, value: Symbol) -> Option<Symbol> {
         self.locals.insert(key.to_string(), value)
     }
 
-    pub fn get_local(&self, key: &str) -> Option<&Symbol> {
-        self.locals.get(key)
-    }
-
     pub fn add_non_local(&mut self, key: &str, value: Symbol) -> Option<Symbol> {
         self.non_locals.insert(key.to_string(), value)
+    }
+    
+    pub fn get_local(&self, key: &str) -> Option<&Symbol> {
+        self.locals.get(key)
     }
 
     pub fn get_non_local(&self, key: &str) -> Option<&Symbol> {
@@ -114,7 +119,7 @@ impl SymbolTable {
     }
 }
 
-impl fmt::Display for SymbolTable {
+impl fmt::Display for ScopeMap {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut entries = vec![];
         let l_width = 60;
@@ -154,5 +159,20 @@ impl fmt::Display for SymbolTable {
         writeln!(f, "╰─{}─┴{}╯", "─".repeat(max_width), "─".repeat(l_width))?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extend_table() {
+        let mut table = ScopeMap::new();
+        let mut other = ScopeMap::new();
+        other.add_local("a", Symbol::var(&Span::empty(), 0));
+        table.extend(other);
+
+        assert!(table.has_local("a"));
     }
 }

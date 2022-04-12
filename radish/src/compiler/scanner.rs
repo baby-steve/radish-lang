@@ -308,6 +308,8 @@ impl Scanner {
             "class" => TokenType::Class,
             "con" => TokenType::Con,
             "return" => TokenType::Return,
+            "for" => TokenType::For,
+            "import" => TokenType::Import,
             _ => TokenType::Ident(value.to_string().into_boxed_str()),
         }
     }
@@ -452,6 +454,8 @@ mod tests {
             ("class", TokenType::Class),
             ("con", TokenType::Con),
             ("return", TokenType::Return),
+            ("for", TokenType::For),
+            ("import", TokenType::Import),
         ];
 
         for (src, token_type) in tests {

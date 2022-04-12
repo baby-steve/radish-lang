@@ -51,6 +51,12 @@ pub enum Opcode {
     ///
     /// [no change]
     SaveLocal,
+
+    // TODO:
+    LoadField,
+    // TODO:
+    SaveField,
+
     /// **UNIMPLEMENTED**
     GetCapture,
     /// **UNIMPLEMENTED**
@@ -181,6 +187,7 @@ pub enum Opcode {
     ///
     /// [Value] ->
     Print,
+    Import,
     /// Remove the top `[Value]` from the stack and return from the current call frame, before
     /// push the removed value back unto the stack.
     ///

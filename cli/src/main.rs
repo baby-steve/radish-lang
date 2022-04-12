@@ -1,97 +1,54 @@
-use radish::{RadishConfig, Radish, RadishError};
+use std::path::{Path, PathBuf};
 
-use clap::{App, Arg};
+use radish::{Radish, RadishConfig, RadishError};
 
-#[derive(Debug)]
-pub struct Cli {
-    pub path: String,
-    pub args: Vec<String>,
-    pub dump_ast: bool,
-    pub dump_code: bool,
-    pub trace: bool,
-}
-
-impl Cli {
-    pub fn new() -> Cli {
-        let version = &format!("v{}", env!("CARGO_PKG_VERSION"))[..];
-
-        let app = App::new("radish")
-            .about("The Radish scripting language")
-            .version(version)
-            .arg(
-                Arg::with_name("dump-ast")
-                    .long("dump-ast")
-                    .short("a")
-                    .help("Dump the program's AST (Abstract Syntax Tree)"),
-            )
-            .arg(
-                Arg::with_name("dump-bytecode")
-                    .long("dump-bytecode")
-                    .short("d")
-                    .help("Dump the program's bytecode"),
-            )
-            .arg(
-                Arg::with_name("trace")
-                    .long("trace")
-                    .short("t")
-                    .help("Trace the VM's execution"),
-            )
-            .arg(
-                Arg::with_name("FILE.rdsh")
-                    .help("Path to file")
-                    .required(true),
-            )
-            .arg(
-                Arg::with_name("arguments")
-                    .help("Arguments passed to program")
-                    .multiple(true),
-            );
-
-        let matches = app.get_matches();
-
-        let path = matches
-            .value_of("FILE.rdsh")
-            .expect("Path can't possibly be None as it is required");
-
-        let dump_ast = matches.is_present("dump-ast");
-        let dump_code = matches.is_present("dump-bytecode");
-        let trace = matches.is_present("trace");
-
-        let args = matches
-            .values_of("arguments")
-            .unwrap_or_default()
-            .collect::<Vec<_>>()
-            .iter()
-            .map(|arg| arg.to_string())
-            .collect();
-
-        Cli {
-            path: path.to_string(),
-            args,
-            dump_ast,
-            dump_code,
-            trace,
-        }
-    }
-}
+mod cli;
+mod repl;
+mod hint;
 
 fn main() -> Result<(), RadishError> {
-    let args = Cli::new();
+    let args = cli::Cli::new();
 
-    let config = RadishConfig {
+    let mut config = RadishConfig {
         dump_ast: args.dump_ast,
         dump_code: args.dump_code,
         trace: args.trace,
         ..RadishConfig::default()
     };
 
-    let mut radish = Radish::with_settings(std::rc::Rc::new(config));
+    if let Some(path) = args.path {
+        // TODO: not the most elegant way to get the directory the entry file is in.
+        config.set_source(&PathBuf::from(&path).parent().unwrap_or(&Path::new("")).to_str().unwrap());
 
-    let source = radish.read_file(&args.path)?;
+        let mut radish = Radish::with_settings(std::rc::Rc::new(config));
 
-    if let Err(err) = radish.run_from_source(source) {        
-        err.emit();
-    } 
+        let module = match radish.compile_file(&path) {
+            Ok(mod_) => mod_,
+            Err(err) => {
+                err.emit();
+                return Err(err);
+            }
+        };
+
+        if let Err(err) = radish.run_module(module) {
+            err.emit();
+            return Err(err);
+        }
+    } else {
+        let source = std::env::current_dir()?;
+
+        dbg!(&source);
+
+        // TODO: not the most elegant way to get the directory the entry file is in.
+        config.set_source(source.to_string_lossy());
+
+
+        config.set_repl(true);
+
+        let radish = Radish::with_settings(std::rc::Rc::new(config));
+        
+        repl::Repl::new(radish).run()?;
+    }
 
     Ok(())
 }

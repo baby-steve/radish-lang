@@ -1,5 +1,5 @@
 //! Runs snippet tests.
-use radish_lang::{common::source::Source, Radish, RadishConfig, RadishFile};
+use radish::{common::source::Source, Radish, RadishConfig, RadishFile};
 
 use std::{cell::RefCell, fs, path::PathBuf, rc::Rc};
 
@@ -60,7 +60,9 @@ impl TestSnippet {
 
         let mut radish = Radish::with_settings(config);
 
-        if let Err(err) = radish.run_from_source(self.source.clone()) {
+        if let Err(err) =
+            radish.run_expr(&self.source.path.to_string_lossy(), &self.source.contents)
+        {
             err.emit();
             panic!("test failed");
         }
@@ -78,7 +80,7 @@ impl TestSnippet {
 
 fn test_files() {
     let paths =
-        fs::read_dir("./tests/snippets").expect("You must be in base directory to run tests");
+        fs::read_dir("./snippets").expect("You must be in base directory to run tests");
 
     let mut files: Vec<PathBuf> = vec![];
 

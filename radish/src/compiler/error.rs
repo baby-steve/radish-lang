@@ -4,11 +4,37 @@ use crate::error::{AsDiagnostic, Diagnostic, Item, Label};
 #[derive(Debug, Clone, PartialEq)]
 pub struct SyntaxError {
     pub kind: SyntaxErrorKind,
+    cause: Option<Box<SyntaxError>>,
 }
 
 impl SyntaxError {
     pub fn new(kind: SyntaxErrorKind) -> SyntaxError {
-        SyntaxError { kind }
+        SyntaxError { kind, cause: None }
+    }
+
+    pub fn set_cause(mut self, cause: SyntaxError) -> SyntaxError {
+        self.cause = Some(Box::new(cause));
+        self
+    }
+
+    pub fn get_cause(self) -> Option<SyntaxError> {
+        if let Some(err) = self.cause {
+            Some(*err)
+        } else {
+            None
+        }
+    }
+
+    pub fn is_unexpected_eof(self) -> bool {
+        if let SyntaxErrorKind::UnexpectedEof { location: _ } = self.kind {
+            return true;
+        }
+
+        if self.cause != None {
+            return self.cause.unwrap().is_unexpected_eof();
+        }
+
+        false
     }
 }
 
@@ -50,6 +76,10 @@ pub enum SyntaxErrorKind {
     ExpectedExpression {
         actual: Item,
     },
+    /// Expected a newline
+    ExpectedNewline {
+        actual: Item,
+    },
     /// Found a mismatched closing delimiter.
     MismatchedDelimiter {
         first: Item,
@@ -61,6 +91,10 @@ pub enum SyntaxErrorKind {
     },
     /// continue statement outside of a loop.
     ContinueOutsideLoop {
+        item: Item,
+    },
+    /// return statement outside of a function.
+    ReturnOutsideFunction {
         item: Item,
     },
     /// Can't find identifier in current scope.
@@ -81,7 +115,7 @@ pub enum SyntaxErrorKind {
     },
     AssignToConst {
         item: Item,
-    }
+    },
 }
 
 impl SyntaxError {
@@ -127,6 +161,15 @@ impl SyntaxError {
                 .with_labels(vec![
                     Label::primary(actual.span.clone()).with_message("expected an expression")
                 ]),
+            ExpectedNewline { actual } => Diagnostic::error()
+                .with_message("expected a newline")
+                .with_labels(vec![
+                    Label::primary(actual.span.clone()).with_message("expected a newline here")
+                ])
+                .with_notes(vec![
+                    "statements are newline terminated",
+                    "try inserting a newline",
+                ]),
             MismatchedDelimiter { first, second } => Diagnostic::error()
                 .with_message(format!(
                     "mismatched closing delimiter: `{}`",
@@ -145,6 +188,10 @@ impl SyntaxError {
                 .with_message("`continue` outside of a loop")
                 .with_labels(vec![Label::primary(item.span.clone())
                     .with_message("cannot `continue` outside of a loop")]),
+            ReturnOutsideFunction { item } => Diagnostic::error()
+                .with_message("`return` outside of function body")
+                .with_labels(vec![Label::primary(item.span.clone())])
+                    .with_message("cannot `return` outside of a function"),
             UnresolvedIdent { item } => Diagnostic::error()
                 .with_message(format!(
                     "cannot find identifier `{}` in this scope",
@@ -175,104 +222,21 @@ impl SyntaxError {
             MissingConstInit { item } => Diagnostic::error()
                 .with_message("missing initalizer in constant declaration")
                 .with_labels(vec![
-                    Label::primary(item.span.clone())
-                        .with_message("missing initalizer")
+                    Label::primary(item.span.clone()).with_message("missing initalizer")
                 ])
                 .with_notes(vec!["add a definition for the constant: `= <expr>`"]),
             AssignToConst { item } => Diagnostic::error()
-                    .with_message(&format!("attempt to assign to constant variable: `{}`", &item.content))
-                    .with_labels(vec![
-                        Label::primary(item.span.clone())
-                            .with_message("cannot assign")
-                    ])
-        }
-    }
-}
-/*
-#[derive(Debug, Clone, PartialEq)]
-pub struct SemanticError {
-    kind: SemanticErrorKind,
-}
-
-impl SemanticError {
-    pub fn new(kind: SemanticErrorKind) -> SemanticError {
-        SemanticError { kind }
-    }
-}
-
-impl AsDiagnostic for SemanticError {
-    fn diagnostic(&self) -> Diagnostic {
-        self.report()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum SemanticErrorKind {
-    /// break statement outside of a loop.
-    BreakOutsideLoop {
-        item: Item,
-    },
-    /// continue statement outside of a loop.
-    ContinueOutsideLoop {
-        item: Item,
-    },
-    /// Can't find identifier in current scope.
-    UnresolvedIdent {
-        item: Item,
-    },
-    DuplicateIdent {
-        first: Item,
-        second: Item,
-    },
-    DuplicateParam {
-        param: Item,
-    },
-}
-
-impl SemanticError {
-    fn report(&self) -> Diagnostic {
-        use SemanticErrorKind::*;
-
-        match &self.kind {
-            BreakOutsideLoop { item } => Diagnostic::error()
-                .with_message("`break` outside of a loop")
-                .with_labels(vec![Label::primary(item.span.clone())
-                    .with_message("cannot `break` outside of a loop")]),
-            ContinueOutsideLoop { item } => Diagnostic::error()
-                .with_message("`continue` outside of a loop")
-                .with_labels(vec![Label::primary(item.span.clone())
-                    .with_message("cannot `continue` outside of a loop")]),
-            UnresolvedIdent { item } => Diagnostic::error()
-                .with_message(format!(
-                    "cannot find identifier `{}` in this scope",
-                    item.content
+                .with_message(&format!(
+                    "attempt to assign to constant variable: `{}`",
+                    &item.content
                 ))
                 .with_labels(vec![
-                    Label::primary(item.span.clone()).with_message("not found in this scope")
+                    Label::primary(item.span.clone()).with_message("cannot assign")
                 ]),
-            DuplicateIdent { first, second } => Diagnostic::error()
-                .with_message(format!(
-                    "the name `{}` is defined multiple times",
-                    first.content
-                ))
-                .with_labels(vec![
-                    Label::secondary(first.span.clone())
-                        .with_message(&format!("previous definition of `{}` here", first.content)),
-                    Label::primary(second.span.clone())
-                        .with_message(&format!("`{}` redefined here", second.content)),
-                ])
-                .with_notes(vec!["identifiers can only be defined once in a scope"]),
-            DuplicateParam { param } => Diagnostic::error()
-                .with_message(format!(
-                    "identifer `{}` is bound more than once",
-                    param.content
-                ))
-                .with_labels(vec![Label::primary(param.span.clone())
-                    .with_message("used as parameter more than once")]),
         }
     }
 }
-*/
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompileError {
     msg: String,
@@ -281,5 +245,26 @@ pub struct CompileError {
 impl CompileError {
     pub fn new(msg: String) -> CompileError {
         CompileError { msg }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn error_cause() {
+        let unexpected_eof = SyntaxError::new(SyntaxErrorKind::UnexpectedEof {
+            location: Span::empty(),
+        });
+
+        assert!(unexpected_eof.clone().is_unexpected_eof());
+
+        let expected_expr = SyntaxError::new(SyntaxErrorKind::ExpectedExpression {
+            actual: Item::new(&Span::empty(), "<eof>"),
+        })
+        .set_cause(unexpected_eof);
+
+        assert!(expected_expr.is_unexpected_eof());
     }
 }

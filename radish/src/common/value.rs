@@ -1,11 +1,10 @@
+use crate::common::{Chunk, Module};
 use std::cell::RefCell;
 use std::cmp::{Ord, Ordering};
+use std::collections::{HashMap, hash_map};
 use std::fmt::{self};
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use std::rc::{Rc, Weak};
-use std::collections::HashMap;
-
-use crate::common::{Chunk, Module};
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum Value {
@@ -16,6 +15,8 @@ pub enum Value {
     Closure(Closure),
     Class(Rc<Class>),
     Instance(Rc<Instance>),
+    Module(Rc<RefCell<Module>>),
+    //Map(Rc<RefCell<ValueMap>>),
     Nil,
 }
 
@@ -102,12 +103,9 @@ impl Clone for Value {
 
             Self::String(val) => Self::String(Rc::clone(val)),
 
-            //Self::Function(val) => Self::Function(Rc::clone(&val)),
-            //Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
-
             Self::Class(val) => Self::Class(Rc::clone(val)),
             Self::Instance(inst) => Self::Instance(Rc::clone(inst)),
-            //Self::Test(val) => Self::Test(Rc::clone(&val)),
+            Self::Module(module) => Self::Module(Rc::clone(module)),
         }
     }
 }
@@ -118,15 +116,14 @@ impl fmt::Display for Value {
             Value::Number(num) => f.write_str(&format!("{}", num.to_string())),
             Value::Boolean(false) => f.write_str("false"),
             Value::Boolean(true) => f.write_str("true"),
-            //Value::Obj(obj) => f.write_str("OBJECT"),
             Value::String(val) => f.write_str(&format!("\"{}\"", val.borrow())),
             Value::Function(val) => write!(f, "<fun {}>", val.format_name()),
             Value::Closure(val) => write!(f, "<fun {}>", val.function.format_name()),
-            //Value::Class(val) => write!(f, "<class>"),
             Value::Class(val) => write!(f, "<class {}>", val.name.borrow()),
             Value::Instance(val) => write!(f, "<{:?} instance>", val.class.name.borrow()),
+            Value::Module(module) => write!(f, "<mod {}>", module.borrow().name),
+            //Value::Map(map) => write!(f, "{:?}", map.borrow().to_string()),
             Value::Nil => f.write_str("nil"),
-            //Value::Test(val) => write!(f, "<test {}>", val.borrow()),
         }
     }
 }
@@ -347,11 +344,28 @@ impl Instance {
     pub fn new(class: &Rc<Class>) -> Self {
         Instance {
             class: Rc::clone(class),
-            // TODO: 
+            // TODO:
             // do we know how many fields an instance has?
             // if so we could instead do `Vec::with_capacity(num_fields)`
             fields: Vec::new(),
         }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ValueMap {
+    inner: HashMap<String, Value>,
+}
+
+impl ValueMap {
+    pub fn iter(&self) -> hash_map::Iter<String, Value> {
+        self.inner.iter()
+    }
+}
+
+impl PartialOrd for ValueMap {
+    fn partial_cmp(&self, _other: &Self) -> Option<Ordering> {
+        None
     }
 }
 

@@ -3,7 +3,7 @@ use crate::common::{
     Value,
 };
 
-use crate::compiler::{ast::*, table::SymbolTable, visitor::Visitor, Rc, SyntaxError};
+use crate::compiler::{ast::*, Rc, SyntaxError};
 use crate::RadishConfig;
 
 #[derive(Debug)]
@@ -39,8 +39,11 @@ enum CompilerTarget {
 
 /// Track the state of the current `[Function]` being compiled.
 #[derive(Debug)]
+#[allow(unused)]
 struct Frame {
+    /// Function being written to.
     pub function: FunctionValue,
+    /// The function's type
     pub function_type: CompilerTarget,
 }
 
@@ -70,10 +73,10 @@ impl Frame {
     }
 }
 
-pub struct Compiler<'a> {
+pub struct Compiler {
     config: Rc<RadishConfig>,
     scope_depth: usize,
-    scope: &'a SymbolTable,
+    //scope: &'a SymbolTable,
     frame_count: usize,
     frame: Vec<Frame>,
     locals: Vec<Local>,
@@ -82,26 +85,26 @@ pub struct Compiler<'a> {
     module: CompiledModule,
 }
 
-impl<'a> Compiler<'a> {
-    pub fn new(scope: &'a SymbolTable, config: &Rc<RadishConfig>) -> Compiler<'a> {
-        Compiler {
+impl Compiler {
+    pub fn new(/*scope: &'a SymbolTable,*/ config: &Rc<RadishConfig>) -> Self {
+        Self {
             config: Rc::clone(&config),
             scope_depth: 0,
             locals: vec![],
             loops: vec![],
             frame_count: 0,
             frame: vec![],
-            scope,
-            module: Module::new("test"),
+            //scope,
+            module: Module::new(""),
         }
     }
 
     pub fn compile(
         &mut self,
+        file_name: &str,
         ast: &AST,
-        scope: &'a SymbolTable,
     ) -> Result<CompiledModule, SyntaxError> {
-        self.scope = scope;
+        self.module.borrow_mut().name = file_name.to_string().into_boxed_str();
 
         let script = FunctionValue {
             arity: 0,
@@ -330,6 +333,8 @@ impl<'a> Compiler<'a> {
 
     /// Leave the current scope, removing all locally declared variables.
     fn leave_scope(&mut self) {
+        //dbg!(&self.locals);
+
         self.scope_depth -= 1;
 
         while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth {
@@ -359,11 +364,11 @@ impl<'a> Compiler<'a> {
         self.frame_count += 1;
         self.enter_scope();
 
-        if self.frame[self.frame_count].function_type == CompilerTarget::Constructor {
-            self.add_local("this");
-        } else {
-            //self.add_local("");
-        }
+        // if self.frame[self.frame_count].function_type == CompilerTarget::Constructor {
+        //     self.add_local("this");
+        // } else {
+        //     //self.add_local("");
+        // }
     }
 
     /// Leave the current function body.
@@ -378,7 +383,7 @@ impl<'a> Compiler<'a> {
     /// Sort of foward declare all globally scoped functions.
     fn declare_globals(&mut self, ast: &AST) -> Result<(), SyntaxError> {
         // add all global declarations to the module with a value of nil.
-        for (name, _) in self.scope.all().iter() {
+        for (name, _) in ast.scope.locals.iter() {
             self.module.borrow_mut().add_var(name.clone());
         }
 
@@ -479,7 +484,27 @@ impl<'a> Compiler<'a> {
     }
 }
 
-impl Visitor<(), SyntaxError> for Compiler<'_> {
+impl Compiler {
+    fn statement(&mut self, stmt: &Stmt) -> Result<(), SyntaxError> {
+        match stmt {
+            Stmt::BlockStmt(body, _) => self.block(&body),
+            Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
+            Stmt::FunDeclaration(fun, _) => self.function_declaration(&fun),
+            Stmt::ConDeclaration(con, _) => self.constructor_declaration(&con),
+            Stmt::ClassDeclaration(class, _) => self.class_declaration(class),
+            Stmt::VarDeclaration(id, init, kind, _) => self.var_declaration(&id, &init, &kind),
+            Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
+            Stmt::IfStmt(expr, body, alt, _) => self.if_statement(&expr, &body, &alt),
+            Stmt::LoopStmt(body, _) => self.loop_statement(&body),
+            Stmt::WhileStmt(expr, body, _) => self.while_statement(&expr, &body),
+            Stmt::ImportStmt(stmt) => self.import_statement(stmt),
+            Stmt::ReturnStmt(value, _) => self.return_statement(&value),
+            Stmt::BreakStmt(pos) => self.break_statement(&pos),
+            Stmt::ContinueStmt(pos) => self.continue_statement(&pos),
+            Stmt::PrintStmt(expr, _) => self.print(&expr),
+        }
+    }
+
     fn function_declaration(&mut self, fun: &FunctionDecl) -> Result<(), SyntaxError> {
         // at this point all global functions have already been compiled,
         // so only locally scoped functions have to be handled.
@@ -616,6 +641,16 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         Ok(())
     }
 
+    fn import_statement(&mut self, import_stmt: &ImportStatement) -> Result<(), SyntaxError> {
+        self.string(import_stmt.path())?;
+
+        self.emit_byte(Opcode::Import as u8);
+
+        self.define_variable(&import_stmt.name().unwrap().name);
+
+        Ok(())
+    }
+
     fn return_statement(&mut self, return_val: &Option<Expr>) -> Result<(), SyntaxError> {
         if self.scope_depth == 0 {
             panic!("Return statement outside of a function");
@@ -694,27 +729,27 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         expr: &Expr,
     ) -> Result<(), SyntaxError> {
         match op {
-            OpAssignment::PlusEquals => {
+            OpAssignment::AddAssign => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
                 self.emit_byte(Opcode::Add as u8);
             }
-            OpAssignment::MinusEquals => {
+            OpAssignment::SubAssign => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
                 self.emit_byte(Opcode::Sub as u8);
             }
-            OpAssignment::MultiplyEquals => {
+            OpAssignment::MulAssign => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
                 self.emit_byte(Opcode::Mul as u8);
             }
-            OpAssignment::DivideEquals => {
+            OpAssignment::DivAssign => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
                 self.emit_byte(Opcode::Div as u8);
             }
-            OpAssignment::ModuloEquals => {
+            OpAssignment::RemAssign => {
                 self.load_variable(&id.name);
                 self.expression(&expr)?;
                 self.emit_byte(Opcode::Rem as u8);
@@ -737,9 +772,25 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         Ok(())
     }
 
+    fn expression(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
+        match expr {
+            Expr::BinaryExpr(expr, _) => self.binary_expression(&expr),
+            Expr::ParenExpr(expr, _) => self.expression(&expr),
+            Expr::UnaryExpr(op, arg, _) => self.unary(&arg, &op),
+            Expr::LogicalExpr(expr, _) => self.logical_expr(&expr),
+            Expr::CallExpr(callee, args, _) => self.call_expr(&callee, &args),
+            Expr::MemberExpr(obj, prop, _) => self.member_expr(&obj, &prop),
+            Expr::Identifier(id) => self.identifier(&id),
+            Expr::Number(num, _) => self.number(&num),
+            Expr::String(string, _) => self.string(&string),
+            Expr::Bool(val, _) => self.boolean(&val),
+            Expr::Nil(_) => self.nil(),
+        }
+    }
+
     fn binary_expression(&mut self, expr: &BinaryExpr) -> Result<(), SyntaxError> {
-        self.expression(&expr.left)?;
-        self.expression(&expr.right)?;
+        self.expression(&expr.lhs)?;
+        self.expression(&expr.rhs)?;
 
         match &expr.op {
             Op::Add => self.emit_byte(Opcode::Add as u8),
@@ -760,7 +811,7 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
     }
 
     fn logical_expr(&mut self, expr: &BinaryExpr) -> Result<(), SyntaxError> {
-        self.expression(&expr.left)?;
+        self.expression(&expr.lhs)?;
 
         let op = match &expr.op {
             Op::And => Opcode::JumpIfFalse,
@@ -771,7 +822,7 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         let end_jump = self.emit_jump(op);
         self.emit_byte(Opcode::Del as u8);
 
-        self.expression(&expr.right)?;
+        self.expression(&expr.rhs)?;
 
         self.patch_jump(end_jump);
 
@@ -790,7 +841,7 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         Ok(())
     }
 
-    fn call_expr(&mut self, callee: &Expr, args: &Vec<Box<Expr>>) -> Result<(), SyntaxError> {
+    fn call_expr(&mut self, callee: &Expr, args: &Vec<Expr>) -> Result<(), SyntaxError> {
         if args.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 arguments.");
         }
@@ -806,10 +857,19 @@ impl Visitor<(), SyntaxError> for Compiler<'_> {
         Ok(())
     }
 
-    fn member_expr(&mut self, _object: &Expr, _property: &Expr) -> Result<(), SyntaxError> {
-        //let object = self.expression(object)?;
+    fn member_expr(&mut self, object: &Expr, property: &Expr) -> Result<(), SyntaxError> {        
+        match property {
+            Expr::Identifier(id) => {
+                self.string(&id.name)?;
+            },
+            _ => unimplemented!(),
+        };
 
-        todo!();
+        self.expression(object)?;
+
+        self.emit_byte(Opcode::LoadField as u8);
+
+        Ok(())
     }
 
     fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {
