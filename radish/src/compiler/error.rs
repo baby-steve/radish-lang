@@ -76,6 +76,10 @@ pub enum SyntaxErrorKind {
     ExpectedExpression {
         actual: Item,
     },
+    /// Expected a newline
+    ExpectedNewline {
+        actual: Item,
+    },
     /// Found a mismatched closing delimiter.
     MismatchedDelimiter {
         first: Item,
@@ -156,6 +160,15 @@ impl SyntaxError {
                 ))
                 .with_labels(vec![
                     Label::primary(actual.span.clone()).with_message("expected an expression")
+                ]),
+            ExpectedNewline { actual } => Diagnostic::error()
+                .with_message("expected a newline")
+                .with_labels(vec![
+                    Label::primary(actual.span.clone()).with_message("expected a newline here")
+                ])
+                .with_notes(vec![
+                    "statements are newline terminated",
+                    "try inserting a newline",
                 ]),
             MismatchedDelimiter { first, second } => Diagnostic::error()
                 .with_message(format!(

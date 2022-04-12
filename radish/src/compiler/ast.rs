@@ -72,6 +72,10 @@ impl AST {
         Stmt::WhileStmt(condition, block, span)
     }
 
+    pub fn import_stmt(path: String, items: Vec<Ident>, span: Span) -> Stmt {
+        Stmt::ImportStmt(ImportStatement::new(path, items, span))
+    }
+
     pub fn break_stmt(span: Span) -> Stmt {
         Stmt::BreakStmt(span)
     }
@@ -186,6 +190,12 @@ pub enum Stmt {
     /// 'while' <expr> 'loop' stmt... 'endloop'
     /// ```
     WhileStmt(Expr, Vec<Stmt>, Span),
+    /// A `import` statement
+    /// ```txt
+    /// 'import' <path> { 'for' ident... }
+    /// ```
+    ImportStmt(ImportStatement),
+    //ImportStmt(String, Vec<Ident>, Span),
     /// A break statement.
     /// ```txt
     /// break
@@ -232,6 +242,7 @@ impl Stmt {
             | Self::ContinueStmt(pos)
             | Self::BreakStmt(pos) => pos.clone(),
             Self::ExpressionStmt(expr) => expr.position(),
+            Self::ImportStmt(stmt) => stmt.pos(),
         }
     }
 }
@@ -374,6 +385,45 @@ pub struct ConstructorDecl {
 impl ConstructorDecl {
     pub fn new(id: Ident, params: Vec<Ident>, body: Box<Vec<Stmt>>) -> Self {
         ConstructorDecl { id, params, body }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ImportStatement {
+    path: String,
+    items: Vec<Ident>,
+    pos: Span,
+}
+
+impl ImportStatement {
+    pub fn new(path: String, items: Vec<Ident>, pos: Span) -> Self {
+        Self { path, items, pos }
+    }
+
+    pub fn name(&self) -> Option<Ident> {
+        use std::path::Path;
+
+        let path = Path::new(&self.path);
+
+        let file_path = path.file_name();
+
+        let name = file_path.map(|p| p.to_str().unwrap()).map(|name| {
+            let span = self.pos.clone();
+            Ident {
+                name: name.to_string(),
+                pos: span,
+            }
+        });
+
+        name
+    }
+
+    pub fn path(&self) -> &str {
+        &self.path
+    }
+
+    pub fn pos(&self) -> Span {
+        self.pos.clone()
     }
 }
 

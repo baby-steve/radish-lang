@@ -188,6 +188,8 @@ impl Parser {
             TokenType::Loop => self.parse_loop_statement(),
             // while
             TokenType::While => self.parse_while_statement(),
+            // import
+            TokenType::Import => self.parse_import_statement(),
             // return
             TokenType::Return => self.parse_return_statement(),
             // break
@@ -402,6 +404,37 @@ impl Parser {
             loop_body,
             Span::combine(&start, &self.current.span),
         ))
+    }
+
+    fn parse_import_statement(&mut self) -> Result<Stmt, SyntaxError> {
+        let start = self.current.span.clone();
+
+        self.consume(TokenType::Import);
+
+        let path = match self.current.token_type.clone() {
+            TokenType::String(val) => {
+                self.advance();
+                val.to_string()
+            }
+            // FIXME: definitely should handle this better.
+            _ => panic!("path must be a string literal"),
+        };
+
+        let items = if self.match_token(&TokenType::For) {
+            let mut items = vec![self.parse_identifier()?];
+            
+            while self.match_token(&TokenType::Comma) {
+                items.push(self.parse_identifier()?);
+            }
+
+            items
+        } else {
+            vec![]
+        };
+
+        let span = Span::combine(&start, &self.current.span);
+
+        Ok(AST::import_stmt(path, items, span))
     }
 
     fn parse_break_statement(&mut self) -> Result<Stmt, SyntaxError> {

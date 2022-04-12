@@ -22,6 +22,7 @@ pub trait Visitor<'a>: Sized {
             Stmt::IfStmt(condition, body, alt, _) => self.visit_if_stmt(condition, body, alt),
             Stmt::LoopStmt(body, _) => self.visit_loop_stmt(body),
             Stmt::WhileStmt(condition, body, _) => self.visit_while_stmt(condition, body),
+            Stmt::ImportStmt(stmt) => self.visit_import_stmt(stmt),
             Stmt::BreakStmt(_) => self.visit_break_stmt(),
             Stmt::ContinueStmt(_) => self.visit_continue_stmt(),
             Stmt::ReturnStmt(return_expr, _) => self.visit_return_stmt(return_expr),
@@ -105,6 +106,11 @@ pub trait Visitor<'a>: Sized {
     fn visit_while_stmt(&mut self, condition: &mut Expr, body: &mut Vec<Stmt>) -> VisitorResult {
         self.visit_expr(condition)?;
         self.visit_block_stmt(body)
+    }
+
+    fn visit_import_stmt(&mut self, _import_stmt: &mut ImportStatement) -> VisitorResult {
+        // Nothing to do (for now).
+        Ok(())
     }
 
     fn visit_break_stmt(&mut self) -> VisitorResult {

@@ -380,6 +380,17 @@ impl Visitor<'_> for Analyzer {
     fn visit_member_expr(&mut self, obj: &mut Expr, _prop: &mut Expr) -> VisitorResult {
         self.resolve_member_expression(obj)
     }
+
+    fn visit_import_stmt(&mut self, import_stmt: &mut ImportStatement) -> VisitorResult {
+        let module_name = match import_stmt.name() {
+            Some(n) => n,
+            None => panic!("invalid import path"),
+        };
+
+        self.declare_variable(&module_name.name, SymbolKind::Var, &module_name.pos)?;
+
+        Ok(())
+    }
 }
 
 impl fmt::Display for Analyzer {

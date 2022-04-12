@@ -39,6 +39,7 @@ enum CompilerTarget {
 
 /// Track the state of the current `[Function]` being compiled.
 #[derive(Debug)]
+#[allow(unused)]
 struct Frame {
     /// Function being written to.
     pub function: FunctionValue,
@@ -94,16 +95,16 @@ impl Compiler {
             frame_count: 0,
             frame: vec![],
             //scope,
-            module: Module::new("test"),
+            module: Module::new(""),
         }
     }
 
     pub fn compile(
         &mut self,
+        file_name: &str,
         ast: &AST,
-        //scope: &'a SymbolTable,
     ) -> Result<CompiledModule, SyntaxError> {
-        //self.scope = scope;
+        self.module.borrow_mut().name = file_name.to_string().into_boxed_str();
 
         let script = FunctionValue {
             arity: 0,
@@ -332,6 +333,8 @@ impl Compiler {
 
     /// Leave the current scope, removing all locally declared variables.
     fn leave_scope(&mut self) {
+        //dbg!(&self.locals);
+
         self.scope_depth -= 1;
 
         while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth {
@@ -361,11 +364,11 @@ impl Compiler {
         self.frame_count += 1;
         self.enter_scope();
 
-        if self.frame[self.frame_count].function_type == CompilerTarget::Constructor {
-            self.add_local("this");
-        } else {
-            //self.add_local("");
-        }
+        // if self.frame[self.frame_count].function_type == CompilerTarget::Constructor {
+        //     self.add_local("this");
+        // } else {
+        //     //self.add_local("");
+        // }
     }
 
     /// Leave the current function body.
@@ -494,6 +497,7 @@ impl Compiler {
             Stmt::IfStmt(expr, body, alt, _) => self.if_statement(&expr, &body, &alt),
             Stmt::LoopStmt(body, _) => self.loop_statement(&body),
             Stmt::WhileStmt(expr, body, _) => self.while_statement(&expr, &body),
+            Stmt::ImportStmt(stmt) => self.import_statement(stmt),
             Stmt::ReturnStmt(value, _) => self.return_statement(&value),
             Stmt::BreakStmt(pos) => self.break_statement(&pos),
             Stmt::ContinueStmt(pos) => self.continue_statement(&pos),
@@ -633,6 +637,16 @@ impl Compiler {
         }
 
         self.leave_scope();
+
+        Ok(())
+    }
+
+    fn import_statement(&mut self, import_stmt: &ImportStatement) -> Result<(), SyntaxError> {
+        self.string(import_stmt.path())?;
+
+        self.emit_byte(Opcode::Import as u8);
+
+        self.define_variable(&import_stmt.name().unwrap().name);
 
         Ok(())
     }
@@ -843,10 +857,19 @@ impl Compiler {
         Ok(())
     }
 
-    fn member_expr(&mut self, _object: &Expr, _property: &Expr) -> Result<(), SyntaxError> {
-        //let object = self.expression(object)?;
+    fn member_expr(&mut self, object: &Expr, property: &Expr) -> Result<(), SyntaxError> {        
+        match property {
+            Expr::Identifier(id) => {
+                self.string(&id.name)?;
+            },
+            _ => unimplemented!(),
+        };
 
-        todo!();
+        self.expression(object)?;
+
+        self.emit_byte(Opcode::LoadField as u8);
+
+        Ok(())
     }
 
     fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {
