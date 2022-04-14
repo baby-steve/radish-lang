@@ -1,6 +1,6 @@
 //! REPL for the Radish programming language.
 
-use radish::{Radish, RadishError};
+use radish::{RadishError, VM};
 
 use rustyline::{error::ReadlineError, Editor};
 
@@ -24,16 +24,16 @@ enum ReplResult<T> {
 }
 
 pub struct Repl<'a> {
-    radish: Radish,
+    vm: VM,
     lines: Vec<String>,
     prev_len: usize,
     prompt: &'a str,
 }
 
 impl<'a> Repl<'a> {
-    pub fn new(radish: Radish) -> Self {
+    pub fn new(vm: VM) -> Self {
         Repl {
-            radish,
+            vm,
             lines: vec![],
             prev_len: 0,
             prompt: PROMPT,
@@ -116,11 +116,10 @@ impl<'a> Repl<'a> {
 
     /// The evil, err, _eval_ part of REPL.
     fn eval(&mut self) -> Result<(), RadishError> {
-        let result = self
-            .radish
-            .run_expr("REPL", &self.lines.join("\n"))?;
-        println!("{}", result);
-        
+        let result = self.vm.eval(&self.lines.join("\n"))?;
+
+        println!("{:?}", result);
+
         Ok(())
     }
 
@@ -145,7 +144,7 @@ impl<'a> Repl<'a> {
 
         let max_msg_width = 93;
 
-        let welcome = "Welcome to Radish!";
+        let welcome = "Welcome to VM!";
         let help = format!("type '{}' for more information", HELP);
         let exit = "press Ctrl+D to exit";
         let version = format!("Version {}", env!("CARGO_PKG_VERSION"));
@@ -172,7 +171,7 @@ impl<'a> Repl<'a> {
     }
 }
 
-/// Radish's welcome banner.
+/// VM's welcome banner.
 const WELCOME: &str = r#"
  ________  ________  ________  ___  ________  ___  ___       
 |\   __  \|\   __  \|\   ___ \|\  \|\   ____\|\  \|\  \      
