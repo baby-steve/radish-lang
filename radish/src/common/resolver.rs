@@ -1,18 +1,19 @@
-use std::path::{Path, PathBuf};
-
+use std::cell::RefCell;
 use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use crate::{Radish, RadishConfig, RadishError};
+use crate::compiler::pipeline::CompilerPipeLine;
+use crate::RadishError;
 
-use super::CompiledModule;
+use super::{CompiledModule, Module};
 
 pub trait Resolver {
     fn resolve(
         &mut self,
         source: Option<impl AsRef<str>>,
         path: &str,
-        config: Rc<RadishConfig>,
     ) -> Result<CompiledModule, RadishError>;
 }
 
@@ -23,6 +24,7 @@ pub struct FileResolver {
     extension: String,
     base_path: Option<PathBuf>,
     cache: BTreeMap<PathBuf, CompiledModule>,
+    stat: BTreeMap<String, CompiledModule>,
 }
 
 impl FileResolver {
@@ -31,6 +33,7 @@ impl FileResolver {
             extension: RADISH_FILE_EXTENSION.to_string(),
             base_path: None,
             cache: BTreeMap::new(),
+            stat: BTreeMap::new(),
         }
     }
 
@@ -39,15 +42,14 @@ impl FileResolver {
             extension: RADISH_FILE_EXTENSION.to_string(),
             base_path: Some(path.into()),
             cache: BTreeMap::new(),
+            stat: BTreeMap::new(),
         }
     }
 
-    // TODO: inline?
     pub fn get_base_path(&self) -> Option<&Path> {
         self.base_path.as_ref().map(PathBuf::as_ref)
     }
-    
-    // TODO: inline?
+
     pub fn set_base_path(&mut self, path: impl Into<PathBuf>) {
         self.base_path = Some(path.into());
     }
@@ -63,16 +65,11 @@ impl FileResolver {
     }
 
     fn get_file_path(&self, path: &str, source_path: Option<impl AsRef<str>>) -> PathBuf {
-        dbg!(&path);
-
         let path = Path::new(path);
 
         let mut file_path;
 
         if path.is_relative() {
-            let msg: &str = &source_path.as_ref().clone().unwrap().as_ref();
-            dbg!(msg);
-
             file_path = self
                 .base_path
                 .clone()
@@ -85,16 +82,27 @@ impl FileResolver {
 
         file_path.set_extension(&self.extension);
 
-        dbg!(&file_path);
-
         file_path
     }
 
-    fn resolve_module(
+    pub fn resolve(
         &mut self,
+        source: Option<&str>,
         path: &str,
-        source: Option<impl AsRef<str>>,
-        config: Rc<RadishConfig>,
+        pipeline: &mut CompilerPipeLine,
+    ) -> Result<CompiledModule, RadishError> {
+        if self.is_logical(path) {
+            self.resolve_static(path)
+        } else {
+            self.resolve_file(source, path, pipeline)
+        }
+    }
+
+    fn resolve_file(
+        &mut self,
+        source: Option<&str>,
+        path: &str,
+        pipeline: &mut CompilerPipeLine,
     ) -> Result<CompiledModule, RadishError> {
         dbg!(&path);
 
@@ -104,25 +112,43 @@ impl FileResolver {
             return Ok(module.clone());
         }
 
-        // The following is something of a hack.
+        let src = self.load_file(&file_path)?;
 
-        let mut radish = Radish::with_settings(config);
+        let file_name = file_path
+            .file_name()
+            .expect("expected a file name, found a directory")
+            .to_str()
+            .expect("invaild unicode in path name");
 
-        let module = radish.compile_file_with_path(&file_path)?;
+        let module = pipeline.compile(&file_name, &src)?;
 
         self.cache.insert(file_path, module.clone());
 
         Ok(module)
     }
-}
 
-impl Resolver for FileResolver {
-    fn resolve(
-        &mut self,
-        source: Option<impl AsRef<str>>,
-        path: &str,
-        config: Rc<RadishConfig>,
-    ) -> Result<CompiledModule, RadishError> {
-        self.resolve_module(path, source, config)
+    fn resolve_static(&mut self, path: &str) -> Result<CompiledModule, RadishError> {
+        let module = self
+            .stat
+            .get(path)
+            .expect("resolver does not have a module with the given path");
+
+        Ok(std::rc::Rc::clone(module))
+    }
+
+    fn load_file(&self, file_path: &PathBuf) -> Result<String, RadishError> {
+        let src = fs::read_to_string(file_path)?;
+        Ok(src)
+    }
+
+    fn is_logical(&self, file_path: &str) -> bool {
+        file_path.starts_with("@")
+    }
+
+    pub fn load(&mut self, name: impl ToString, module: Module) -> &mut Self {
+        self.stat
+            .insert(name.to_string(), Rc::new(RefCell::new(module)));
+
+        self
     }
 }

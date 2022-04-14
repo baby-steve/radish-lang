@@ -8,13 +8,37 @@ use crate::compiler::{
     token::{Token, TokenType},
 };
 
-use crate::RadishConfig;
-
 use crate::common::{source::Source, span::Span};
 use crate::error::Item;
 
+use super::pipeline::PipelineSettings;
+
+struct ParserSettings {
+    pub dump_ast: bool,
+}
+
+impl ParserSettings {
+    pub fn new() -> Self {
+        Self { dump_ast: false }
+    }
+}
+
+impl Default for ParserSettings {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl From<&PipelineSettings> for ParserSettings {
+    fn from(pipeline: &PipelineSettings) -> Self {
+        Self {
+            dump_ast: pipeline.dump_ast,
+        }
+    }
+}
+
 pub struct Parser {
-    config: Rc<RadishConfig>,
+    settings: ParserSettings,
     source: Rc<Source>,
     scanner: Scanner,
     previous: Token,
@@ -22,9 +46,19 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(source: Rc<Source>, config: &Rc<RadishConfig>) -> Parser {
-        Parser {
-            config: Rc::clone(&config),
+    pub fn new(source: Rc<Source>) -> Self {
+        Self {
+            settings: ParserSettings::default(),
+            source: Rc::clone(&source),
+            scanner: Scanner::new(source),
+            previous: Token::empty(),
+            current: Token::empty(),
+        }
+    }
+
+    pub fn with_config(source: Rc<Source>, settings: &PipelineSettings) -> Self {
+        Self {
+            settings: ParserSettings::from(settings),
             source: Rc::clone(&source),
             scanner: Scanner::new(source),
             previous: Token::empty(),
@@ -36,12 +70,12 @@ impl Parser {
         self.advance();
 
         match self.parse_body() {
-            Ok(items) => { 
-                if self.config.dump_ast {
+            Ok(items) => {
+                if self.settings.dump_ast {
                     println!("{:#?}", &items);
                 }
-                Ok(AST::new(items)) 
-            },
+                Ok(AST::new(items))
+            }
             Err(err) => Err(err),
         }
     }
@@ -233,7 +267,7 @@ impl Parser {
         Ok(AST::fun_decl(function, span))
     }
 
-    fn parse_class_declaration(&mut self) -> Result<Stmt, SyntaxError> {    
+    fn parse_class_declaration(&mut self) -> Result<Stmt, SyntaxError> {
         let start = self.current.span.clone();
         let mut constructors = vec![];
 
@@ -262,7 +296,7 @@ impl Parser {
                     // break;
                 }
             };
-        };
+        }
 
         // class <id> { ... }
         self.expect(TokenType::RightBrace)?;
@@ -273,7 +307,7 @@ impl Parser {
     }
 
     fn parse_constructor(&mut self) -> Result<ConstructorDecl, SyntaxError> {
-        // con ... 
+        // con ...
         self.consume(TokenType::Con);
         // con <id> ...
         let id = self.parse_identifier()?;
@@ -422,7 +456,7 @@ impl Parser {
 
         let items = if self.match_token(&TokenType::For) {
             let mut items = vec![self.parse_identifier()?];
-            
+
             while self.match_token(&TokenType::Comma) {
                 items.push(self.parse_identifier()?);
             }
@@ -853,7 +887,7 @@ impl Parser {
                     };
 
                     let node = AST::identifier(id);
-                    
+
                     self.consume(TokenType::Ident(name));
                     return Ok(node);
                 }

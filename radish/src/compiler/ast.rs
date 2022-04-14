@@ -3,7 +3,7 @@
 
 use crate::common::span::Span;
 
-use crate::ScopeMap;
+use crate::compiler::scope::ScopeMap;
 
 use std::cmp::Ordering;
 
@@ -26,6 +26,13 @@ impl AST {
     }
 
     pub fn walk<F, T>(&mut self, mut callback: F) -> Result<T, SyntaxError>
+    where
+        F: FnMut(&mut AST) -> Result<T, SyntaxError>,
+    {
+        callback(self)
+    }
+
+    pub fn visit<F, T>(&mut self, callback: &mut F) -> Result<T, SyntaxError>
     where
         F: FnMut(&mut AST) -> Result<T, SyntaxError>,
     {

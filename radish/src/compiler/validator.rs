@@ -152,7 +152,10 @@ impl Visitor<'_> for AstValidator {
 
         if in_function == false {
             let kind = SyntaxErrorKind::ReturnOutsideFunction {
-                item: Item { span: Span::empty(), content: "".to_string() },
+                item: Item {
+                    span: Span::empty(),
+                    content: "".to_string(),
+                },
             };
 
             let err = SyntaxError::new(kind);
@@ -163,10 +166,9 @@ impl Visitor<'_> for AstValidator {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::{common::source::Source, compiler::parser::Parser, RadishConfig};
+    use crate::{common::source::Source, compiler::parser::Parser};
 
     use super::*;
 
@@ -174,9 +176,8 @@ mod tests {
     fn walk_ast() {
         let src = "1 + 2 - 3 * 4 / 5";
         let source = Source::source(src);
-        let config = RadishConfig::new();
 
-        let mut parser = Parser::new(source, &config);
+        let mut parser = Parser::new(source);
 
         let mut ast = parser.parse().expect("expected an parser to succeed");
 
