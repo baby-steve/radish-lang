@@ -1,7 +1,7 @@
 use std::fmt;
 use std::collections::HashMap;
 
-use crate::common::value::Value;
+use crate::Value;
 
 /// A chunk of bytecode and its associated data.
 #[derive(Debug, PartialEq, Clone)]

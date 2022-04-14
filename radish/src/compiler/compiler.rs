@@ -1,10 +1,12 @@
-use crate::common::{
-    value::Function as FunctionValue, Chunk, CompiledModule, Disassembler, Module, Opcode, Span,
-    Value,
-};
+use crate::common::{Chunk, CompiledModule, Disassembler, Module, Opcode, Span};
+
+use crate::vm::value::Function as FunctionValue;
+                                      
+use crate::Value;
 
 use crate::compiler::{ast::*, Rc, SyntaxError};
-use crate::RadishConfig;
+
+use super::pipeline::PipelineSettings;
 
 #[derive(Debug)]
 pub struct Local {
@@ -73,37 +75,58 @@ impl Frame {
     }
 }
 
+struct CompilerSettings {
+    pub dump_bytecode: bool,
+}
+
+impl CompilerSettings {
+    pub fn new() -> Self {
+        Self {
+            dump_bytecode: false,
+        }
+    }
+}
+
+impl Default for CompilerSettings {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl From<&PipelineSettings> for CompilerSettings {
+    fn from(pipeline: &PipelineSettings) -> Self {
+        Self {
+            dump_bytecode: pipeline.dump_bytecode,
+        }
+    }
+}
+
 pub struct Compiler {
-    config: Rc<RadishConfig>,
+    config: CompilerSettings,
     scope_depth: usize,
-    //scope: &'a SymbolTable,
     frame_count: usize,
     frame: Vec<Frame>,
     locals: Vec<Local>,
     loops: Vec<Loop>,
-
     module: CompiledModule,
 }
 
 impl Compiler {
-    pub fn new(/*scope: &'a SymbolTable,*/ config: &Rc<RadishConfig>) -> Self {
+    pub fn new(config: &PipelineSettings) -> Self {
+        let config = CompilerSettings::from(config);
+
         Self {
-            config: Rc::clone(&config),
+            config,
             scope_depth: 0,
             locals: vec![],
             loops: vec![],
             frame_count: 0,
             frame: vec![],
-            //scope,
-            module: Module::new(""),
+            module: Module::empty(),
         }
     }
 
-    pub fn compile(
-        &mut self,
-        file_name: &str,
-        ast: &AST,
-    ) -> Result<CompiledModule, SyntaxError> {
+    pub fn compile(&mut self, file_name: &str, ast: &AST) -> Result<CompiledModule, SyntaxError> {
         self.module.borrow_mut().name = file_name.to_string().into_boxed_str();
 
         let script = FunctionValue {
@@ -132,7 +155,7 @@ impl Compiler {
 
         let script = self.frame.pop().unwrap().function;
 
-        if self.config.dump_code {
+        if self.config.dump_bytecode {
             Disassembler::disassemble_chunk(&script.name, &script);
         }
 
@@ -439,7 +462,7 @@ impl Compiler {
 
         let frame = self.leave_function();
 
-        if self.config.dump_code {
+        if self.config.dump_bytecode {
             Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
         }
 
@@ -554,7 +577,7 @@ impl Compiler {
 
         let frame = self.leave_function();
 
-        if self.config.dump_code {
+        if self.config.dump_bytecode {
             Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
         }
 
@@ -857,11 +880,11 @@ impl Compiler {
         Ok(())
     }
 
-    fn member_expr(&mut self, object: &Expr, property: &Expr) -> Result<(), SyntaxError> {        
+    fn member_expr(&mut self, object: &Expr, property: &Expr) -> Result<(), SyntaxError> {
         match property {
             Expr::Identifier(id) => {
                 self.string(&id.name)?;
-            },
+            }
             _ => unimplemented!(),
         };
 

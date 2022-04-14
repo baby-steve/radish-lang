@@ -1,81 +1,14 @@
 use std::{convert::TryInto, rc::Rc};
 
 use crate::{
-    common::{
-        resolver::{FileResolver, Resolver},
-        value::Class,
-        value::Closure,
-        value::Value,
-        CompiledModule, Disassembler, Module, Opcode,
-    },
-    vm::stack::Stack,
+    common::{Disassembler, Opcode},
     vm::trace::Trace,
-    RadishConfig,
+    vm::value::{Class, Closure, Value},
 };
 
-#[derive(Debug)]
-pub struct CallFrame {
-    /// Call frame's function.
-    pub closure: Closure,
-    /// Track where we're at in the function's chunk.
-    pub ip: usize,
-    /// VM stack offset.
-    pub offset: usize,
-}
-
-#[derive(Debug)]
-pub struct VM {
-    pub stack: Stack,
-    pub frames: Vec<CallFrame>,
-    pub frame_count: usize,
-
-    pub config: Rc<RadishConfig>,
-
-    pub last_module: CompiledModule,
-
-    pub modules: Vec<CompiledModule>,
-
-    pub resolver: FileResolver,
-
-    //HACK
-    source: Option<String>,
-}
+use crate::vm::{CallFrame, VM};
 
 impl VM {
-    pub fn new(config: &Rc<RadishConfig>) -> VM {
-        VM {
-            stack: Stack::new(),
-            frames: Vec::new(),
-            frame_count: 0,
-            config: Rc::clone(&config),
-            last_module: Module::empty(),
-            resolver: FileResolver::new(),
-            modules: Vec::new(),
-            source: config.source.clone(),
-        }
-    }
-
-    pub fn interpret(&mut self, module: CompiledModule) -> Result<Value, Trace> {
-        use std::time::Instant;
-
-        self.last_module = module;
-
-        let closure = Closure {
-            //function: Rc::new(script),
-            function: self.last_module.borrow().entry(),
-        };
-        self.stack.push(Value::Closure(closure.clone()));
-        self.call_function(closure, 0)?;
-
-        let start = Instant::now();
-
-        let res = self.run()?;
-
-        println!("elapsed: {:?}", start.elapsed());
-
-        Ok(res)
-    }
-
     /// Create a new [`Trace`] with the given message, adding context to it.
     fn error(&mut self, message: impl ToString) -> Trace {
         let mut trace = Trace::new(message);
@@ -181,7 +114,7 @@ impl VM {
     }
 
     #[inline]
-    fn call_function(&mut self, closure: Closure, arg_count: usize) -> Result<(), Trace> {
+    pub(crate) fn call_function(&mut self, closure: Closure, arg_count: usize) -> Result<(), Trace> {
         let offset = self.stack.stack.len() - arg_count;
         let frame = CallFrame {
             closure: Closure::from(Rc::clone(&closure.function)),
@@ -237,10 +170,12 @@ impl VM {
 
     #[inline]
     fn print(&mut self) -> Result<(), Trace> {
-        let msg = self.stack.pop();
-        self.config.stdout.write(&format!("{}", msg));
+        let _msg = self.stack.pop();
+        
+        //self.config.stdout.write(&format!("{}", msg));
+        //Ok(())
 
-        Ok(())
+        todo!();
     }
 
     #[inline]
@@ -393,47 +328,29 @@ impl VM {
             .expect("path is not a string");
 
         // TODO: find a better way to get this.
-        // let source = self.config.source.clone();
+        let source_path = "";
 
         // TODO: figure out import semantics.
         // currently any import will only ever be runned once. While this seems
         // to be a common trend, I'm not sure if its the best choice.
         if self
             .resolver
-            .is_cached(&*path.borrow(), self.source.as_ref())
+            .is_cached(&*path.borrow(), Some(source_path))
         {
             return Ok(());
         };
 
-        let module =
-            match self
-                .resolver
-                .resolve(self.source.clone(), &path.borrow(), self.config.clone())
-            {
-                Ok(m) => m,
-                Err(e) => {
-                    e.emit();
-                    return Err(self.error("failed to load module"));
-                    //panic!("failed to load module");
-                }
-            };
+        let module = match self.resolver.resolve(Some(source_path), &path.borrow(), &mut self.pipeline) {
+            Ok(m) => m,
+            Err(e) => {
+                e.emit();
+                let msg = "failed to load module";
+                return Err(Trace::new(msg));
+            }
+        };
 
         // swap out the last module with the new one.
         let last_module = std::mem::replace(&mut self.last_module, module);
-
-        let source = std::path::PathBuf::from(&path.borrow().to_string())
-            .parent()
-            .unwrap_or(&std::path::Path::new(""))
-            .to_string_lossy()
-            .to_string();
-
-        let mut src = self.source.clone().unwrap();
-
-        src.extend([source]);
-
-        self.source = Some(src);
-
-        dbg!(&self.source);
 
         // store the last module.
         self.modules.push(last_module);
@@ -448,7 +365,7 @@ impl VM {
         Ok(())
     }
 
-    fn run(&mut self) -> Result<Value, Trace> {
+    pub(crate) fn run(&mut self) -> Result<Value, Trace> {
         macro_rules! binary_op {
             ($op:tt) => {{
                 let b = self.stack.pop();

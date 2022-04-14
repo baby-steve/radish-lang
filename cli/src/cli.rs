@@ -1,6 +1,7 @@
 //! CLI for the Radish programming langauge.
 
 use clap::{App, Arg};
+use radish::config::Config;
 
 #[derive(Debug)]
 pub struct Cli {
@@ -73,6 +74,17 @@ impl Cli {
             dump_ast,
             dump_code,
             trace,
+        }
+    }
+}
+
+impl From<&Cli> for Config {
+    fn from(cli: &Cli) -> Self {
+        Config {
+            dump_ast: cli.dump_ast,
+            dump_bytecode: cli.dump_code,
+            trace: cli.trace,
+            ..Default::default()
         }
     }
 }

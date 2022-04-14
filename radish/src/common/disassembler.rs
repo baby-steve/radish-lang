@@ -1,4 +1,4 @@
-use crate::common::value::Function;
+use crate::vm::value::Function;
 
 pub struct Disassembler<'a> {
     name: &'a str,

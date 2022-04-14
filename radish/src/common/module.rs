@@ -1,4 +1,6 @@
-use crate::common::{value::Function, Value};
+use crate::vm::value::Function;
+use crate::vm::native::NativeFunction;
+use crate::{Value, VM};
 
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, rc::Rc};
 
@@ -13,12 +15,16 @@ pub struct Module {
 
 impl Module {
     pub fn new(name: &str) -> Rc<RefCell<Module>> {
-        let module = Module {
+        let module = Self::new_(name);
+        Rc::new(RefCell::new(module))
+    }
+
+    pub fn new_(name: &str) -> Self {
+        Self {
             name: name.to_string().into_boxed_str(),
             variables: Vec::new(),
             symbols: HashMap::new(),
-        };
-        Rc::new(RefCell::new(module))
+        }
     }
 
     pub fn empty() -> Rc<RefCell<Module>> {
@@ -82,10 +88,20 @@ impl Module {
     // Add a function to the current scope
     // pub fn add_function(function: Function) {}
 
-    // Add a native function to the current scope
-    // pub fn add_native(native: Native) {}
+    pub fn add_native<F: 'static>(&mut self, name: &str, airty: u8, fun: F) -> &mut Self
+    where
+        F: FnMut(&mut VM, Vec<Value>) -> Result<Value, String>,
+    {
+        let native_fun = NativeFunction::new::<F>(Rc::new(fun), airty);
 
-    // create a class 
+        let index = self.add_var(name.to_string());
+
+        self.set_var(index, Value::NativeFunction(Rc::new(native_fun)));
+
+        self
+    }
+
+    // create a class
     // pub fn create_class(name: impl ToString) {}
 
     // add a method to a class
@@ -95,7 +111,7 @@ impl Module {
     //      class.add_method(method)
     // or should we add the method to a class with a given name:
     //      bind_method(method, "ClassName");
-    
+
     // functions to:
     //  a. declare a global
     //  b. set a global's value
@@ -144,7 +160,7 @@ impl fmt::Display for Module {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::{value::Function, Chunk};
+    use crate::common::Chunk;
 
     #[test]
     fn variables() {
@@ -180,5 +196,15 @@ mod tests {
         assert_eq!(module.borrow().variables.len(), 1);
 
         assert_eq!(module.borrow().entry(), Rc::new(fun));
+    }
+}
+
+pub trait ModuleBuilder {
+    fn build(self) -> Result<Module, String>;
+}
+
+impl ModuleBuilder for Module {
+    fn build(self) -> Result<Module, String> {
+        Ok(self)
     }
 }

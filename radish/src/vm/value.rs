@@ -1,10 +1,11 @@
 use crate::common::{Chunk, Module};
 use std::cell::RefCell;
 use std::cmp::{Ord, Ordering};
-use std::collections::{HashMap, hash_map};
+use std::collections::{hash_map, HashMap};
 use std::fmt::{self};
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use std::rc::{Rc, Weak};
+use crate::vm::native::NativeFunction;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum Value {
@@ -17,6 +18,7 @@ pub enum Value {
     Instance(Rc<Instance>),
     Module(Rc<RefCell<Module>>),
     //Map(Rc<RefCell<ValueMap>>),
+    NativeFunction(Rc<NativeFunction>),
     Nil,
 }
 
@@ -80,7 +82,6 @@ impl From<&String> for Value {
 
 impl From<Function> for Value {
     fn from(val: Function) -> Self {
-        //Value::Function(Rc::new(RefCell::new(val)))
         Value::Function(Rc::new(val))
     }
 }
@@ -96,16 +97,14 @@ impl Clone for Value {
         match self {
             Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
             Self::Function(val) => Self::Function(Rc::clone(&val)),
-
             Self::Nil => Self::Nil,
             Self::Boolean(val) => Self::Boolean(*val),
             Self::Number(val) => Self::Number(*val),
-
             Self::String(val) => Self::String(Rc::clone(val)),
-
             Self::Class(val) => Self::Class(Rc::clone(val)),
             Self::Instance(inst) => Self::Instance(Rc::clone(inst)),
             Self::Module(module) => Self::Module(Rc::clone(module)),
+            Self::NativeFunction(val) => Self::NativeFunction(Rc::clone(val)),
         }
     }
 }
@@ -122,6 +121,7 @@ impl fmt::Display for Value {
             Value::Class(val) => write!(f, "<class {}>", val.name.borrow()),
             Value::Instance(val) => write!(f, "<{:?} instance>", val.class.name.borrow()),
             Value::Module(module) => write!(f, "<mod {}>", module.borrow().name),
+            Value::NativeFunction(_) => write!(f, "<native fun>"),
             //Value::Map(map) => write!(f, "{:?}", map.borrow().to_string()),
             Value::Nil => f.write_str("nil"),
         }
