@@ -1,4 +1,4 @@
-use crate::common::value::Value;
+use crate::Value;
 
 #[derive(Debug, PartialEq)]
 pub struct Stack {
