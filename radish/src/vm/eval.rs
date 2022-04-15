@@ -47,7 +47,6 @@ impl VM {
     /// # Ok(())
     /// # }
     /// ```
-    #[must_use]
     pub fn eval<I: FromValue>(&mut self, src: &str) -> Result<I, RadishError> {
         self._eval(src)
     }
@@ -91,7 +90,6 @@ impl VM {
     /// # Ok(())
     /// # }
     /// ```
-    #[must_use]
     pub fn eval_file<I: FromValue>(&mut self, file_name: &str) -> Result<I, RadishError> {
         match self._eval_file(file_name) {
             Ok(val) => I::from_value(val),

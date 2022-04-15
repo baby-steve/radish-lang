@@ -414,15 +414,13 @@ impl ImportStatement {
 
         let file_path = path.file_name();
 
-        let name = file_path.map(|p| p.to_str().unwrap()).map(|name| {
+        file_path.map(|p| p.to_str().unwrap()).map(|name| {
             let span = self.pos.clone();
             Ident {
                 name: name.to_string(),
                 pos: span,
             }
-        });
-
-        name
+        })
     }
 
     pub fn path(&self) -> &str {

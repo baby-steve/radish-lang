@@ -15,19 +15,19 @@ pub struct Symbol(pub SymbolKind, pub Span, pub usize);
 
 impl Symbol {
     pub fn new(kind: SymbolKind, span: &Span, depth: usize) -> Symbol {
-        Symbol(kind, Span::from(&span), depth)
+        Symbol(kind, Span::from(span), depth)
     }
 
     pub fn var(span: &Span, depth: usize) -> Symbol {
-        Symbol(SymbolKind::Var, Span::from(&span), depth)
+        Symbol(SymbolKind::Var, Span::from(span), depth)
     }
 
     pub fn fun(arg_count: usize, span: &Span, depth: usize) -> Symbol {
-        Symbol(SymbolKind::Fun { arg_count }, Span::from(&span), depth)
+        Symbol(SymbolKind::Fun { arg_count }, Span::from(span), depth)
     }
 
     pub fn class(span: &Span, depth: usize) -> Symbol {
-        Symbol(SymbolKind::Class, Span::from(&span), depth)
+        Symbol(SymbolKind::Class, Span::from(span), depth)
     }
 }
 
@@ -51,7 +51,7 @@ impl fmt::Display for Symbol {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let contents = &self.1.source.contents;
         let start = self.1.start;
-        let (start_line, start_col) = Span::get_line_index(&contents, start);
+        let (start_line, start_col) = Span::get_line_index(contents, start);
         write!(
             f,
             "Symbol<type=\"{:?}\", pos=({},{})>",
@@ -116,6 +116,12 @@ impl ScopeMap {
 
     pub fn all(&self) -> &HashMap<String, Symbol> {
         &self.locals
+    }
+}
+
+impl Default for ScopeMap {
+    fn default() -> Self {
+        ScopeMap::new()
     }
 }
 

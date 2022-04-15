@@ -179,7 +179,7 @@ impl Parser {
             | (TokenType::Then, TokenType::Else)
             | (TokenType::Else, TokenType::EndIf)
             | (TokenType::Loop, TokenType::EndLoop)
-            | (TokenType::LeftParen, TokenType::RightParen) => return Ok(body),
+            | (TokenType::LeftParen, TokenType::RightParen) => Ok(body),
             _ => {
                 let err_kind = SyntaxErrorKind::MismatchedDelimiter {
                     first: Item::new(&opening_delimiter.span, opening_delimiter.syntax()),
@@ -188,7 +188,7 @@ impl Parser {
 
                 let err = self.error(err_kind);
 
-                return Err(err);
+                Err(err)
             }
         }
     }
@@ -584,16 +584,16 @@ impl Parser {
                 SyntaxErrorKind::Unexpected { found } => {
                     let err_kind = SyntaxErrorKind::ExpectedExpression { actual: found };
                     let err = self.error(err_kind);
-                    return Err(err);
+                    Err(err)
                 }
                 SyntaxErrorKind::UnexpectedEof { ref location } => {
                     let err_kind = SyntaxErrorKind::ExpectedExpression {
-                        actual: Item::new(&location, "<eof>"),
+                        actual: Item::new(location, "<eof>"),
                     };
                     let expected_expr = self.error(err_kind).set_cause(err);
-                    return Err(expected_expr);
+                    Err(expected_expr)
                 }
-                _ => return Err(err),
+                _ => Err(err)
             },
         }
     }
@@ -601,18 +601,13 @@ impl Parser {
     fn parse_boolean_expression(&mut self) -> Result<Expr, SyntaxError> {
         let mut node = self.parse_boolean_term()?;
 
-        loop {
-            match self.current.token_type {
-                TokenType::Or => {
-                    self.consume(TokenType::Or);
+        while let TokenType::Or = self.current.token_type {
+            self.consume(TokenType::Or);
 
-                    let right = self.parse_boolean_term()?;
+            let right = self.parse_boolean_term()?;
 
-                    let span = Span::combine(&node.position(), &right.position());
-                    node = AST::logical_expr(Box::new(BinaryExpr::new(Op::Or, node, right)), span)
-                }
-                _ => break,
-            }
+            let span = Span::combine(&node.position(), &right.position());
+            node = AST::logical_expr(Box::new(BinaryExpr::new(Op::Or, node, right)), span)
         }
 
         Ok(node)
@@ -621,18 +616,13 @@ impl Parser {
     fn parse_boolean_term(&mut self) -> Result<Expr, SyntaxError> {
         let mut node = self.parse_boolean_factor()?;
 
-        loop {
-            match self.current.token_type {
-                TokenType::And => {
-                    self.consume(TokenType::And);
+        while let TokenType::And = self.current.token_type {
+            self.consume(TokenType::And);
 
-                    let right = self.parse_boolean_factor()?;
+            let right = self.parse_boolean_factor()?;
 
-                    let span = Span::combine(&node.position(), &right.position());
-                    node = AST::logical_expr(Box::new(BinaryExpr::new(Op::And, node, right)), span)
-                }
-                _ => break,
-            }
+            let span = Span::combine(&node.position(), &right.position());
+            node = AST::logical_expr(Box::new(BinaryExpr::new(Op::And, node, right)), span)
         }
 
         Ok(node)
@@ -945,7 +935,7 @@ impl Parser {
                     actual: Item::new(&self.current.span, token.syntax()),
                 };
                 let err = SyntaxError::new(err_kind);
-                return Err(err);
+                Err(err)
             }
         }
     }

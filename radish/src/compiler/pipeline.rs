@@ -67,7 +67,7 @@ impl CompilerPipeLine {
     }
 
     fn _compile(&mut self, file_name: &str, src: &str) -> Result<CompiledModule, SyntaxError> {
-        let source = Source::new(&src, &file_name);
+        let source = Source::new(src, &file_name);
 
         let mut parser = Parser::with_config(source, &self.settings);
 
@@ -77,7 +77,7 @@ impl CompilerPipeLine {
             ast.visit(callback)?;
         }
 
-        let module = self.compiler.compile(&file_name, &ast)?;
+        let module = self.compiler.compile(file_name, &ast)?;
 
         Ok(module)
     }

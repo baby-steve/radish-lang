@@ -43,11 +43,7 @@ impl Module {
 
     #[inline]
     pub fn get_index(&self, name: &str) -> Option<usize> {
-        if let Some(index) = self.symbols.get(name) {
-            Some(*index)
-        } else {
-            None
-        }
+        self.symbols.get(name).copied()
     }
 
     #[inline]
@@ -71,7 +67,7 @@ impl Module {
     pub fn entry(&self) -> Rc<Function> {
         if let Some(index) = self.symbols.get("") {
             match &self.variables[*index] {
-                Value::Function(fun) => Rc::clone(&fun),
+                Value::Function(fun) => Rc::clone(fun),
                 _ => unreachable!(
                     "The entry point for module '{}' is not a function.",
                     self.name.to_string()
@@ -80,7 +76,7 @@ impl Module {
         } else {
             panic!(
                 "Module '{}' doesn't have an entry point",
-                self.name.to_string()
+                self.name
             );
         }
     }
@@ -148,7 +144,7 @@ impl fmt::Display for Module {
                 f,
                 "\n    {} {}: {}",
                 index,
-                if name == "" { "entry" } else { &name },
+                if name.is_empty() { "entry" } else { name },
                 value
             )?;
         }

@@ -2,7 +2,7 @@
 
 mod analysis;
 pub mod ast;
-pub mod compiler;
+pub mod codegen;
 pub mod error;
 pub mod parser;
 pub mod pipeline;
@@ -13,7 +13,7 @@ mod validator;
 pub mod visitor;
 
 pub use ast::*;
-pub use compiler::Compiler;
+pub use codegen::Compiler;
 pub use error::SyntaxError;
 pub use parser::Parser;
 pub use scope::ScopeMap;

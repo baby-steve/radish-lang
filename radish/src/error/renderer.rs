@@ -146,7 +146,7 @@ impl<'writer> Renderer<'writer> {
             write!(self, " ")?;
 
             // Write source text.
-            let lines = Span::lines(&source);
+            let lines = Span::lines(source);
             write!(self, "{}", lines[line_number])?;
 
             writeln!(self)?;
@@ -184,7 +184,7 @@ impl<'writer> Renderer<'writer> {
             }
 
             // render the trailing label
-            write!(self, " {}\n", labels.last().unwrap().message)?;
+            writeln!(self, " {}", labels.last().unwrap().message)?;
 
             // render the previous label if there was one
             if labels.len() == 2 {
@@ -197,7 +197,7 @@ impl<'writer> Renderer<'writer> {
                     Span::get_line_index(&label.span.source.contents, label.span.start);
 
                 let space_before = " ".repeat(start_col + 1);
-                write!(self, "{}|\n", space_before).unwrap();
+                writeln!(self, "{}|", space_before).unwrap();
 
                 self.outer_gutter(padding)?;
                 self.border_left()?;

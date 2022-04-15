@@ -142,7 +142,7 @@ impl Compiler {
 
         self.add_local("");
 
-        self.declare_globals(&ast)?;
+        self.declare_globals(ast)?;
 
         for node in &ast.items {
             match self.statement(node) {
@@ -360,7 +360,7 @@ impl Compiler {
 
         self.scope_depth -= 1;
 
-        while self.locals.len() > 0 && self.locals[self.locals.len() - 1].depth > self.scope_depth {
+        while !self.locals.is_empty() && self.locals[self.locals.len() - 1].depth > self.scope_depth {
             self.emit_byte(Opcode::Del as u8);
             self.locals.pop();
         }
@@ -417,7 +417,7 @@ impl Compiler {
                     // get the function's location in the module's variables array.
                     let index = self.module.borrow_mut().get_index(&fun.id.name).unwrap();
                     // compile the functions body.
-                    self.function(&fun)?;
+                    self.function(fun)?;
                     // set the location in the module's variable array to the function's body.
                     self.define_global(index as u32);
                 }
@@ -425,7 +425,7 @@ impl Compiler {
                     // get the class's location in the module's variables array.
                     let index = self.module.borrow_mut().get_index(&class.id.name).unwrap();
                     // compile the class body.
-                    self.class(&class)?;
+                    self.class(class)?;
                     // define the class in the global scope.
                     self.define_global(index as u32);
                 }
@@ -510,21 +510,21 @@ impl Compiler {
 impl Compiler {
     fn statement(&mut self, stmt: &Stmt) -> Result<(), SyntaxError> {
         match stmt {
-            Stmt::BlockStmt(body, _) => self.block(&body),
-            Stmt::ExpressionStmt(expr) => self.expression_stmt(&expr),
-            Stmt::FunDeclaration(fun, _) => self.function_declaration(&fun),
-            Stmt::ConDeclaration(con, _) => self.constructor_declaration(&con),
+            Stmt::BlockStmt(body, _) => self.block(body),
+            Stmt::ExpressionStmt(expr) => self.expression_stmt(expr),
+            Stmt::FunDeclaration(fun, _) => self.function_declaration(fun),
+            Stmt::ConDeclaration(con, _) => self.constructor_declaration(con),
             Stmt::ClassDeclaration(class, _) => self.class_declaration(class),
-            Stmt::VarDeclaration(id, init, kind, _) => self.var_declaration(&id, &init, &kind),
-            Stmt::Assignment(id, op, expr, _) => self.assignment(&id, &op, &expr),
-            Stmt::IfStmt(expr, body, alt, _) => self.if_statement(&expr, &body, &alt),
-            Stmt::LoopStmt(body, _) => self.loop_statement(&body),
-            Stmt::WhileStmt(expr, body, _) => self.while_statement(&expr, &body),
+            Stmt::VarDeclaration(id, init, kind, _) => self.var_declaration(id, init, kind),
+            Stmt::Assignment(id, op, expr, _) => self.assignment(id, op, expr),
+            Stmt::IfStmt(expr, body, alt, _) => self.if_statement(expr, body, alt),
+            Stmt::LoopStmt(body, _) => self.loop_statement(body),
+            Stmt::WhileStmt(expr, body, _) => self.while_statement(expr, body),
             Stmt::ImportStmt(stmt) => self.import_statement(stmt),
-            Stmt::ReturnStmt(value, _) => self.return_statement(&value),
-            Stmt::BreakStmt(pos) => self.break_statement(&pos),
-            Stmt::ContinueStmt(pos) => self.continue_statement(&pos),
-            Stmt::PrintStmt(expr, _) => self.print(&expr),
+            Stmt::ReturnStmt(value, _) => self.return_statement(value),
+            Stmt::BreakStmt(pos) => self.break_statement(pos),
+            Stmt::ContinueStmt(pos) => self.continue_statement(pos),
+            Stmt::PrintStmt(expr, _) => self.print(expr),
         }
     }
 
@@ -599,13 +599,13 @@ impl Compiler {
     fn if_statement(
         &mut self,
         expr: &Expr,
-        body: &Vec<Stmt>,
+        body: &[Stmt],
         else_branch: &Option<Box<Stmt>>,
     ) -> Result<(), SyntaxError> {
-        self.expression(&expr)?;
+        self.expression(expr)?;
         let then_jump = self.emit_jump(Opcode::JumpIfFalse);
         self.emit_byte(Opcode::Del as u8);
-        self.block(&body)?;
+        self.block(body)?;
 
         let else_jump = self.emit_jump(Opcode::Jump);
 
@@ -613,7 +613,7 @@ impl Compiler {
         self.emit_byte(Opcode::Del as u8);
 
         if let Some(else_branch) = &else_branch {
-            self.statement(&else_branch)?;
+            self.statement(else_branch)?;
         }
 
         self.patch_jump(else_jump);
@@ -621,11 +621,11 @@ impl Compiler {
         Ok(())
     }
 
-    fn loop_statement(&mut self, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
+    fn loop_statement(&mut self, body: &[Stmt]) -> Result<(), SyntaxError> {
         let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
-        self.block(&body)?;
+        self.block(body)?;
         self.emit_loop(loop_start);
 
         self.leave_loop();
@@ -633,15 +633,15 @@ impl Compiler {
         Ok(())
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
+    fn while_statement(&mut self, expr: &Expr, body: &[Stmt]) -> Result<(), SyntaxError> {
         let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
-        self.expression(&expr)?;
+        self.expression(expr)?;
         let exit_jump = self.emit_jump(Opcode::JumpIfFalse);
         self.emit_byte(Opcode::Del as u8);
 
-        self.block(&body)?;
+        self.block(body)?;
 
         self.emit_loop(loop_start);
 
@@ -652,11 +652,11 @@ impl Compiler {
         Ok(())
     }
 
-    fn block(&mut self, body: &Vec<Stmt>) -> Result<(), SyntaxError> {
+    fn block(&mut self, body: &[Stmt]) -> Result<(), SyntaxError> {
         self.enter_scope();
 
         for node in body {
-            self.statement(&node)?;
+            self.statement(node)?;
         }
 
         self.leave_scope();
@@ -709,7 +709,7 @@ impl Compiler {
     }
 
     fn print(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
-        self.expression(&expr)?;
+        self.expression(expr)?;
 
         self.emit_byte(Opcode::Print as u8);
 
@@ -724,7 +724,7 @@ impl Compiler {
     ) -> Result<(), SyntaxError> {
         if self.scope_depth > 0 {
             if let Some(expr) = &init {
-                self.expression(&expr)?;
+                self.expression(expr)?;
             } else {
                 self.emit_byte(Opcode::Nil as u8);
             }
@@ -734,7 +734,7 @@ impl Compiler {
             let index = self.module.borrow_mut().get_index(&id.name).unwrap();
 
             if let Some(expr) = &init {
-                self.expression(&expr)?;
+                self.expression(expr)?;
             } else {
                 self.emit_byte(Opcode::Nil as u8);
             }
@@ -754,31 +754,31 @@ impl Compiler {
         match op {
             OpAssignment::AddAssign => {
                 self.load_variable(&id.name);
-                self.expression(&expr)?;
+                self.expression(expr)?;
                 self.emit_byte(Opcode::Add as u8);
             }
             OpAssignment::SubAssign => {
                 self.load_variable(&id.name);
-                self.expression(&expr)?;
+                self.expression(expr)?;
                 self.emit_byte(Opcode::Sub as u8);
             }
             OpAssignment::MulAssign => {
                 self.load_variable(&id.name);
-                self.expression(&expr)?;
+                self.expression(expr)?;
                 self.emit_byte(Opcode::Mul as u8);
             }
             OpAssignment::DivAssign => {
                 self.load_variable(&id.name);
-                self.expression(&expr)?;
+                self.expression(expr)?;
                 self.emit_byte(Opcode::Div as u8);
             }
             OpAssignment::RemAssign => {
                 self.load_variable(&id.name);
-                self.expression(&expr)?;
+                self.expression(expr)?;
                 self.emit_byte(Opcode::Rem as u8);
             }
             OpAssignment::Equals => {
-                self.expression(&expr)?;
+                self.expression(expr)?;
             }
         };
 
@@ -788,7 +788,7 @@ impl Compiler {
     }
 
     fn expression_stmt(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
-        self.expression(&expr)?;
+        self.expression(expr)?;
 
         self.emit_byte(Opcode::Del as u8);
 
@@ -797,16 +797,16 @@ impl Compiler {
 
     fn expression(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         match expr {
-            Expr::BinaryExpr(expr, _) => self.binary_expression(&expr),
-            Expr::ParenExpr(expr, _) => self.expression(&expr),
-            Expr::UnaryExpr(op, arg, _) => self.unary(&arg, &op),
-            Expr::LogicalExpr(expr, _) => self.logical_expr(&expr),
-            Expr::CallExpr(callee, args, _) => self.call_expr(&callee, &args),
-            Expr::MemberExpr(obj, prop, _) => self.member_expr(&obj, &prop),
-            Expr::Identifier(id) => self.identifier(&id),
-            Expr::Number(num, _) => self.number(&num),
-            Expr::String(string, _) => self.string(&string),
-            Expr::Bool(val, _) => self.boolean(&val),
+            Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
+            Expr::ParenExpr(expr, _) => self.expression(expr),
+            Expr::UnaryExpr(op, arg, _) => self.unary(arg, op),
+            Expr::LogicalExpr(expr, _) => self.logical_expr(expr),
+            Expr::CallExpr(callee, args, _) => self.call_expr(callee, args),
+            Expr::MemberExpr(obj, prop, _) => self.member_expr(obj, prop),
+            Expr::Identifier(id) => self.identifier(id),
+            Expr::Number(val, _) => self.number(val),
+            Expr::String(val, _) => self.string(val),
+            Expr::Bool(val, _) => self.boolean(val),
             Expr::Nil(_) => self.nil(),
         }
     }
@@ -853,7 +853,7 @@ impl Compiler {
     }
 
     fn unary(&mut self, arg: &Expr, op: &Op) -> Result<(), SyntaxError> {
-        self.expression(&arg)?;
+        self.expression(arg)?;
 
         match op {
             Op::Subtract => self.emit_byte(Opcode::Neg as u8),
@@ -864,12 +864,12 @@ impl Compiler {
         Ok(())
     }
 
-    fn call_expr(&mut self, callee: &Expr, args: &Vec<Expr>) -> Result<(), SyntaxError> {
+    fn call_expr(&mut self, callee: &Expr, args: &[Expr]) -> Result<(), SyntaxError> {
         if args.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 arguments.");
         }
 
-        self.expression(&callee)?;
+        self.expression(callee)?;
 
         for arg in args.iter() {
             self.expression(arg)?;

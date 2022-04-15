@@ -64,3 +64,9 @@ impl VM {
         }
     }
 }
+
+impl Default for VM {
+    fn default() -> Self {
+        VM::new()
+    }
+}

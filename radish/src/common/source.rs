@@ -14,13 +14,6 @@ impl Source {
             path: PathBuf::from(path.to_string()),
         })
     }
-
-    pub fn source(source: &str) -> Rc<Source> {
-        Rc::new(Source {
-            contents: source.to_string(),
-            path: PathBuf::from("./main"), // should a source without a file have some default name?
-        })
-    }
 }
 
 #[cfg(test)]

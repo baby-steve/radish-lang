@@ -100,8 +100,8 @@ impl Scanner {
             _ if is_alpha(c.unwrap()) => self.identifier(),
             _ if is_digit(c.unwrap()) => self.number(),
             _ => {
-                let msg = format!("{}", c.unwrap());
-                return self.make_error_token(&msg);
+                let msg = c.unwrap().to_string();
+                self.make_error_token(&msg)
             }
         }
     }
@@ -286,7 +286,7 @@ impl Scanner {
 
     fn identifier_type(&mut self) -> TokenType {
         let value = &self.source.contents[self.previous..self.current];
-        match &value[..] {
+        match value {
             "true" => TokenType::True,
             "false" => TokenType::False,
             "nil" => TokenType::Nil,
@@ -391,15 +391,9 @@ fn is_octal(string: &str) -> bool {
 }
 
 fn is_hex(string: &str) -> bool {
-    if is_digit(string)
-        || string
-            .bytes()
-            .all(|b| matches!(b, b'a'..=b'f' | b'A'..=b'F'))
-    {
-        true
-    } else {
-        false
-    }
+    is_digit(string) || string
+        .bytes()
+        .all(|b| matches!(b, b'a'..=b'f' | b'A'..=b'F'))
 }
 
 #[cfg(test)]
@@ -459,7 +453,7 @@ mod tests {
         ];
 
         for (src, token_type) in tests {
-            let source = Source::source(src);
+            let source = Source::new(src, "");
             let mut scanner = Scanner::new(source);
 
             let token = scanner.scan_token();
@@ -488,7 +482,7 @@ mod tests {
         ];
 
         for (val, num, syntax) in tests {
-            let src = Source::source(val);
+            let src = Source::new(val, "");
             let mut scanner = Scanner::new(src);
 
             let token = scanner.scan_token();
@@ -506,7 +500,7 @@ mod tests {
         ];
 
         for (snippet, expected_count) in tests {
-            let src = Source::source(snippet);
+            let src = Source::new(snippet, "");
             let mut scanner = Scanner::new(src);
 
             let mut token_count = 0;
@@ -528,7 +522,7 @@ mod tests {
         ];
 
         for (string, syntax) in tests {
-            let src = Source::source(string);
+            let src = Source::new(string, "");
             let mut scanner = Scanner::new(src);
             let expected = String::from(syntax).into_boxed_str();
             assert_eq!(scanner.scan_token().token_type, TokenType::String(expected));
@@ -537,7 +531,7 @@ mod tests {
 
     #[test]
     fn token_span() {
-        let src = Source::source("123 val 猫");
+        let src = Source::new("123 val 猫", "");
         let spans = vec![(0, 3), (4, 7), (8, 11), (11, 11)];
 
         let mut scanner = Scanner::new(src);
@@ -551,7 +545,7 @@ mod tests {
 
     #[test]
     fn scan_identifier_token() {
-        let src = Source::source("radishes");
+        let src = Source::new("radishes", "");
         let mut scanner = Scanner::new(src);
         let token = scanner.scan_token();
 
@@ -563,7 +557,7 @@ mod tests {
 
     #[test]
     fn scan_newline_token() {
-        let src = Source::source("\n");
+        let src = Source::new("\n", "");
         let mut scanner = Scanner::new(src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Newline);
@@ -572,7 +566,7 @@ mod tests {
 
     #[test]
     fn scan_single_line_comment() {
-        let src = Source::source("//this is a comment");
+        let src = Source::new("//this is a comment", "");
         let mut scanner = Scanner::new(src);
         let expected = String::from("this is a comment").into_boxed_str();
         assert_eq!(
@@ -583,7 +577,7 @@ mod tests {
 
     #[test]
     fn scan_unexpected_token() {
-        let src = Source::source("猫");
+        let src = Source::new("猫", "");
         let mut scanner = Scanner::new(src);
         let token = scanner.scan_token();
         assert_eq!(
@@ -595,7 +589,7 @@ mod tests {
 
     #[test]
     fn scan_empty_file() {
-        let src = Source::source("");
+        let src = Source::new("", "");
         let mut scanner = Scanner::new(src);
         let token = scanner.scan_token();
         assert_eq!(token.token_type, TokenType::Eof);

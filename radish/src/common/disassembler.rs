@@ -91,7 +91,7 @@ impl<'a> Disassembler<'a> {
 
     fn simple_instruction(&self, name: &str, offset: usize) -> usize {
         self.write_instruction(name, offset);
-        print!("\n");
+        println!();
         offset + 1
     }
 
@@ -114,7 +114,7 @@ impl<'a> Disassembler<'a> {
 
         let bytes = self.function.chunk.code[offset + 1..offset + 5]
             .try_into()
-            .expect(&format!("Expected a slice of length {}.", 4));
+            .unwrap_or_else(|_| panic!("Expected a slice of length {}.", 4));
         let index = u32::from_le_bytes(bytes);
         let i_padding = " ".repeat(
             self.function.chunk.constants.len().to_string().len() - index.to_string().len(),
@@ -124,7 +124,7 @@ impl<'a> Disassembler<'a> {
         if has_value {
             self.write_value(index as usize);
         } else {
-            print!("\n");
+            println!();
         }
 
         offset + 5
@@ -139,11 +139,11 @@ impl<'a> Disassembler<'a> {
         let i_padding =
             " ".repeat(self.function.chunk.code.len().to_string().len() - jump.to_string().len());
 
-        print!(
-            "{}{} -> {}\n",
+        println!(
+            "{}{} -> {}",
             i_padding,
             offset,
-            offset as i32 + 3 as i32 + sign as i32 * jump as i32
+            offset as i32 + 3_i32 + sign as i32 * jump as i32
         );
 
         offset + 3
@@ -165,7 +165,7 @@ impl<'a> Disassembler<'a> {
 
         let bytes = self.function.chunk.code[offset + 1..offset + 5]
             .try_into()
-            .expect(&format!("Expected a slice of length {}.", 4));
+            .unwrap_or_else(|_| panic!("Expected a slice of length {}.", 4));
         let index = u32::from_le_bytes(bytes);
         let i_padding = " ".repeat(
             self.function.chunk.constants.len().to_string().len() - index.to_string().len(),
@@ -173,7 +173,7 @@ impl<'a> Disassembler<'a> {
         print!("{}{}", index, i_padding);
 
         let a = self.function.module.upgrade();
-        print!(" ({})\n", a.unwrap().borrow().get_var(index as usize));
+        println!(" ({})", a.unwrap().borrow().get_var(index as usize));
 
         offset + 5
     }

@@ -393,7 +393,7 @@ impl VM {
                 for slot in &self.stack.stack {
                     print!("[ {} ]", &slot);
                 }
-                print!("\n");
+                println!();
             }
 
             match self.decode_opcode() {
@@ -520,7 +520,7 @@ impl VM {
 
                 print!("{}{}", spacing, module_name);
 
-                print!("\n");
+                println!();
             }
         }
     }

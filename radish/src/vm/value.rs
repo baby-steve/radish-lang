@@ -96,7 +96,7 @@ impl Clone for Value {
     fn clone(&self) -> Value {
         match self {
             Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
-            Self::Function(val) => Self::Function(Rc::clone(&val)),
+            Self::Function(val) => Self::Function(Rc::clone(val)),
             Self::Nil => Self::Nil,
             Self::Boolean(val) => Self::Boolean(*val),
             Self::Number(val) => Self::Number(*val),
@@ -112,7 +112,7 @@ impl Clone for Value {
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Value::Number(num) => f.write_str(&format!("{}", num.to_string())),
+            Value::Number(num) => f.write_str(&num.to_string()),
             Value::Boolean(false) => f.write_str("false"),
             Value::Boolean(true) => f.write_str("true"),
             Value::String(val) => f.write_str(&format!("\"{}\"", val.borrow())),
@@ -132,7 +132,7 @@ impl Add for Value {
     type Output = Self;
     fn add(self, other: Value) -> <Self as std::ops::Add<Value>>::Output {
         match (self, other) {
-            (Value::Number(a), Value::Number(b)) => return Value::Number(a + b),
+            (Value::Number(a), Value::Number(b)) => Value::Number(a + b),
             (Value::String(a), Value::String(b)) => {
                 // FIXME: I believe this doesn't work. Need to look into it.
                 a.borrow_mut().push_str(&b.borrow());
@@ -213,7 +213,7 @@ pub struct Function {
 
 impl Function {
     pub fn format_name(&self) -> &str {
-        if &*self.name == "" {
+        if self.name.is_empty() {
             "script"
         } else {
             &*self.name

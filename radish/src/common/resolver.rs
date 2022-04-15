@@ -27,6 +27,12 @@ pub struct FileResolver {
     stat: BTreeMap<String, CompiledModule>,
 }
 
+impl Default for FileResolver {
+    fn default() -> Self {
+        FileResolver::new()
+    }
+}
+
 impl FileResolver {
     pub fn new() -> Self {
         Self {
@@ -120,7 +126,7 @@ impl FileResolver {
             .to_str()
             .expect("invaild unicode in path name");
 
-        let module = pipeline.compile(&file_name, &src)?;
+        let module = pipeline.compile(file_name, &src)?;
 
         self.cache.insert(file_path, module.clone());
 
@@ -136,13 +142,13 @@ impl FileResolver {
         Ok(std::rc::Rc::clone(module))
     }
 
-    fn load_file(&self, file_path: &PathBuf) -> Result<String, RadishError> {
+    fn load_file(&self, file_path: &Path) -> Result<String, RadishError> {
         let src = fs::read_to_string(file_path)?;
         Ok(src)
     }
 
     fn is_logical(&self, file_path: &str) -> bool {
-        file_path.starts_with("@")
+        file_path.starts_with('@')
     }
 
     pub fn load(&mut self, name: impl ToString, module: Module) -> &mut Self {

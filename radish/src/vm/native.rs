@@ -23,6 +23,7 @@ impl PartialOrd for NativeFunction {
 
 impl PartialEq for NativeFunction {
     fn eq(&self, other: &Self) -> bool {
+        // FIXME: clippy doesn't like that we compare two trait object pointers.
         Rc::ptr_eq(&self.fun, &other.fun) && self.airty == other.airty
     }
 }

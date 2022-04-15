@@ -42,8 +42,8 @@ pub fn emit(
 
     let mut renderer = Renderer::new(writer);
     match display_style {
-        DisplayStyle::Short => ShortDiagnostic::new(&diagnostic).render(&mut renderer),
-        DisplayStyle::Verbose => RichDiagnostic::new(&diagnostic).render(&mut renderer),
+        DisplayStyle::Short => ShortDiagnostic::new(diagnostic).render(&mut renderer),
+        DisplayStyle::Verbose => RichDiagnostic::new(diagnostic).render(&mut renderer),
     }
 }
 
