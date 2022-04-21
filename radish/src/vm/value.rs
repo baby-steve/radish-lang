@@ -54,6 +54,14 @@ impl Value {
             _ => Err("expected a closure".to_string()),
         }
     }
+
+    #[inline]
+    pub fn into_module(self) -> Result<Rc<RefCell<Module>>, String> {
+        match self {
+            Value::Module(module) => Ok(module),
+            _ => Err("expected a module".to_string()),
+        }
+    }
 }
 
 impl From<f64> for Value {

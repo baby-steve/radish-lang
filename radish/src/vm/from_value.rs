@@ -1,4 +1,6 @@
-use crate::{Value, RadishError};
+use std::{cell::RefCell, rc::Rc};
+
+use crate::{Module, RadishError, Value};
 
 pub trait FromValue: Sized {
     fn from_value(val: Value) -> Result<Self, RadishError>;
@@ -52,3 +54,9 @@ impl_number!(u32);
 impl_number!(u64);
 impl_number!(u128);
 impl_number!(usize);
+
+impl FromValue for Rc<RefCell<Module>> {
+    fn from_value(val: Value) -> Result<Self, RadishError> {
+        val.into_module().map_err(|err| err.into())
+    }
+}

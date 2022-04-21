@@ -10,11 +10,11 @@ use crate::{
 use self::stack::Stack;
 
 mod eval;
-mod from_value;
+pub mod from_value;
 mod load;
+pub(crate) mod native;
 mod run;
 mod stack;
-pub(crate) mod native;
 pub mod trace;
 pub mod value;
 
@@ -50,7 +50,7 @@ impl VM {
     pub fn with_config(config: Config) -> Self {
         let config = Box::new(config);
 
-        let pipeline = CompilerPipeLine::new(&config);
+        let pipeline = CompilerPipeLine::new(&config).with_default_passes();
 
         Self {
             config,
