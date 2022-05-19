@@ -1,0 +1,5 @@
+fun main() {
+    return 1 + 2
+}
+
+print main() // expect: 3

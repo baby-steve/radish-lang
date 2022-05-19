@@ -1,0 +1,6 @@
+while true loop
+    print "ok"
+    break
+endloop
+
+// expect: "ok"

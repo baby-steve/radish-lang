@@ -1,0 +1,7 @@
+if true then
+    print "ok" // expect: "ok"
+endif
+
+if false then
+    print "ohh"
+endif

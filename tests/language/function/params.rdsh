@@ -1,0 +1,54 @@
+fun no_params() {
+    return "ok"
+}
+
+print "ok" // expect: "ok"
+
+fun one_param(a) {
+    print a
+}
+
+one_param(1) // expect: 1
+
+fun two_params(a, b) {
+    print a + b
+}
+
+two_params(1, 2) // expect: 3
+
+fun three_params(a, b, c) {
+    print a + b + c
+}
+
+three_params(1, 2, 3) // expect: 6
+
+fun four_params(a, b, c, d) {
+    print a + b + c + d
+}
+
+four_params(1, 2, 3, 4) // expect: 10
+
+fun five_params(a, b, c, d, e) {
+    print a + b + c + d + e
+}
+
+five_params(1, 2, 3, 4, 5) // expect: 15
+
+fun six_params(a, b, c, d, e, f) {
+    print a + b + c + d + e + f
+}
+
+six_params(1, 2, 3, 4, 5, 6) // expect: 21
+
+fun seven_params(a, b, c, d, e, f, g) {
+    print a + b + c + d + e + f + g
+}
+
+seven_params(1, 2, 3, 4, 5, 6, 7) // expect: 28
+
+
+fun eight_params(a, b, c, d, e, f, g, h) {
+    print a + b + c + d + e + f + g + h
+}
+
+eight_params(1, 2, 3, 4, 5, 6, 7, 8) // expect: 36

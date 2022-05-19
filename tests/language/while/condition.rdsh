@@ -1,0 +1,14 @@
+while false loop
+    print "..."
+    break
+endloop
+
+while nil loop
+    print "..."
+    break
+endloop
+
+while true loop
+    print "ok" // expect: "ok"
+    break
+endloop

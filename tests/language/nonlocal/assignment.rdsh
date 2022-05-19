@@ -1,0 +1,7 @@
+var global = "before"
+
+print global // expect: "before"
+
+global = "after"
+
+print global // expect: "after"
