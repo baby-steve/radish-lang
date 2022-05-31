@@ -1,18 +1,13 @@
 use crate::common::{Chunk, CompiledModule, Disassembler, Module, Opcode, Span};
 
 use crate::vm::value::Function as FunctionValue;
-                                      
+
 use crate::Value;
 
 use crate::compiler::{ast::*, Rc, SyntaxError};
 
+use super::hoist::VarScope;
 use super::pipeline::PipelineSettings;
-
-#[derive(Debug)]
-pub struct Local {
-    name: String,
-    depth: usize,
-}
 
 /// Track the state of a loop.
 struct Loop {
@@ -52,25 +47,23 @@ struct Frame {
 impl Frame {
     /// Helper method for creating a frame with a function type.
     pub fn function(fun: FunctionValue) -> Frame {
-        Frame {
-            function: fun,
-            function_type: CompilerTarget::Function,
-        }
+        Self::new(fun, CompilerTarget::Function)
     }
 
     /// Helper method for creating a frame with a script type.
     pub fn script(script: FunctionValue) -> Frame {
-        Frame {
-            function: script,
-            function_type: CompilerTarget::Script,
-        }
+        Self::new(script, CompilerTarget::Script)
     }
 
     /// Helper method for creating a frame with a constructor type
     pub fn constructor(con: FunctionValue) -> Frame {
-        Frame {
-            function: con,
-            function_type: CompilerTarget::Constructor,
+        Self::new(con, CompilerTarget::Constructor)
+    }
+
+    pub fn new(val: FunctionValue, typ: CompilerTarget) -> Frame {
+        Self {
+            function: val,
+            function_type: typ,
         }
     }
 }
@@ -106,7 +99,6 @@ pub struct Compiler {
     scope_depth: usize,
     frame_count: usize,
     frame: Vec<Frame>,
-    locals: Vec<Local>,
     loops: Vec<Loop>,
     module: CompiledModule,
 }
@@ -118,7 +110,6 @@ impl Compiler {
         Self {
             config,
             scope_depth: 0,
-            locals: vec![],
             loops: vec![],
             frame_count: 0,
             frame: vec![],
@@ -126,6 +117,7 @@ impl Compiler {
         }
     }
 
+    // TODO: mutable borrow the ast.
     pub fn compile(&mut self, file_name: &str, ast: &AST) -> Result<CompiledModule, SyntaxError> {
         self.module.borrow_mut().name = file_name.to_string().into_boxed_str();
 
@@ -139,8 +131,6 @@ impl Compiler {
         let frame = Frame::script(script);
 
         self.frame.push(frame);
-
-        self.add_local("");
 
         self.declare_globals(ast)?;
 
@@ -209,7 +199,6 @@ impl Compiler {
         let jump = self.last_byte() - offset - 2;
 
         if jump > u16::MAX.into() {
-            // should probably test this and also make better error message.
             panic!("To much code to jump over.");
         }
 
@@ -226,7 +215,6 @@ impl Compiler {
 
         let offset = self.last_byte() - loop_start + 2;
         if offset > u16::MAX.into() {
-            // like jumps, I should probably test this and add better error message.
             panic!("To much code to jump over.");
         }
 
@@ -260,23 +248,15 @@ impl Compiler {
     }
 
     /// Define a variable.
-    fn define_variable(&mut self, name: &str) {
-        if self.scope_depth > 0 {
-            self.add_local(name);
-        } else {
-            let index = self.module.borrow_mut().get_index(name).unwrap();
+    fn define_variable(&mut self, id: &Ident) {
+        //println!("[compiler] defining variable {}", &id.name);
+        //println!("[compiler] scope: {:?}", &id.scope);
+        if self.scope_depth == 0 {
+            let index = self.module.borrow_mut().get_index(&id.name).unwrap();
             self.define_global(index as u32);
+        } else if id.scope == VarScope::Local(true) {
+            self.capture_local(id);
         }
-    }
-
-    /// Add a [`Local`] to the [`Compiler`]'s locals array.
-    fn add_local(&mut self, name: &str) {
-        let local = Local {
-            name: name.to_string(),
-            depth: self.scope_depth,
-        };
-
-        self.locals.push(local);
     }
 
     /// Define a global variable.
@@ -288,65 +268,74 @@ impl Compiler {
         }
     }
 
-    /// Emit an `[Opcode]` to load the variable with the given name.
-    fn load_variable(&mut self, name: &str) {
-        let arg = match self.resolve_local(name) {
-            Some(index) => {
-                self.emit_byte(Opcode::LoadLocal as u8);
-                index as u32
-            }
-            None => {
-                self.emit_byte(Opcode::LoadGlobal as u8);
-                let index = self.module.borrow().get_index(name).unwrap();
-                index as u32
-            }
-        };
+    fn capture_local(&mut self, _id: &Ident) {
+        //println!("[compiler] compiling captured local {}", _id.name);
+        self.emit_byte(Opcode::DefCapture as u8);
+    }
 
-        for byte in arg.to_le_bytes() {
-            self.emit_byte(byte);
+    /// Emit an `[Opcode]` to load the variable with the given name.
+    fn load_variable(&mut self, id: &Ident) {
+        use super::hoist::VarScope::*;
+
+        match &id.scope {
+            Local(_) => {
+                self.emit_byte(Opcode::LoadLocal as u8);
+                for byte in id.index.to_le_bytes() {
+                    self.emit_byte(byte);
+                }
+            }
+            NonLocal => {
+                //println!("[compiler] compiling nonlocal with an index of {}", &id.index);
+                self.emit_byte(Opcode::LoadCapture as u8);
+                for byte in id.index.to_le_bytes() {
+                    self.emit_byte(byte);
+                } 
+            }
+            Global => {
+                self.emit_byte(Opcode::LoadGlobal as u8);
+                let index: u32 = match self.module.borrow().get_index(&id.name) {
+                    Some(i) => i as u32,
+                    None => {
+                        panic!("Module does not have a variable named '{}'", &id.name);
+                    }
+                };
+                for byte in index.to_le_bytes() {
+                    self.emit_byte(byte);
+                }
+            }
         }
     }
 
     /// Emit an `[Opcode]` to save a value to the variable with the
     /// given name.
-    fn save_variable(&mut self, name: &str) {
-        let arg = match self.resolve_local(name) {
-            Some(index) => {
+    fn save_variable(&mut self, id: &Ident) {
+        use super::hoist::VarScope::*;
+
+        match &id.scope {
+            Local(_) => {
                 self.emit_byte(Opcode::SaveLocal as u8);
-                index as u32
+                for byte in id.index.to_le_bytes() {
+                    self.emit_byte(byte);
+                }
             }
-            None => {
+            NonLocal => {
+                //todo!("Haven't finished implementing upvalues");
+                self.emit_byte(Opcode::SaveCapture as u8);
+                for byte in id.index.to_le_bytes() {
+                    self.emit_byte(byte);
+                }
+            }
+            Global => {
                 self.emit_byte(Opcode::SaveGlobal as u8);
-                //self.identifier_constant(name)
-
-                let index = self.module.borrow().get_index(name).unwrap();
-                index as u32
+                let index = self.module.borrow().get_index(&id.name).unwrap() as u32;
+                for byte in index.to_le_bytes() {
+                    self.emit_byte(byte);
+                }
             }
-        };
-
-        for byte in arg.to_le_bytes() {
-            self.emit_byte(byte);
         }
 
+        // TODO: figure out why we need to emit an op delete. I seem to have forgotten...
         self.emit_byte(Opcode::Del as u8);
-    }
-
-    /// Resolve a local variable with the given name. Returns the variable's
-    /// index in the `[Local]` array if it's locally defined or None if it's a global.
-    fn resolve_local(&mut self, name: &str) -> Option<usize> {
-        let mut index = self.locals.len();
-
-        while index > 0 {
-            let local = &self.locals[index - 1];
-
-            if local.name == name {
-                return Some(index - 1);
-            }
-
-            index -= 1;
-        }
-
-        None
     }
 
     /// Enter a new block level scope.
@@ -356,14 +345,7 @@ impl Compiler {
 
     /// Leave the current scope, removing all locally declared variables.
     fn leave_scope(&mut self) {
-        //dbg!(&self.locals);
-
         self.scope_depth -= 1;
-
-        while !self.locals.is_empty() && self.locals[self.locals.len() - 1].depth > self.scope_depth {
-            self.emit_byte(Opcode::Del as u8);
-            self.locals.pop();
-        }
     }
 
     /// Enter a loop body.
@@ -386,12 +368,6 @@ impl Compiler {
         self.frame.push(frame);
         self.frame_count += 1;
         self.enter_scope();
-
-        // if self.frame[self.frame_count].function_type == CompilerTarget::Constructor {
-        //     self.add_local("this");
-        // } else {
-        //     //self.add_local("");
-        // }
     }
 
     /// Leave the current function body.
@@ -407,7 +383,7 @@ impl Compiler {
     fn declare_globals(&mut self, ast: &AST) -> Result<(), SyntaxError> {
         // add all global declarations to the module with a value of nil.
         for (name, _) in ast.scope.locals.iter() {
-            self.module.borrow_mut().add_var(name.clone());
+            self.module.borrow_mut().add_symbol(name.clone());
         }
 
         // next, go through and compile all global functions and classes.
@@ -438,6 +414,8 @@ impl Compiler {
 
     /// Compile a function declaration,
     fn function(&mut self, fun: &FunctionDecl) -> Result<(), SyntaxError> {
+        //println!("{:#?}", fun);
+
         if fun.params.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 parameters");
         }
@@ -452,7 +430,7 @@ impl Compiler {
         self.enter_function(Frame::function(frame));
         {
             for param in &fun.params {
-                self.define_variable(&param.name);
+                self.define_variable(&param);
             }
 
             for stmt in fun.body.iter() {
@@ -468,6 +446,29 @@ impl Compiler {
 
         self.emit_constant(Value::from(frame.function));
         self.emit_byte(Opcode::Closure as u8);
+
+        let scope = fun.other_scope.clone().unwrap();
+
+        if scope.upvalues.len() > u8::MAX.into() {
+            panic!("Too many upvalues");
+        };
+
+        //println!("[compiler] closure {} has {} upvalues", &fun.id.name, scope.upvalues.len());
+
+        self.emit_byte(scope.upvalues.len() as u8);
+
+        for upval in scope.upvalues.iter() {
+            //println!("[compiler] emitting byte {}. Also: Pineapples", upval.index);
+
+            // TODO: replace the 1 and 0 with globals or something for readablity.
+            if upval.on_stack {
+                self.emit_byte(0);
+            } else {
+                self.emit_byte(1);
+            }
+
+            self.emit_byte(upval.index as u8);
+        }
 
         Ok(())
     }
@@ -531,9 +532,10 @@ impl Compiler {
     fn function_declaration(&mut self, fun: &FunctionDecl) -> Result<(), SyntaxError> {
         // at this point all global functions have already been compiled,
         // so only locally scoped functions have to be handled.
+
         if self.scope_depth > 0 {
             self.function(fun)?;
-            self.define_variable(&fun.id.name);
+            self.define_variable(&fun.id);
         }
 
         Ok(())
@@ -544,7 +546,7 @@ impl Compiler {
         // so only locally scoped classes have to be handled.
         if self.scope_depth > 0 {
             self.class(class)?;
-            self.define_variable(&class.id.name);
+            self.define_variable(&class.id);
         }
 
         Ok(())
@@ -567,7 +569,7 @@ impl Compiler {
         self.enter_function(Frame::constructor(frame));
         {
             for param in &con.params {
-                self.define_variable(&param.name);
+                self.define_variable(&param);
             }
 
             for stmt in con.body.iter() {
@@ -661,6 +663,15 @@ impl Compiler {
 
         self.leave_scope();
 
+        for stmt in body {
+            match stmt {
+                Stmt::VarDeclaration(_, _, _, _) => {
+                    self.emit_byte(Opcode::Del as u8);
+                }
+                _ => continue,
+            }
+        }
+
         Ok(())
     }
 
@@ -669,7 +680,7 @@ impl Compiler {
 
         self.emit_byte(Opcode::Import as u8);
 
-        self.define_variable(&import_stmt.name().unwrap().name);
+        self.define_variable(&import_stmt.name().unwrap());
 
         Ok(())
     }
@@ -729,8 +740,10 @@ impl Compiler {
                 self.emit_byte(Opcode::Nil as u8);
             }
 
-            self.add_local(&id.name);
+            self.define_variable(id);
         } else {
+            // All global variables have already been foward declared, so we can just
+            // grab its location from the module.
             let index = self.module.borrow_mut().get_index(&id.name).unwrap();
 
             if let Some(expr) = &init {
@@ -753,27 +766,27 @@ impl Compiler {
     ) -> Result<(), SyntaxError> {
         match op {
             OpAssignment::AddAssign => {
-                self.load_variable(&id.name);
+                self.load_variable(&id);
                 self.expression(expr)?;
                 self.emit_byte(Opcode::Add as u8);
             }
             OpAssignment::SubAssign => {
-                self.load_variable(&id.name);
+                self.load_variable(&id);
                 self.expression(expr)?;
                 self.emit_byte(Opcode::Sub as u8);
             }
             OpAssignment::MulAssign => {
-                self.load_variable(&id.name);
+                self.load_variable(&id);
                 self.expression(expr)?;
                 self.emit_byte(Opcode::Mul as u8);
             }
             OpAssignment::DivAssign => {
-                self.load_variable(&id.name);
+                self.load_variable(&id);
                 self.expression(expr)?;
                 self.emit_byte(Opcode::Div as u8);
             }
             OpAssignment::RemAssign => {
-                self.load_variable(&id.name);
+                self.load_variable(&id);
                 self.expression(expr)?;
                 self.emit_byte(Opcode::Rem as u8);
             }
@@ -782,7 +795,7 @@ impl Compiler {
             }
         };
 
-        self.save_variable(&id.name);
+        self.save_variable(&id);
 
         Ok(())
     }
@@ -896,7 +909,7 @@ impl Compiler {
     }
 
     fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {
-        self.load_variable(&id.name);
+        self.load_variable(&id);
         Ok(())
     }
 
@@ -923,373 +936,3 @@ impl Compiler {
         Ok(())
     }
 }
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use std::rc::Rc;
-
-    use crate::common::source::Source;
-    use crate::compiler::parser::Parser;
-
-    fn run_test_compiler(test_string: &str) -> Compiler {
-        let source = Source::source(test_string);
-        let result = Parser::new(Rc::clone(&source)).parse().unwrap();
-        let mut compiler = Compiler::new();
-        compiler.run(&result);
-        compiler
-    }
-
-    #[test]
-    fn compile_binary_add_expr() {
-        let result = run_test_compiler("1 + 23");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::Add as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(1.0), Value::Number(23.0),)
-        );
-    }
-
-    #[test]
-    fn compile_binary_sub_expr() {
-        let result = run_test_compiler("12 - 6");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::Subtract as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(12.0), Value::Number(6.0),)
-        );
-    }
-
-    #[test]
-    fn compile_binary_mul_expr() {
-        let result = run_test_compiler("5 * 2");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::Multiply as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(5.0), Value::Number(2.0),)
-        );
-    }
-
-    #[test]
-    fn compile_binary_div_expr() {
-        let result = run_test_compiler("12 / 4");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::Divide as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(12.0), Value::Number(4.0),)
-        );
-    }
-
-    #[test]
-    fn compile_less_than_expr() {
-        let result = run_test_compiler("5 < 2");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::LessThan as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(5.0), Value::Number(2.0))
-        );
-    }
-
-    #[test]
-    fn compile_less_than_equals_expr() {
-        let result = run_test_compiler("5 <= 2");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::LessThanEquals as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(5.0), Value::Number(2.0))
-        );
-    }
-
-    #[test]
-    fn compile_greater_than_expr() {
-        let result = run_test_compiler("5 > 2");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::GreaterThan as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(5.0), Value::Number(2.0),)
-        );
-    }
-
-    #[test]
-    fn compile_greater_than_equal_expr() {
-        let result = run_test_compiler("5 >= 2");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::GreaterThanEquals as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(5.0), Value::Number(2.0),)
-        );
-    }
-
-    #[test]
-    fn compile_equals_to_expr() {
-        let result = run_test_compiler("5 == 2");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::EqualsTo as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(5.0), Value::Number(2.0),)
-        );
-    }
-
-    #[test]
-    fn compile_not_equal_expr() {
-        let result = run_test_compiler("5 != 2");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::NotEqual as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(5.0), Value::Number(2.0))
-        );
-    }
-
-    #[test]
-    fn compile_multiple_binary_expr() {
-        let result = run_test_compiler("1 + 23 * 5");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::LoadConst as u8,
-                2,
-                Opcode::Multiply as u8,
-                Opcode::Add as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(
-            result.chunk.constants,
-            vec!(Value::Number(1.0), Value::Number(23.0), Value::Number(5.0),)
-        )
-    }
-
-    #[test]
-    fn compile_unary_expr() {
-        let result = run_test_compiler("-23");
-        assert_eq!(
-            result.chunk.code,
-            vec!(
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::Negate as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            )
-        );
-        assert_eq!(result.chunk.constants, vec!(Value::Number(23.0)))
-    }
-
-    #[test]
-    fn compile_unary_not() {
-        let result = run_test_compiler("!true");
-        assert_eq!(
-            result.chunk.code,
-            vec![
-                Opcode::True as u8,
-                Opcode::Not as u8,
-                Opcode::Del as u8,
-                Opcode::Halt as u8
-            ]
-        );
-    }
-
-    #[test]
-    fn compile_boolean_literal() {
-        let result = run_test_compiler("true");
-        assert_eq!(
-            result.chunk.code,
-            vec!(Opcode::True as u8, Opcode::Del as u8, Opcode::Halt as u8)
-        );
-
-        let result = run_test_compiler("false");
-        assert_eq!(
-            result.chunk.code,
-            vec!(Opcode::False as u8, Opcode::Del as u8, Opcode::Halt as u8)
-        );
-    }
-
-    #[test]
-    fn compile_nil_literal() {
-        let result = run_test_compiler("nil");
-        assert_eq!(
-            result.chunk.code,
-            vec![Opcode::Nil as u8, Opcode::Del as u8, Opcode::Halt as u8]
-        );
-    }
-
-    #[test]
-    fn compile_variable_declaration() {
-        let result = run_test_compiler("var a");
-        assert_eq!(
-            result.chunk.code,
-            vec![
-                Opcode::Nil as u8,
-                Opcode::DefGlobal as u8,
-                0,
-                0,
-                0,
-                0,
-                Opcode::Halt as u8,
-            ]
-        )
-    }
-
-    #[test]
-    fn compile_variable_declaration_with_value() {
-        let result = run_test_compiler("var a = 23");
-        assert_eq!(
-            result.chunk.code,
-            vec![
-                Opcode::LoadConst as u8,
-                1,
-                Opcode::DefGlobal as u8,
-                0,
-                0,
-                0,
-                0,
-                Opcode::Halt as u8,
-            ]
-        )
-    }
-
-    #[test]
-    fn compile_print_statement() {
-        let result = run_test_compiler("print 23");
-        assert_eq!(
-            result.chunk.code,
-            vec![
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::Print as u8,
-                Opcode::Halt as u8,
-            ]
-        )
-    }
-
-    #[test]
-    fn compile_string_literal() {
-        let result = run_test_compiler("\"Hello, World!\"");
-        assert_eq!(
-            result.chunk.code,
-            vec![
-                Opcode::LoadConst as u8,
-                0,
-                Opcode::Del as u8,
-                Opcode::Halt as u8,
-            ]
-        );
-    }
-}
-*/

@@ -11,6 +11,7 @@ pub mod scope;
 pub mod token;
 mod validator;
 pub mod visitor;
+mod hoist;
 
 pub use ast::*;
 pub use codegen::Compiler;
@@ -24,11 +25,3 @@ pub use std::rc::Rc;
 
 pub use analysis::resolve_symbols;
 pub use validator::validate_ast;
-
-// TODO: rename this.
-// TODO: move this to a better place.
-// TODO: rewrite this.
-pub fn check(ast: &mut AST) -> Result<(), SyntaxError> {
-    ast.walk(validate_ast)?;
-    ast.walk(resolve_symbols)
-}

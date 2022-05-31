@@ -1,0 +1,13 @@
+fun return_arg(arg) {
+    return arg
+}
+
+fun return_fun_call_with_arg(func, arg) {
+    return return_arg(func)(arg)
+}
+
+fun print_arg(arg) {
+    print arg
+}
+
+return_fun_call_with_arg(print_arg, "hello world") // expect: "hello world"

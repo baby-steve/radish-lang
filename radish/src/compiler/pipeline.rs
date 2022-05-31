@@ -5,6 +5,8 @@ use crate::{
     compiler::Compiler, compiler::Parser, compiler::SyntaxError, compiler::AST, config::Config,
 };
 
+use super::{validate_ast, resolve_symbols, hoist::hoist};
+
 type ASTPass = Box<dyn FnMut(&mut AST) -> Result<(), SyntaxError> + 'static>;
 
 pub struct PipelineSettings {
@@ -52,6 +54,14 @@ impl CompilerPipeLine {
             passes: vec![],
             compiler,
         }
+    }
+
+    pub fn with_default_passes(mut self) -> Self {
+        self.register_pass(resolve_symbols);
+        self.register_pass(validate_ast);
+        self.register_pass(hoist);
+        
+        self
     }
 
     pub fn register_pass<F: 'static>(&mut self, pass: F) -> &mut Self

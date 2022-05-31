@@ -33,6 +33,10 @@ impl Stack {
             Some(self.stack[self.stack.len() - index].clone())
         }
     }
+
+    pub fn get(&self, index: usize) -> &Value {
+        &self.stack[index]
+    }
 }
 
 impl Default for Stack {
