@@ -7,6 +7,7 @@ use crate::compiler::scope::ScopeMap;
 
 use std::cmp::Ordering;
 
+use super::hoist::{VarScope, Scope};
 use super::SyntaxError;
 
 /// Contains a tree of nested statements and expressions along with
@@ -15,6 +16,7 @@ use super::SyntaxError;
 pub struct AST {
     pub items: Vec<Stmt>,
     pub scope: ScopeMap,
+    pub other_scope: Option<Scope>,
 }
 
 impl AST {
@@ -22,6 +24,7 @@ impl AST {
         AST {
             items,
             scope: ScopeMap::new(),
+            other_scope: None,
         }
     }
 
@@ -252,6 +255,20 @@ impl Stmt {
             Self::ImportStmt(stmt) => stmt.pos(),
         }
     }
+
+    pub fn as_function(&mut self) -> &mut FunctionDecl {
+        match self {
+            Stmt::FunDeclaration(fun, _) => fun,
+            _ => panic!("not a function"),
+        }
+    }
+
+    pub fn as_ident(&mut self) -> (&mut Ident, &mut Option<Expr>, &mut VarKind, &mut Span) {
+        match self {
+            Stmt::VarDeclaration(id, expr, kind, span) => (id, expr, kind, span),
+            _ => panic!("not an identifier"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -347,6 +364,7 @@ pub struct FunctionDecl {
     pub body: Vec<Stmt>,
     /// This function's scope map.
     pub scope: ScopeMap,
+    pub other_scope: Option<Scope>,
 }
 
 impl FunctionDecl {
@@ -356,6 +374,7 @@ impl FunctionDecl {
             params,
             body,
             scope: ScopeMap::new(),
+            other_scope: None,
         }
     }
 }
@@ -416,10 +435,7 @@ impl ImportStatement {
 
         file_path.map(|p| p.to_str().unwrap()).map(|name| {
             let span = self.pos.clone();
-            Ident {
-                name: name.to_string(),
-                pos: span,
-            }
+            Ident::new(name.to_string(), span)
         })
     }
 
@@ -436,6 +452,19 @@ impl ImportStatement {
 pub struct Ident {
     pub name: String,
     pub pos: Span,
+    pub index: u32,
+    pub scope: VarScope,
+}
+
+impl Ident {
+    pub fn new(name: String, pos: Span) -> Self {
+        Self {
+            name,
+            pos,
+            index: 0,
+            scope: VarScope::default(),
+        }
+    }
 }
 
 impl PartialEq for Ident {

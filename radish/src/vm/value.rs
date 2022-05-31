@@ -1,11 +1,15 @@
 use crate::common::{Chunk, Module};
+use crate::vm::native::NativeFunction;
+use crate::VM;
 use std::cell::RefCell;
 use std::cmp::{Ord, Ordering};
 use std::collections::{hash_map, HashMap};
 use std::fmt::{self};
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use std::rc::{Rc, Weak};
-use crate::vm::native::NativeFunction;
+
+use super::CallFrame;
+use super::stack::Stack;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum Value {
@@ -13,7 +17,7 @@ pub enum Value {
     Boolean(bool),
     String(Rc<RefCell<String>>),
     Function(Rc<Function>),
-    Closure(Closure),
+    Closure(Rc<Closure>),
     Class(Rc<Class>),
     Instance(Rc<Instance>),
     Module(Rc<RefCell<Module>>),
@@ -48,7 +52,7 @@ impl Value {
     }
 
     #[inline]
-    pub fn into_closure(self) -> Result<Closure, String> {
+    pub fn into_closure(self) -> Result<Rc<Closure>, String> {
         match self {
             Value::Closure(closure) => Ok(closure),
             _ => Err("expected a closure".to_string()),
@@ -103,7 +107,7 @@ impl From<Class> for Value {
 impl Clone for Value {
     fn clone(&self) -> Value {
         match self {
-            Self::Closure(val) => Self::Closure(Closure::from(Rc::clone(&val.function))),
+            Self::Closure(val) => Self::Closure(Rc::clone(val)),
             Self::Function(val) => Self::Function(Rc::clone(val)),
             Self::Nil => Self::Nil,
             Self::Boolean(val) => Self::Boolean(*val),
@@ -249,15 +253,20 @@ impl Ord for Function {
 
 impl Eq for Function {}
 
+/// Runtime representation of a closure.
 #[derive(Debug)]
 pub struct Closure {
+    /// This closure's function.
     pub function: Rc<Function>,
+    /// Store 'non-locals'.
+    pub non_locals: RefCell<Vec<UpValue>>,
 }
 
-impl Clone for Closure {
-    fn clone(&self) -> Closure {
-        Closure {
-            function: Rc::clone(&self.function),
+impl Closure {
+    pub fn new(function: Rc<Function>) -> Self {
+        Self {
+            function,
+            non_locals: RefCell::new(vec![]),
         }
     }
 }
@@ -284,7 +293,102 @@ impl Eq for Closure {}
 
 impl From<Rc<Function>> for Closure {
     fn from(function: Rc<Function>) -> Closure {
-        Closure { function }
+        Closure::new(function)
+    }
+}
+
+#[derive(Debug, PartialEq, PartialOrd)]
+pub enum UpValueLocation {
+    StackIndex(usize),
+    UpValueIndex(usize),
+}
+
+/// Runtime representation of an up-value.
+#[derive(Debug, PartialEq, PartialOrd)]
+pub struct UpValue {
+    /// The place where the value is stored after its closed over.
+    closed: Option<Value>,
+    /// The Value's location on the stack before its closed over.
+    location: Option<UpValueLocation>,
+}
+
+impl UpValue {
+    pub fn new(pos: usize, on_stack: bool) -> Self {
+        let location = if on_stack {
+            UpValueLocation::StackIndex(pos)
+        } else {
+            UpValueLocation::UpValueIndex(pos)
+        };
+
+        Self {
+            closed: None,
+            location: Some(location),
+        }
+    }
+
+    /// Get this upvalue's inner value.
+    pub fn inner(&self, vm: &VM) -> Value {
+        if let Some(val) = &self.closed {
+            return val.clone();
+        } else if let Some(index) = &self.location {
+            let val = match index {
+                UpValueLocation::StackIndex(idx) => vm.stack.get(*idx).clone(),
+                UpValueLocation::UpValueIndex(idx) => {
+                    let prev_frame = &vm.frames[vm.frame_count - 1].closure;
+
+                    println!("[vm] previous frame name: {}", prev_frame.function.name);
+
+                    let upval = &vm.frames[vm.frame_count - 1].closure.non_locals.borrow()[*idx];
+
+                    let val = upval.inner(vm);
+                    val
+                }
+            };
+
+            val
+        } else {
+            unreachable!("Can't get inner value: Upvalue doesn't have a location or a value");
+        }
+    }
+
+    /// Set this upvalue's inner value.
+    pub fn set_value(&mut self, frames: &Vec<CallFrame>, stack: &mut Stack, new_val: Value) {
+        if let Some(val) = &mut self.closed {
+            *val = new_val;
+        } else if let Some(location) = &self.location {
+            match location {
+                UpValueLocation::StackIndex(idx) => {
+                    stack.stack[*idx] = new_val;
+                },
+                UpValueLocation::UpValueIndex(idx) => {
+                    let frame_count = frames.len();
+                    let prev_frame = &frames[frame_count - 1].closure;
+
+                    prev_frame.non_locals.borrow_mut()[*idx].set_value(frames, stack, new_val);
+                },
+            }
+        } else {
+            unreachable!("Can't set new value: Upvalue doesn't have a location or a value");
+        }
+    }
+
+    /// Close up this upvalue.
+    pub fn close(&mut self, vm: &VM) {
+        let location = self
+            .location
+            .take()
+            .expect("Upvalue doesn't have a location. It may have already been closed over.");
+
+        let val = match location {
+            UpValueLocation::StackIndex(idx) => vm.stack.stack[idx].clone(),
+            UpValueLocation::UpValueIndex(idx) => {
+                let prev_frame = &vm.frames[vm.frame_count - 1].closure;
+
+                prev_frame.non_locals.borrow()[idx].inner(vm).clone()
+            }
+        };
+
+        self.closed = Some(val);
     }
 }
 

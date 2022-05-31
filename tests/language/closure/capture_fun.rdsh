@@ -1,0 +1,13 @@
+fun outer() {
+    fun captured() {
+        print "ok"
+    }
+
+    fun inner() {
+        captured()
+    }
+
+    return inner
+}
+
+outer()() // expect: "ok"

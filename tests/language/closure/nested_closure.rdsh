@@ -1,0 +1,25 @@
+var f
+
+fun outer() {
+    var a = "a"
+    fun mid() {
+        var b = "b"
+        fun inner() {
+            var c = "c"
+            fun inner_most() {
+                print a
+                print b
+                print c
+            }
+            f = inner_most
+        }
+        inner()
+    }
+    mid()
+}
+outer()
+
+f()
+// expect: "a"
+// expect: "b"
+// expect: "c"

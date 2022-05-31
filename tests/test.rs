@@ -15,12 +15,20 @@ lazy_static! {
     static ref EXPECTED: Regex = Regex::new("// expect: ?(.*)").unwrap();
     static ref ERROR: Regex = Regex::new("// expect error").unwrap();
     static ref NON_TEST: Regex = Regex::new("// no test").unwrap();
+    static ref IGNORE: Regex = Regex::new("// ignore").unwrap();
+}
+
+enum CreateTestResult {
+    Ignore,
+    NoTest,
+    Some(Test),
 }
 
 #[derive(Default)]
 struct TestRunner {
     pub passed: u32,
     pub failed: u32,
+    pub ignored: u32,
     pub failures: Vec<Test>,
     // pub skipped: u32,
     // pub expectations: u32,
@@ -35,7 +43,7 @@ struct Test {
 }
 
 impl Test {
-    pub fn new(path: impl ToString) -> Option<Self> {
+    pub fn new(path: impl ToString) -> CreateTestResult {
         let mut output = vec![];
         let mut _errors = vec![];
 
@@ -64,7 +72,11 @@ impl Test {
             }
 
             if NON_TEST.is_match(line) {
-                return None;
+                return CreateTestResult::NoTest;
+            }
+
+            if IGNORE.is_match(line) {
+                return CreateTestResult::Ignore;
             }
         }
 
@@ -75,22 +87,18 @@ impl Test {
             failures: vec![],
         };
 
-        Some(test)
+        CreateTestResult::Some(test)
     }
 
     pub fn run(&mut self) {
-        //use std::panic;
-        //let result = panic::catch_unwind(|| {
-        let process = Command::new("target/debug/cli")
-            .arg(&self.path)
-            .output()
-            .expect("failed to start command");
+        let process = Command::new("target/debug/cli").arg(&self.path)
+                .output()
+                .expect("failed to start command");
 
         let out = String::from_utf8_lossy(&process.stdout);
         let err = String::from_utf8_lossy(&process.stderr);
 
         self.validate(out, err);
-        //});
     }
 
     fn validate(&mut self, out: Cow<'_, str>, err: Cow<'_, str>) {
@@ -165,18 +173,22 @@ fn run_script(file: &DirEntry, test_runner: &mut TestRunner) {
         return;
     }
 
-    let path = path.to_string_lossy().to_string();
+    let path = path.to_string_lossy();
 
-    print!("test {} ... ", path);
-
+    
     // TODO: allow running only a single set of tests.
-
-    let mut test = if let Some(test) = Test::new(&path) {
-        test
-    } else {
-        return;
+    
+    let mut test = match Test::new(path.to_string()) {
+        CreateTestResult::Ignore => {
+            test_runner.ignored += 1;
+            return
+        }
+        CreateTestResult::NoTest => return,
+        CreateTestResult::Some(test) => test,
     };
-
+    
+    print!("test {} ... ", path);
+    
     test.run();
 
     if test.failures.is_empty() {
@@ -207,11 +219,15 @@ fn main() {
     println!();
 
     if test_runner.failed == 0 {
+        let w = if test_runner.ignored == 1 { "was" } else { "where" };
+
         println!(
-            "All {} tests passed. Yeah!",
-            test_runner.passed.to_string().green()
+            "All {} tests passed. Yeah! ({} {} ignored)",
+            test_runner.passed.to_string().green(),
+            test_runner.ignored.to_string().yellow(),
+            w,
         );
-        println!("(that, or there's a bug in the test suite itself)");
+        println!("Of course there may be a bug in the test suite itself...");
     } else {
         for test in test_runner.failures.iter() {
             println!("---- {} ----", test.path);
@@ -225,13 +241,16 @@ fn main() {
 
         let end1 = if test_runner.passed == 1 { "" } else { "s" };
         let end2 = if test_runner.failed == 1 { "" } else { "s" };
+        let end3 = if test_runner.ignored == 1 { "" } else { "s" };
 
         println!(
-            "{} test{} passed. {} test{} failed.",
+            "{} test{} passed. {} test{} failed. {} test{} ignored",
             test_runner.passed.to_string().green(),
             end1,
             test_runner.failed.to_string().red(),
             end2,
+            test_runner.ignored.to_string().yellow(),
+            end3,
         );
     }
 }

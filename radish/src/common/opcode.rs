@@ -57,10 +57,14 @@ pub enum Opcode {
     // TODO:
     SaveField,
 
+    //// **UNIMPLMENTED**
+    DefCapture,
     /// **UNIMPLEMENTED**
-    GetCapture,
+    LoadCapture,
     /// **UNIMPLEMENTED**
-    SetCapture,
+    SaveCapture,
+    /// **UNIMPLEMENTED**
+    //DefCapture,
     /// Push `[Value::Boolean(true)]` onto the stack.
     ///
     /// -> [Value::Boolean(true)]

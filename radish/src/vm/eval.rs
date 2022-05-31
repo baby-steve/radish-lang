@@ -99,7 +99,7 @@ impl VM {
 
     /// Evaluate a file.
     fn _eval_file(&mut self, file_name: &str) -> Result<Value, RadishError> {
-        let module = self.resolver.resolve(None, file_name, &mut self.pipeline)?;
+        let module = self.resolver.resolve(None, file_name, &mut self.compiler)?;
 
         match self.interpret(module) {
             Ok(res) => Ok(res),
@@ -109,7 +109,7 @@ impl VM {
 
     /// Evaluate a string.
     fn _eval<I: FromValue>(&mut self, src: &str) -> Result<I, RadishError> {
-        let module = self.pipeline.compile(&self.config.default_filename, src)?;
+        let module = self.compiler.compile(&self.config.default_filename, src)?;
 
         match self.interpret(module) {
             Ok(val) => I::from_value(val),
@@ -121,9 +121,7 @@ impl VM {
     fn interpret(&mut self, module: CompiledModule) -> Result<Value, Trace> {
         self.last_module = module;
 
-        let closure = Closure {
-            function: self.last_module.borrow().entry(),
-        };
+        let closure = std::rc::Rc::new(Closure::new(self.last_module.borrow().entry()));
         self.stack.push(Value::Closure(closure.clone()));
         self.call_function(closure, 0)?;
 

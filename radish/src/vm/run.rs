@@ -8,6 +8,8 @@ use crate::{
 
 use crate::vm::{CallFrame, VM};
 
+use super::value::UpValue;
+
 impl VM {
     /// Create a new [`Trace`] with the given message, adding context to it.
     fn error(&mut self, message: impl ToString) -> Trace {
@@ -114,10 +116,21 @@ impl VM {
     }
 
     #[inline]
-    pub(crate) fn call_function(&mut self, closure: Closure, arg_count: usize) -> Result<(), Trace> {
+    pub(crate) fn call_function(
+        &mut self,
+        closure: Rc<Closure>,
+        arg_count: usize,
+    ) -> Result<(), Trace> {
+        //println!(
+        //    "[vm] calling {}. It has {} upvalues",
+        //    closure.function.name,
+        //    &closure.non_locals.borrow().len()
+        //);
+
         let offset = self.stack.stack.len() - arg_count;
+
         let frame = CallFrame {
-            closure: Closure::from(Rc::clone(&closure.function)),
+            closure: Rc::clone(&closure),
             ip: 0,
             offset,
         };
@@ -132,9 +145,53 @@ impl VM {
     #[inline]
     fn make_closure(&mut self) -> Result<(), Trace> {
         let function = self.stack.pop().into_function().unwrap();
-        let closure = Closure { function };
 
-        self.stack.push(Value::Closure(closure));
+        //println!("[vm] creating closure \"{}\"", &function.name);
+
+        let closure = Closure::new(function);
+
+        let num_upvals = self.read_byte();
+
+        //println!("[vm] current open upvalues in vm: {:?}", self.upvalues);
+
+        for _ in 0..num_upvals {
+            let typ = self.read_byte() as usize;
+            let index = self.read_byte() as usize;
+
+            let upvalue = if typ == 0 {
+                let other_index = self.upvalues.get(&index).unwrap();
+                UpValue::new(*other_index, true)
+            } else if typ == 1 {
+                UpValue::new(index, false)
+            } else {
+                panic!("invalid flag: must be 0 or 1");
+            };
+
+            //println!(
+            //    "[vm] adding upvalue referencing upvalue slot index {}",
+            //    index
+            //);
+            closure.non_locals.borrow_mut().push(upvalue);
+        }
+
+        //println!(
+        //    "[vm] created closure with the following upvalues: {:?}",
+        //    self.upvalues
+        //);
+
+        //println!("[vm] closing upvalues");
+
+        for upval in closure.non_locals.borrow_mut().iter_mut() {
+            upval.close(&self);
+        }
+
+        //println!(
+        //    "[vm] closure \"{}\" has the following upvalues: {:?}",
+        //    closure.function.name,
+        //    closure.non_locals.borrow()
+        //);
+
+        self.stack.push(Value::Closure(Rc::new(closure)));
 
         Ok(())
     }
@@ -170,12 +227,12 @@ impl VM {
 
     #[inline]
     fn print(&mut self) -> Result<(), Trace> {
-        let _msg = self.stack.pop();
-        
-        //self.config.stdout.write(&format!("{}", msg));
-        //Ok(())
+        let msg = self.stack.pop();
 
-        todo!();
+        println!("{}", msg);
+
+        //self.config.stdout.write(&format!("{}", msg));
+        Ok(())
     }
 
     #[inline]
@@ -187,30 +244,33 @@ impl VM {
         // ^ script     ^ function being called  ^ local being loaded
         // ```
         // the local being loaded will have a relative index of (1).
-        let relative_index = self.read_long() as usize;
+        let relative_index = self.read_long() as usize; // + 1;
 
-        //dbg!(&relative_index);
+        //dbg!(relative_index);
 
         // The stack position of the current function being called.
         let offset = self.current_frame().offset;
 
-        //dbg!(&offset);
+        //dbg!(offset);
 
         // To get the locals position on the stack, we then have to add the locals
         // relative position to the function's position.
-        let slot_index = relative_index + offset - 1;
+        let slot_index = relative_index + offset; // - 1;
 
-        //dbg!(&slot_index);
+        //dbg!(slot_index);
 
-        self.stack
-            .push(self.stack.stack[slot_index as usize].clone());
+        self.stack.push(self.stack.stack[slot_index].clone());
 
         Ok(())
     }
 
     #[inline]
     fn save_local(&mut self) -> Result<(), Trace> {
-        let slot_index = self.read_long() as usize + self.current_frame().offset - 1;
+        let relative_index = self.read_long() as usize;
+
+        let offset = self.current_frame().offset;
+
+        let slot_index = relative_index + offset; // - 1;
 
         self.stack.stack[slot_index as usize] = self.stack.peek().unwrap();
 
@@ -220,7 +280,6 @@ impl VM {
     #[inline]
     fn load_global(&mut self) -> Result<(), Trace> {
         let index = self.read_long() as usize;
-        //let value = self.last_module.borrow().get_var(index).clone();
 
         let value = self
             .current_frame()
@@ -228,9 +287,9 @@ impl VM {
             .function
             .module
             .upgrade()
-            .expect("something broke")
+            .expect("Module has already been dropped")
             .borrow()
-            .get_var(index)
+            .get_value_at_index(index)
             .clone();
 
         self.stack.push(value);
@@ -242,10 +301,6 @@ impl VM {
     fn save_global(&mut self) -> Result<(), Trace> {
         let index = self.read_long() as usize;
 
-        //self.last_module
-        //    .borrow_mut()
-        //    .set_var(index, self.stack.peek().unwrap());
-
         self.current_frame()
             .closure
             .function
@@ -253,7 +308,7 @@ impl VM {
             .upgrade()
             .expect("something broke")
             .borrow_mut()
-            .set_var(index, self.stack.peek().unwrap());
+            .set_value_at_index(index, self.stack.peek().unwrap());
 
         Ok(())
     }
@@ -270,7 +325,7 @@ impl VM {
                     .get_index(&field_name.into_string().unwrap().borrow())
                     .expect("no value at index");
 
-                let val = module.borrow().get_var(index).clone();
+                let val = module.borrow().get_value_at_index(index).clone();
 
                 self.stack.push(val);
             }
@@ -283,6 +338,67 @@ impl VM {
     #[inline]
     fn save_field(&mut self) -> Result<(), Trace> {
         todo!()
+    }
+
+    #[inline]
+    fn def_upvalue(&mut self) -> Result<(), Trace> {
+        //let slot_index = self.read_long() as usize;
+        //println!("[vm] defining upvalue");
+
+        let slot_index = self.stack.stack.len() - 1;
+
+        let offset = self.current_frame().offset;
+
+        let relative_index = slot_index - offset;
+
+        //println!(
+        //    "[vm] defining upvalue with a slot index of {} and a relative index of {} ",
+        //    slot_index, relative_index,
+        //);
+
+        self.upvalues.insert(relative_index, slot_index);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn load_upvalue(&mut self) -> Result<(), Trace> {
+        // Read the upvalue's position from the bytecode stream.
+        let index = self.read_long() as usize;
+
+        let closure = &self.current_frame().closure;
+
+        let upvalues = &closure.non_locals;
+
+        debug_assert!(!upvalues.borrow().is_empty(), "the closure's upvalue list should not be empty");
+
+        //println!(
+        //    "[vm] closure \"{}\" has the following upvalues: {:?}",
+        //    closure.function.name,
+        //    upvalues.borrow()
+        //);
+
+        //debug_assert!(index >= upvalues.borrow().len());
+
+        let val = upvalues.borrow()[index - 1].inner(&self);
+
+        self.stack.push(val);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn save_upvalue(&mut self) -> Result<(), Trace> {
+        let index = self.read_long() as usize;
+
+        let frame = &self.frames[self.frame_count - 1].closure.non_locals;
+        let upval =  &mut frame.borrow_mut()[index];
+        let val = self.stack.peek().unwrap();
+
+        upval.set_value(&self.frames, &mut self.stack, val);
+        //().set_value(&mut self, self.stack.peek().unwrap());
+
+        Ok(())
     }
 
     #[inline]
@@ -333,21 +449,22 @@ impl VM {
         // TODO: figure out import semantics.
         // currently any import will only ever be runned once. While this seems
         // to be a common trend, I'm not sure if its the best choice.
-        if self
-            .resolver
-            .is_cached(&*path.borrow(), Some(source_path))
-        {
+        if self.resolver.is_cached(&*path.borrow(), Some(source_path)) {
             return Ok(());
         };
 
-        let module = match self.resolver.resolve(Some(source_path), &path.borrow(), &mut self.pipeline) {
-            Ok(m) => m,
-            Err(e) => {
-                e.emit();
-                let msg = "failed to load module";
-                return Err(Trace::new(msg));
-            }
-        };
+        let module =
+            match self
+                .resolver
+                .resolve(Some(source_path), &path.borrow(), &mut self.compiler)
+            {
+                Ok(m) => m,
+                Err(e) => {
+                    e.emit();
+                    let msg = "failed to load module";
+                    return Err(Trace::new(msg));
+                }
+            };
 
         // swap out the last module with the new one.
         let last_module = std::mem::replace(&mut self.last_module, module);
@@ -356,13 +473,27 @@ impl VM {
         self.modules.push(last_module);
 
         // load and run the module's top level code.
-        let closure = Closure {
-            function: self.last_module.borrow().entry(),
-        };
-        self.stack.push(Value::Closure(closure.clone()));
+        let closure = Rc::new(Closure::new(self.last_module.borrow().entry()));
+        self.stack.push(Value::Closure(Rc::clone(&closure)));
         self.call_function(closure, 0)?;
 
         Ok(())
+    }
+
+    fn _close_upvalues(&mut self) {
+        println!("[vm] closing upvalues");
+
+        let closure = Rc::clone(&self.current_frame_mut().closure);
+
+        for upval in closure.non_locals.borrow_mut().iter_mut() {
+            upval.close(&self);
+        }
+
+        println!(
+            "[vm] closure \"{}\" has the following upvalues: {:?}",
+            closure.function.name,
+            closure.non_locals.borrow()
+        );
     }
 
     pub(crate) fn run(&mut self) -> Result<Value, Trace> {
@@ -441,7 +572,7 @@ impl VM {
                     let index = self.read_long() as usize;
                     self.last_module
                         .borrow_mut()
-                        .set_var(index, self.stack.peek().unwrap());
+                        .set_value_at_index(index, self.stack.peek().unwrap());
 
                     self.stack.pop();
                 }
@@ -449,8 +580,9 @@ impl VM {
                 Opcode::SaveGlobal => self.save_global()?,
                 Opcode::LoadLocal => self.load_local()?,
                 Opcode::SaveLocal => self.save_local()?,
-                Opcode::GetCapture => todo!(),
-                Opcode::SetCapture => todo!(),
+                Opcode::DefCapture => self.def_upvalue()?,
+                Opcode::LoadCapture => self.load_upvalue()?,
+                Opcode::SaveCapture => self.save_upvalue()?,
                 Opcode::LoadField => self.load_field()?,
                 Opcode::SaveField => self.save_field()?,
                 Opcode::JumpIfFalse => self.jump_if_false()?,
@@ -468,6 +600,11 @@ impl VM {
                     self.call_value(callee, arg_count)?;
                 }
                 Opcode::Return => {
+                    //println!(
+                    //    "[vm] returning from {}",
+                    //    self.current_frame().closure.function.name
+                    //);
+
                     let result = self.stack.pop(); // pop return value
 
                     // if that was the last frame, exit the VM.
@@ -525,263 +662,3 @@ impl VM {
         }
     }
 }
-
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn test_vm(chunk: Chunk) -> VM<'static> {
-        let script = Function {
-            arity: 0,
-            name: String::from("test").into_boxed_str(),
-            chunk,
-        };
-
-        let config = RadishConfig::new();
-        let mut vm = VM::new(&config);
-        vm.interpret(&script);
-        vm
-    }
-
-    /*#[test]
-    fn test_halt_opcode() {
-        let code = vec![Opcode::Return as u8];
-        let vm = test_vm(Chunk::new(code, vec![]));
-        assert_eq!(vm.ip, 1);
-    }*/
-
-    #[test]
-    fn test_constant_opcode() {
-        let code = vec![Opcode::LoadConst as u8, 0, Opcode::Return as u8];
-        let constants = vec![Value::Number(123.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Number(123.0)));
-    }
-
-    #[test]
-    fn test_add_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::Add as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(2.0), Value::Number(3.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Number(5.0)));
-    }
-
-    #[test]
-    fn test_subtract_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::Subtract as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(3.0), Value::Number(2.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Number(1.0)));
-    }
-
-    #[test]
-    fn test_multiply_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::Multiply as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(2.0), Value::Number(5.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Number(10.0)));
-    }
-
-    #[test]
-    fn test_divide_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::Divide as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(4.0), Value::Number(2.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Number(2.0)));
-    }
-    #[test]
-    fn test_less_than_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::LessThan as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(4.0), Value::Number(5.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
-    }
-
-    #[test]
-    fn test_less_than_equals_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::LessThanEquals as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(4.0), Value::Number(5.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
-    }
-
-    #[test]
-    fn test_greater_than_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::GreaterThan as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(6.0), Value::Number(5.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
-    }
-
-    #[test]
-    fn test_greater_than_equal_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::GreaterThanEquals as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(8.0), Value::Number(5.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
-    }
-
-    #[test]
-    fn test_equals_to_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::EqualsTo as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(5.0), Value::Number(5.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
-    }
-
-    #[test]
-    fn test_not_equal_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::NotEqual as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![Value::Number(9.0), Value::Number(5.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
-    }
-
-    #[test]
-    fn test_multiple_opcodes() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::LoadConst as u8, 1,
-            Opcode::Add as u8,
-            Opcode::LoadConst as u8, 2,
-            Opcode::LoadConst as u8, 3,
-            Opcode::Divide as u8,
-            Opcode::LoadConst as u8, 4,
-            Opcode::Multiply as u8,
-            Opcode::Subtract as u8,
-            Opcode::Return as u8,
-        ];
-        let constants = vec![
-            Value::Number(12.0),
-            Value::Number(7.0),
-            Value::Number(8.0),
-            Value::Number(4.0),
-            Value::Number(5.0),
-        ];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Number(9.0)));
-    }
-
-    #[test]
-    fn test_negate_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::Negate as u8,
-            Opcode::Return as u8
-        ];
-        let constants = vec![Value::Number(2.0)];
-        let mut vm = test_vm(Chunk::new(code, constants));
-        assert_eq!(vm.stack.peek(), Some(Value::Number(-2.0)));
-    }
-
-    #[test]
-    fn test_not_opcode() {
-        let code = vec![
-            Opcode::True as u8,
-            Opcode::Not as u8,
-            Opcode::Return as u8
-        ];
-        let mut vm = test_vm(Chunk::new( code, vec![]));
-        assert_eq!(vm.stack.peek(), Some(Value::from(false)));
-    }
-
-    #[test]
-    fn test_true_opcode() {
-        let code = vec!(Opcode::True as u8, Opcode::Return as u8);
-        let mut vm = test_vm(Chunk::new( code, vec![]));
-        assert_eq!(vm.stack.peek(), Some(Value::Boolean(true)));
-    }
-
-    #[test]
-    fn test_false_opcode() {
-        let code = vec!(Opcode::False as u8, Opcode::Return as u8);
-        let mut vm = test_vm(Chunk::new( code, vec![]));
-        assert_eq!(vm.stack.peek(), Some(Value::Boolean(false)));
-    }
-
-    #[test]
-    fn test_nil_opcode() {
-        let code = vec![Opcode::Nil as u8, Opcode::Return as u8];
-        let mut vm = test_vm(Chunk::new( code, vec![]));
-        assert_eq!(vm.stack.peek(), Some(Value::Nil));
-    }
-
-    #[test]
-    fn test_define_global_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 1, // 23
-            Opcode::DefGlobal as u8, 0, 0, 0, 0, // "a"
-            Opcode::Return as u8,
-        ];
-
-        let constants = vec![Value::from("a"), Value::from(23.0)];
-
-        let vm = test_vm(Chunk::new(code, constants));
-
-        println!("{:?}", vm.stack);
-        println!("{:?}", vm.globals);
-        assert_eq!(vm.globals.get("\"a\""), Some(&Value::from(23.0)));
-    }
-    /*
-    #[test]
-    fn test_print_opcode() {
-        let code = vec![
-            Opcode::LoadConst as u8, 0,
-            Opcode::Print as u8,
-            Opcode::Return as u8,
-        ];
-
-        let constants = vec![Value::from(23.0)];
-    }*/
-}*/
