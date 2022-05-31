@@ -1,0 +1,11 @@
+if false then
+    print "no"
+else 
+    print "ok" // expect: "ok"
+endif
+
+if true then
+    print "ok" // expect: "ok"
+else 
+    print "no"
+endif

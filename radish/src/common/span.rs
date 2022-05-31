@@ -26,7 +26,7 @@ impl Span {
     }
 
     pub fn empty() -> Span {
-        let source = Source::source("");
+        let source = Source::new("", "");
         Span {
             source: Rc::clone(&source),
             start: 0,
@@ -187,7 +187,7 @@ mod tests {
     #[test]
     fn display_single_line_span() {
         let test_source = "1 + 2 * 3";
-        let test_span = Span::new(Source::source(test_source), 4, 9);
+        let test_span = Span::new(Source::new(test_source, "./main"), 4, 9);
         assert_eq!(
             format!("{}", test_span),
             "  --> ./main:1:5\n   |\n 1 | 1 + 2 * 3\n   |     ^^^^^\n"
@@ -197,7 +197,7 @@ mod tests {
     #[test]
     fn display_single_char_span() {
         let test_source = "1 + 2 * 3";
-        let test_span = Span::new(Source::source(test_source), 0, 1);
+        let test_span = Span::new(Source::new(test_source, "./main"), 0, 1);
         assert_eq!(
             format!("{}", test_span),
             "  --> ./main:1:1\n   |\n 1 | 1 + 2 * 3\n   | ^\n"
@@ -207,8 +207,8 @@ mod tests {
     #[test]
     fn combine_span() {
         let source = "Hello, Radish!";
-        let span1 = Span::new(Source::source(source), 0, 5);
-        let span2 = Span::new(Source::source(source), 7, 10);
+        let span1 = Span::new(Source::new(source, ""), 0, 5);
+        let span2 = Span::new(Source::new(source, ""), 7, 10);
 
         let combine_span = Span::combine(&span1, &span2);
         assert_eq!((combine_span.start, combine_span.end), (0, 10));

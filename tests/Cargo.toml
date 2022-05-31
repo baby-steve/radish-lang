@@ -4,11 +4,13 @@ version = "0.1.0"
 edition = "2018"
 publish = false
 
-[dev-dependencies]
+[dependencies]
 radish = { path = "../radish" }
 regex = "1"
 lazy_static = "1.4.0"
+colored = "2"
+termcolor = "1"
 
-[[test]]
-name = "test_snippets"
-path = "test_runner.rs"
+[[bin]]
+name = "test_runner"
+path = "test.rs"

@@ -150,7 +150,7 @@ impl Visitor<'_> for AstValidator {
             }
         }
 
-        if in_function == false {
+        if !in_function {
             let kind = SyntaxErrorKind::ReturnOutsideFunction {
                 item: Item {
                     span: Span::empty(),
@@ -175,7 +175,7 @@ mod tests {
     #[test]
     fn walk_ast() {
         let src = "1 + 2 - 3 * 4 / 5";
-        let source = Source::source(src);
+        let source = Source::new(src, "");
 
         let mut parser = Parser::new(source);
 

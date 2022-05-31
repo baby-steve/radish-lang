@@ -30,7 +30,7 @@ impl<'diagnostic> RichDiagnostic<'diagnostic> {
 
         for label in sorted_labels.iter() {
             if label.style == LabelStyle::Primary {
-                primary_label = Some(&label);
+                primary_label = Some(label);
             }
 
             // get the label's line number. For now just persume its single lined.

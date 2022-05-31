@@ -1,5 +1,6 @@
-use crate::vm::value::Function;
+use crate::vm::from_value::FromValue;
 use crate::vm::native::NativeFunction;
+use crate::vm::value::Function;
 use crate::{Value, VM};
 
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, rc::Rc};
@@ -27,12 +28,57 @@ impl Module {
         }
     }
 
-    pub fn empty() -> Rc<RefCell<Module>> {
+    pub(crate) fn empty() -> Rc<RefCell<Module>> {
         Module::new("")
     }
 
+    pub fn add_native<F: 'static>(&mut self, name: &str, airty: u8, fun: F) -> &mut Self
+    where
+        F: FnMut(&mut VM, Vec<Value>) -> Result<Value, String>,
+    {
+        let native_fun = NativeFunction::new::<F>(Rc::new(fun), airty);
+
+        let index = self.add_symbol(name.to_string());
+
+        self.set_value_at_index(index, Value::NativeFunction(Rc::new(native_fun)));
+
+        self
+    }
+
+    pub fn add_module<M>(&mut self, module: M) -> &mut Self
+    where
+        M: ModuleBuilder,
+    {
+        let m = module.build().expect("failed to build module");
+
+        let index = self.add_symbol(m.name.to_string());
+
+        self.set_value_at_index(index, Value::Module(Rc::new(RefCell::new(m))));
+
+        self
+    }
+
+    //pub fn add_variable<I: FromValue>(&mut self, name: impl ToString, value: I) -> &mut Self {
+    //    let index = self.add_symbol(name.to_string());
+    //
+    //    self.set_value_at_index(index, Value::Nil);
+    //
+    //    self
+    //}
+
+    pub fn get_variable<F: FromValue>(&self, name: &str) -> Option<F> {
+        let index = match self.get_index(name) {
+            Some(i) => i,
+            None => return None,
+        };
+
+        let value = self.get_value_at_index(index).clone();
+
+        Some(F::from_value(value).expect("Failed to coerce type"))
+    }
+
     #[inline]
-    pub fn add_var(&mut self, name: String) -> usize {
+    pub(crate) fn add_symbol(&mut self, name: String) -> usize {
         let index = self.variables.len();
         self.variables.push(Value::Nil);
 
@@ -42,21 +88,17 @@ impl Module {
     }
 
     #[inline]
-    pub fn get_index(&self, name: &str) -> Option<usize> {
-        if let Some(index) = self.symbols.get(name) {
-            Some(*index)
-        } else {
-            None
-        }
+    pub(crate) fn get_index(&self, name: &str) -> Option<usize> {
+        self.symbols.get(name).copied()
     }
 
     #[inline]
-    pub fn set_var(&mut self, index: usize, value: Value) {
+    pub(crate) fn set_value_at_index(&mut self, index: usize, value: Value) {
         self.variables[index] = value;
     }
 
     #[inline]
-    pub fn get_var(&self, index: usize) -> &Value {
+    pub(crate) fn get_value_at_index(&self, index: usize) -> &Value {
         &self.variables[index]
     }
 
@@ -68,49 +110,19 @@ impl Module {
         self.symbols.insert(String::from(""), index);
     }
 
-    pub fn entry(&self) -> Rc<Function> {
+    pub(crate) fn entry(&self) -> Rc<Function> {
         if let Some(index) = self.symbols.get("") {
             match &self.variables[*index] {
-                Value::Function(fun) => Rc::clone(&fun),
+                Value::Function(fun) => Rc::clone(fun),
                 _ => unreachable!(
                     "The entry point for module '{}' is not a function.",
                     self.name.to_string()
                 ),
             }
         } else {
-            panic!(
-                "Module '{}' doesn't have an entry point",
-                self.name.to_string()
-            );
+            panic!("Module '{}' doesn't have an entry point", self.name);
         }
     }
-
-    // Add a function to the current scope
-    // pub fn add_function(function: Function) {}
-
-    pub fn add_native<F: 'static>(&mut self, name: &str, airty: u8, fun: F) -> &mut Self
-    where
-        F: FnMut(&mut VM, Vec<Value>) -> Result<Value, String>,
-    {
-        let native_fun = NativeFunction::new::<F>(Rc::new(fun), airty);
-
-        let index = self.add_var(name.to_string());
-
-        self.set_var(index, Value::NativeFunction(Rc::new(native_fun)));
-
-        self
-    }
-
-    // create a class
-    // pub fn create_class(name: impl ToString) {}
-
-    // add a method to a class
-    // should we add the method directly to the class? like so:
-    //      let class = create_class_or_whatever();
-    //      let method = create_a_method();
-    //      class.add_method(method)
-    // or should we add the method to a class with a given name:
-    //      bind_method(method, "ClassName");
 
     // functions to:
     //  a. declare a global
@@ -148,12 +160,22 @@ impl fmt::Display for Module {
                 f,
                 "\n    {} {}: {}",
                 index,
-                if name == "" { "entry" } else { &name },
+                if name.is_empty() { "entry" } else { name },
                 value
             )?;
         }
 
         write!(f, "")
+    }
+}
+
+pub trait ModuleBuilder {
+    fn build(self) -> Result<Module, String>;
+}
+
+impl ModuleBuilder for Module {
+    fn build(self) -> Result<Module, String> {
+        Ok(self)
     }
 }
 
@@ -167,14 +189,14 @@ mod tests {
         let module = Module::new("test");
         let mut module = module.borrow_mut();
 
-        module.add_var("a".to_string());
+        module.add_symbol("a".to_string());
 
-        let value = module.get_var(0);
+        let value = module.get_value_at_index(0);
         assert_eq!(value, &Value::Nil);
 
-        module.set_var(0, Value::Boolean(true));
+        module.set_value_at_index(0, Value::Boolean(true));
 
-        let value = module.get_var(0);
+        let value = module.get_value_at_index(0);
         assert_eq!(value, &Value::Boolean(true));
     }
 
@@ -196,15 +218,5 @@ mod tests {
         assert_eq!(module.borrow().variables.len(), 1);
 
         assert_eq!(module.borrow().entry(), Rc::new(fun));
-    }
-}
-
-pub trait ModuleBuilder {
-    fn build(self) -> Result<Module, String>;
-}
-
-impl ModuleBuilder for Module {
-    fn build(self) -> Result<Module, String> {
-        Ok(self)
     }
 }

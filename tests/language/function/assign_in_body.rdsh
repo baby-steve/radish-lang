@@ -1,0 +1,10 @@
+fun test() {
+    var a = 2
+    var b = 3
+    a = 4
+    b = 5
+    print a // expect: 4
+    print b // expect: 5
+}
+
+test()

@@ -15,15 +15,17 @@ impl<'a> Disassembler<'a> {
 
         println!("Disassembling \"{}\"...", dis.name);
         let mut offset = 0;
+        
+        println!("==== Constants ===============");
+        for con in &dis.function.chunk.constants {
+            print!("[ {} ]", con);
+        }
+
+        print!("\n\n");
 
         println!("==== Code ====================");
         while offset < dis.function.chunk.code.len() {
             offset = dis.disassemble_instruction(offset);
-        }
-
-        println!("==== Constants ===============");
-        for con in &dis.function.chunk.constants {
-            print!("[ {} ]", con);
         }
 
         print!("\n\n");
@@ -36,24 +38,33 @@ impl<'a> Disassembler<'a> {
         match Opcode::from(byte) {
             Opcode::LoadConst => self.byte_instruction("LoadConst", offset),
             Opcode::LoadConstLong => self.long_const_instruction("LoadConstLong", offset, true),
+
             Opcode::Del => self.simple_instruction("Pop", offset),
+
             Opcode::DefGlobal => self.write_global("DefGlobal", offset),
             Opcode::LoadGlobal => self.write_global("GetGlobal", offset),
             Opcode::SaveGlobal => self.write_global("SetGlobal", offset),
+
             Opcode::LoadLocal => self.long_const_instruction("GetLocal", offset, false),
             Opcode::SaveLocal => self.long_const_instruction("SetLocal", offset, false),
-            Opcode::GetCapture => self.long_const_instruction("GetCapture", offset, false),
-            Opcode::SetCapture => self.long_const_instruction("SetCapture", offset, false),
+
+            Opcode::DefCapture => self.simple_instruction("DefCapture", offset),
+            Opcode::LoadCapture => self.upvalue_instruction("LoadCapture", offset),
+            Opcode::SaveCapture => self.upvalue_instruction("SaveCapture", offset),
+
             Opcode::LoadField => self.simple_instruction("LoadField", offset),
             Opcode::SaveField => self.long_const_instruction("SaveField", offset, false),
+
             Opcode::True => self.simple_instruction("True", offset),
             Opcode::False => self.simple_instruction("False", offset),
             Opcode::Nil => self.simple_instruction("Nil", offset),
+
             Opcode::Add => self.simple_instruction("Add", offset),
             Opcode::Sub => self.simple_instruction("Sub", offset),
             Opcode::Mul => self.simple_instruction("Mul", offset),
             Opcode::Div => self.simple_instruction("Div", offset),
             Opcode::Rem => self.simple_instruction("Rem", offset),
+
             Opcode::Neg => self.simple_instruction("Negate", offset),
             Opcode::Not => self.simple_instruction("Not", offset),
             Opcode::CmpLT => self.simple_instruction("LessThan", offset),
@@ -62,10 +73,12 @@ impl<'a> Disassembler<'a> {
             Opcode::CmpGTEq => self.simple_instruction("GreaterThanEquals", offset),
             Opcode::CmpEq => self.simple_instruction("EqualsTo", offset),
             Opcode::CmpNotEq => self.simple_instruction("NotEqual", offset),
+
             Opcode::JumpIfTrue => self.jump_instruction("JumpIfTrue", 1, offset),
             Opcode::JumpIfFalse => self.jump_instruction("JumpIfFalse", 1, offset),
             Opcode::Jump => self.jump_instruction("Jump", 1, offset),
             Opcode::Loop => self.jump_instruction("Loop", -1, offset),
+
             Opcode::Call => {
                 self.write_instruction("Call", offset);
 
@@ -75,12 +88,12 @@ impl<'a> Disassembler<'a> {
                 );
                 print!("{}{}", index, i_padding);
 
-                println!(" (arg_count: {})", index);                
+                println!(" (arg_count: {})", index);
 
                 offset + 2
             }
 
-            Opcode::Closure => self.simple_instruction("Closure", offset),
+            Opcode::Closure => self.closure(offset),
             Opcode::BuildClass => self.simple_instruction("Class", offset),
             Opcode::BuildCon => self.simple_instruction("BuildCon", offset),
             Opcode::Print => self.simple_instruction("Print", offset),
@@ -91,15 +104,18 @@ impl<'a> Disassembler<'a> {
 
     fn simple_instruction(&self, name: &str, offset: usize) -> usize {
         self.write_instruction(name, offset);
-        print!("\n");
+        println!();
         offset + 1
     }
 
     fn byte_instruction(&self, name: &str, offset: usize) -> usize {
         self.write_instruction(name, offset);
         let index = &self.function.chunk.code[offset + 1];
+
         let i_padding = " ".repeat(
             self.function.chunk.constants.len().to_string().len() - index.to_string().len(),
+            //.checked_sub(index.to_string().len())
+            //.unwrap_or(0),
         );
         print!("{}{}", index, i_padding);
 
@@ -114,7 +130,7 @@ impl<'a> Disassembler<'a> {
 
         let bytes = self.function.chunk.code[offset + 1..offset + 5]
             .try_into()
-            .expect(&format!("Expected a slice of length {}.", 4));
+            .unwrap_or_else(|_| panic!("Expected a slice of length {}.", 4));
         let index = u32::from_le_bytes(bytes);
         let i_padding = " ".repeat(
             self.function.chunk.constants.len().to_string().len() - index.to_string().len(),
@@ -124,8 +140,23 @@ impl<'a> Disassembler<'a> {
         if has_value {
             self.write_value(index as usize);
         } else {
-            print!("\n");
+            println!();
         }
+
+        offset + 5
+    }
+
+    fn upvalue_instruction(&self, name: &str, offset: usize) -> usize {
+        use std::convert::TryInto;
+        self.write_instruction(name, offset);
+
+        let bytes: [u8; 4] = self.function.chunk.code[offset + 1..offset + 5]
+            .try_into()
+            .unwrap_or_else(|_| panic!("Expected a slice of length {}.", 4));
+
+        let index = u32::from_le_bytes(bytes);
+
+        print!("{}\n", index);
 
         offset + 5
     }
@@ -139,11 +170,11 @@ impl<'a> Disassembler<'a> {
         let i_padding =
             " ".repeat(self.function.chunk.code.len().to_string().len() - jump.to_string().len());
 
-        print!(
-            "{}{} -> {}\n",
+        println!(
+            "{}{} -> {}",
             i_padding,
             offset,
-            offset as i32 + 3 as i32 + sign as i32 * jump as i32
+            offset as i32 + 3_i32 + sign as i32 * jump as i32
         );
 
         offset + 3
@@ -165,7 +196,7 @@ impl<'a> Disassembler<'a> {
 
         let bytes = self.function.chunk.code[offset + 1..offset + 5]
             .try_into()
-            .expect(&format!("Expected a slice of length {}.", 4));
+            .unwrap_or_else(|_| panic!("Expected a slice of length {}.", 4));
         let index = u32::from_le_bytes(bytes);
         let i_padding = " ".repeat(
             self.function.chunk.constants.len().to_string().len() - index.to_string().len(),
@@ -173,8 +204,40 @@ impl<'a> Disassembler<'a> {
         print!("{}{}", index, i_padding);
 
         let a = self.function.module.upgrade();
-        print!(" ({})\n", a.unwrap().borrow().get_var(index as usize));
+        println!(
+            " ({})",
+            a.unwrap().borrow().get_value_at_index(index as usize)
+        );
 
         offset + 5
+    }
+
+    fn closure(&self, mut offset: usize) -> usize {
+        self.write_instruction("Closure", offset);
+        offset += 1;
+        println!();
+        let num_upvals = self.function.chunk.code[offset];// + 1];
+
+        offset += 1;
+
+        for _ in 0..num_upvals {
+            //println!("{}; {}", self.function.chunk.code[offset], self.function.chunk.code[offset + 1]);
+
+            let is_local = self.function.chunk.code[offset];
+
+            self.write_instruction(&self.function.chunk.code[offset + 1].to_string(), offset + 1);
+
+            if is_local == 0 {
+                println!("  local")
+            } else if is_local == 1 {
+                println!("  upvalue");
+            } else {
+                panic!("something broke");
+            }
+
+            offset += 2;
+        }
+
+        offset
     }
 }

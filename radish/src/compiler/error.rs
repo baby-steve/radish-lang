@@ -18,11 +18,7 @@ impl SyntaxError {
     }
 
     pub fn get_cause(self) -> Option<SyntaxError> {
-        if let Some(err) = self.cause {
-            Some(*err)
-        } else {
-            None
-        }
+        self.cause.map(|err| *err)
     }
 
     pub fn is_unexpected_eof(self) -> bool {

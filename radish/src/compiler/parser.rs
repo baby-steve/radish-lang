@@ -179,7 +179,7 @@ impl Parser {
             | (TokenType::Then, TokenType::Else)
             | (TokenType::Else, TokenType::EndIf)
             | (TokenType::Loop, TokenType::EndLoop)
-            | (TokenType::LeftParen, TokenType::RightParen) => return Ok(body),
+            | (TokenType::LeftParen, TokenType::RightParen) => Ok(body),
             _ => {
                 let err_kind = SyntaxErrorKind::MismatchedDelimiter {
                     first: Item::new(&opening_delimiter.span, opening_delimiter.syntax()),
@@ -188,7 +188,7 @@ impl Parser {
 
                 let err = self.error(err_kind);
 
-                return Err(err);
+                Err(err)
             }
         }
     }
@@ -584,16 +584,16 @@ impl Parser {
                 SyntaxErrorKind::Unexpected { found } => {
                     let err_kind = SyntaxErrorKind::ExpectedExpression { actual: found };
                     let err = self.error(err_kind);
-                    return Err(err);
+                    Err(err)
                 }
                 SyntaxErrorKind::UnexpectedEof { ref location } => {
                     let err_kind = SyntaxErrorKind::ExpectedExpression {
-                        actual: Item::new(&location, "<eof>"),
+                        actual: Item::new(location, "<eof>"),
                     };
                     let expected_expr = self.error(err_kind).set_cause(err);
-                    return Err(expected_expr);
+                    Err(expected_expr)
                 }
-                _ => return Err(err),
+                _ => Err(err)
             },
         }
     }
@@ -601,18 +601,13 @@ impl Parser {
     fn parse_boolean_expression(&mut self) -> Result<Expr, SyntaxError> {
         let mut node = self.parse_boolean_term()?;
 
-        loop {
-            match self.current.token_type {
-                TokenType::Or => {
-                    self.consume(TokenType::Or);
+        while let TokenType::Or = self.current.token_type {
+            self.consume(TokenType::Or);
 
-                    let right = self.parse_boolean_term()?;
+            let right = self.parse_boolean_term()?;
 
-                    let span = Span::combine(&node.position(), &right.position());
-                    node = AST::logical_expr(Box::new(BinaryExpr::new(Op::Or, node, right)), span)
-                }
-                _ => break,
-            }
+            let span = Span::combine(&node.position(), &right.position());
+            node = AST::logical_expr(Box::new(BinaryExpr::new(Op::Or, node, right)), span)
         }
 
         Ok(node)
@@ -621,18 +616,13 @@ impl Parser {
     fn parse_boolean_term(&mut self) -> Result<Expr, SyntaxError> {
         let mut node = self.parse_boolean_factor()?;
 
-        loop {
-            match self.current.token_type {
-                TokenType::And => {
-                    self.consume(TokenType::And);
+        while let TokenType::And = self.current.token_type {
+            self.consume(TokenType::And);
 
-                    let right = self.parse_boolean_factor()?;
+            let right = self.parse_boolean_factor()?;
 
-                    let span = Span::combine(&node.position(), &right.position());
-                    node = AST::logical_expr(Box::new(BinaryExpr::new(Op::And, node, right)), span)
-                }
-                _ => break,
-            }
+            let span = Span::combine(&node.position(), &right.position());
+            node = AST::logical_expr(Box::new(BinaryExpr::new(Op::And, node, right)), span)
         }
 
         Ok(node)
@@ -881,10 +871,7 @@ impl Parser {
                 }
                 // <id>
                 TokenType::Ident(name) => {
-                    let id = Ident {
-                        name: name.to_string(),
-                        pos: Span::from(&current.span),
-                    };
+                    let id = Ident::new(name.to_string(), Span::from(&current.span));
 
                     let node = AST::identifier(id);
 
@@ -934,10 +921,7 @@ impl Parser {
             TokenType::Ident(id) => {
                 self.consume(TokenType::Ident(id.clone()));
 
-                Ok(Ident {
-                    name: id.to_string(),
-                    pos: Span::from(&token.span),
-                })
+                Ok(Ident::new(id.to_string(), Span::from(&token.span)))
             }
             // <error>
             _ => {
@@ -945,7 +929,7 @@ impl Parser {
                     actual: Item::new(&self.current.span, token.syntax()),
                 };
                 let err = SyntaxError::new(err_kind);
-                return Err(err);
+                Err(err)
             }
         }
     }
@@ -1008,634 +992,3 @@ impl Parser {
         Ok(AST::paren_expr(Box::new(expr), span))
     }
 }
-/*
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn parse_boolean_literal() {
-        let source = Source::source("true");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::Literal(
-                        Literal::Bool(true),
-                        Span::new(Rc::clone(&source), 0, 4)
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 4)
-            ))
-        );
-
-        let source = Source::source("false");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::Literal(
-                        Literal::Bool(false),
-                        Span::new(Rc::clone(&source), 0, 5)
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 5)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_nil_literal() {
-        let source = Source::source("nil");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::Literal(
-                        Literal::Nil,
-                        Span::new(Rc::clone(&source), 0, 3)
-                    ))
-                }),
-                Span::new(Rc::clone(&source), 0, 3)
-            ))
-        );
-    }
-
-    #[test]
-    fn parse_unary_minus() {
-        let source = Source::source("-23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::UnaryExpr(
-                        Box::new(UnaryExpr {
-                            op: Op::Subtract,
-                            arg: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(23.0),
-                                Span::new(Rc::clone(&source), 1, 3)
-                            ))
-                        }),
-                        Span::new(Rc::clone(&source), 0, 3)
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 3)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_unary_not() {
-        let source = Source::source("!23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::UnaryExpr(
-                        Box::new(UnaryExpr {
-                            op: Op::Bang,
-                            arg: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(23.0),
-                                Span::new(Rc::clone(&source), 1, 3)
-                            ))
-                        }),
-                        Span::new(Rc::clone(&source), 0, 3)
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 3)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_binary_add_expr() {
-        let source = Source::source("1 + 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(1.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::Add,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(23.0),
-                                Span::new(Rc::clone(&source), 4, 6),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 6),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 6)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_binary_sub_expr() {
-        let source = Source::source("1 - 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(1.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::Subtract,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(23.0),
-                                Span::new(Rc::clone(&source), 4, 6),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 6),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 6)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_binary_mul_expr() {
-        let source = Source::source("1 * 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(1.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::Multiply,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(23.0),
-                                Span::new(Rc::clone(&source), 4, 6),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 6),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 6)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_binary_div_expr() {
-        let source = Source::source("1 / 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(1.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::Divide,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(23.0),
-                                Span::new(Rc::clone(&source), 4, 6),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 6),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 6)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_less_than_expr() {
-        let source = Source::source("2 < 4");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(2.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::LessThan,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(4.0),
-                                Span::new(Rc::clone(&source), 4, 5),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 5),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 5)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_less_than_equals_expr() {
-        let source = Source::source("2 <= 4");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(2.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::LessThanEquals,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(4.0),
-                                Span::new(Rc::clone(&source), 5, 6),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 6),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 6)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_greater_than_expr() {
-        let source = Source::source("2 > 4");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(2.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::GreaterThan,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(4.0),
-                                Span::new(Rc::clone(&source), 4, 5),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 5),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 5)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_greater_than_equals_expr() {
-        let source = Source::source("2 >= 4");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(2.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::GreaterThanEquals,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(4.0),
-                                Span::new(Rc::clone(&source), 5, 6),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 6),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 6)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_equals_to_expr() {
-        let source = Source::source("2 == 4");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(2.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::EqualsTo,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(4.0),
-                                Span::new(Rc::clone(&source), 5, 6),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 6),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 6)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_not_equal_expr() {
-        let source = Source::source("2 != 4");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::Stmt(Stmt::ExpressionStmt(
-                Box::new(ExpressionStmt {
-                    expr: ASTNode::Expr(Expr::BinaryExpr(
-                        Box::new(BinaryExpr {
-                            left: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(2.0),
-                                Span::new(Rc::clone(&source), 0, 1),
-                            )),
-                            op: Op::NotEqual,
-                            right: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(4.0),
-                                Span::new(Rc::clone(&source), 5, 6),
-                            )),
-                        },),
-                        Span::new(Rc::clone(&source), 0, 6),
-                    ),)
-                }),
-                Span::new(Rc::clone(&source), 0, 6)
-            ))
-        )
-    }
-
-    #[test]
-    fn parse_var_declaration() {
-        let source = Source::source("var x");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::from(Stmt::VarDeclaration(
-                Box::new(VarDeclaration {
-                    id: Ident {
-                        name: "x".to_string(),
-                        pos: Span::new(Rc::clone(&source), 4, 5)
-                    },
-                    init: None,
-                }),
-                Span::new(Rc::clone(&source), 0, 5)
-            ))
-        );
-    }
-
-    #[test]
-    fn parse_var_declaration_with_value() {
-        let source = Source::source("var x = 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::from(Stmt::VarDeclaration(
-                Box::new(VarDeclaration {
-                    id: Ident {
-                        name: "x".to_string(),
-                        pos: Span::new(Rc::clone(&source), 4, 5)
-                    },
-                    init: Some(ASTNode::from(Expr::Literal(
-                        Literal::Number(23.0),
-                        Span::new(Rc::clone(&source), 8, 10)
-                    )))
-                }),
-                Span::new(Rc::clone(&source), 0, 10)
-            ))
-        );
-    }
-
-    #[test]
-    fn parse_print_statement() {
-        let source = Source::source("print 23");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::from(Stmt::PrintStmt(
-                Box::new(ASTNode::from(Expr::Literal(
-                    Literal::Number(23.0),
-                    Span::new(Rc::clone(&source), 6, 8)
-                ))),
-                Span::new(Rc::clone(&source), 0, 8),
-            ))
-        );
-    }
-
-    #[test]
-    fn parse_block_statement() {
-        let source = Source::source("{ 23 }");
-        let result = &Parser::new(Rc::clone(&source)).parse().unwrap().items[0];
-
-        assert_eq!(
-            *result,
-            ASTNode::from(Stmt::BlockStmt(
-                Box::new(BlockStmt {
-                    body: vec![ASTNode::Stmt(Stmt::ExpressionStmt(
-                        Box::new(ExpressionStmt {
-                            expr: ASTNode::Expr(Expr::Literal(
-                                Literal::Number(23.0),
-                                Span::new(Rc::clone(&source), 2, 4)
-                            ))
-                        }),
-                        Span::new(Rc::clone(&source), 2, 4)
-                    ))]
-                }),
-                Span::new(Rc::clone(&source), 0, 6)
-            ))
-        )
-    }
-
-    #[test]
-    fn test_invaild_expr() {
-        let sources = vec![
-            Source::source("12 + ?"),
-            Source::source("12 - ?"),
-            Source::source("12 * ?"),
-            Source::source("12 / ?"),
-            Source::source("12 < ?"),
-            Source::source("12 > ?"),
-            Source::source("12 <= ?"),
-            Source::source("12 >= ?"),
-            Source::source("12 == ?"),
-            Source::source("12 + 3 + ?"),
-            Source::source("12 + 3 - ?"),
-            Source::source("12 + 3 * ?"),
-            Source::source("12 + 3 / ?"),
-        ];
-
-        for source in sources {
-            let result = Parser::new(Rc::clone(&source)).parse();
-            let err = match result {
-                Err(err) => err,
-                Ok(_) => unreachable!("The parser should return an error."),
-            };
-            assert_eq!(
-                err.error,
-                ExpectedError(ExpectedExpression(
-                    "found unexpected token '?'.".to_string()
-                ))
-            );
-        }
-    }
-
-    #[test]
-    fn test_unexpected_eof() {
-        let sources = vec![
-            Source::source("12 +"),
-            Source::source("12 -"),
-            Source::source("12 *"),
-            Source::source("12 /"),
-            Source::source("12 + 3 +"),
-            Source::source("12 + 3 -"),
-            Source::source("12 + 3 *"),
-            Source::source("12 + 3 /"),
-        ];
-
-        for source in sources {
-            let result = &Parser::new(Rc::clone(&source)).parse();
-            let err = match result {
-                Err(err) => err,
-                Ok(_) => unreachable!(),
-            };
-            println!("failed on: {}", source.contents);
-            assert_eq!(
-                err.error,
-                ExpectedError(ExpectedExpression("found unexpected '<Eof>'.".to_string()))
-            );
-        }
-    }
-
-    #[test]
-    fn test_unbalanced_parentheses() {
-        let sources = vec![
-            (
-                Source::source("(1 + 2"),
-                ExpectedRightParen("found '<Eof>'.".to_string()),
-            ),
-            (
-                Source::source("1 + (2 + 3"),
-                ExpectedRightParen("found '<Eof>'.".to_string()),
-            ),
-            (
-                Source::source("(1 + 2 ?"),
-                ExpectedRightParen("found unexpected token '?'.".to_string()),
-            ),
-            (
-                Source::source("(1 + (1 + (1 + (1 + 2)))?"),
-                ExpectedRightParen("found unexpected token '?'.".to_string()),
-            ),
-            (
-                Source::source("(1 + ?)"),
-                ExpectedExpression("found unexpected token '?'.".to_string()),
-            ),
-        ];
-
-        for (source, error) in sources {
-            let result = &Parser::new(Rc::clone(&source)).parse();
-            let err = match result {
-                Err(err) => err,
-                Ok(_) => unreachable!(),
-            };
-            println!("failed on: {}", source.contents);
-            assert_eq!(err.error, ExpectedError(error));
-        }
-    }
-
-    #[test]
-    fn test_make_error() {
-        let mut parser = Parser::new(Source::source(""));
-
-        // if the first error is Unexpected return the second error.
-        let first = SyntaxError::new(SyntaxError::UnexpectedError(UnexpectedEOF), &Span::empty());
-        let second = ExpectedError(ExpectedExpression(first.error.to_string()));
-
-        let from = parser.make_error(first, second);
-
-        assert_eq!(
-            from,
-            SyntaxError::new(
-                ExpectedError(ExpectedExpression(
-                    SyntaxError::UnexpectedError(UnexpectedEOF).to_string(),
-                )),
-                &Span::empty()
-            )
-        );
-
-        // If the first is expected, return the the first error.
-        let first = SyntaxError::new(
-            ExpectedError(ExpectedExpression("found error".to_string())),
-            &Span::empty(),
-        );
-        let second = SyntaxError::UnexpectedError(UnexpectedEOF);
-
-        let from = parser.make_error(first, second);
-
-        assert_eq!(
-            from,
-            SyntaxError::new(
-                ExpectedError(ExpectedExpression("found error".to_string())),
-                &Span::empty(),
-            )
-        );
-
-        // if the both are expected, return the first error.
-        let first = SyntaxError::new(
-            ExpectedError(ExpectedExpression("found error".to_string())),
-            &Span::empty(),
-        );
-        let second = ExpectedError(ExpectedExpression("found error".to_string()));
-        let from = parser.make_error(first, second);
-
-        assert_eq!(
-            from,
-            SyntaxError::new(
-                ExpectedError(ExpectedExpression("found error".to_string())),
-                &Span::empty(),
-            )
-        )
-    }
-}
-*/

@@ -5,6 +5,8 @@ use crate::{
     compiler::Compiler, compiler::Parser, compiler::SyntaxError, compiler::AST, config::Config,
 };
 
+use super::{validate_ast, resolve_symbols, hoist::hoist};
+
 type ASTPass = Box<dyn FnMut(&mut AST) -> Result<(), SyntaxError> + 'static>;
 
 pub struct PipelineSettings {
@@ -54,6 +56,14 @@ impl CompilerPipeLine {
         }
     }
 
+    pub fn with_default_passes(mut self) -> Self {
+        self.register_pass(resolve_symbols);
+        self.register_pass(validate_ast);
+        self.register_pass(hoist);
+        
+        self
+    }
+
     pub fn register_pass<F: 'static>(&mut self, pass: F) -> &mut Self
     where
         F: FnMut(&mut AST) -> Result<(), SyntaxError>,
@@ -67,7 +77,7 @@ impl CompilerPipeLine {
     }
 
     fn _compile(&mut self, file_name: &str, src: &str) -> Result<CompiledModule, SyntaxError> {
-        let source = Source::new(&src, &file_name);
+        let source = Source::new(src, &file_name);
 
         let mut parser = Parser::with_config(source, &self.settings);
 
@@ -77,7 +87,7 @@ impl CompilerPipeLine {
             ast.visit(callback)?;
         }
 
-        let module = self.compiler.compile(&file_name, &ast)?;
+        let module = self.compiler.compile(file_name, &ast)?;
 
         Ok(module)
     }

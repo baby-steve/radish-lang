@@ -1,0 +1,5 @@
+fun main() {
+    return
+}
+
+print main() // expect: nil

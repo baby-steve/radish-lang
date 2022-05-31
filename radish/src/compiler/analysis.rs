@@ -41,7 +41,7 @@ impl Analyzer {
     }
 
     pub fn analyze(&mut self, ast: &mut AST) -> Result<(), SyntaxError> {
-        self.foward_declare(&ast);
+        self.foward_declare(ast);
 
         for node in ast.items.iter_mut() {
             match self.visit_stmt(node) {
@@ -202,10 +202,10 @@ impl Analyzer {
     ) -> Result<(), SyntaxError> {
         let depth = self.scopes.len() - 1;
 
-        let symbol = Symbol::new(kind, &span, depth);
+        let symbol = Symbol::new(kind, span, depth);
 
-        if let Some(Symbol(_, prev_pos, _)) = self.local_scope().add_local(&name, symbol) {
-            return Err(self.duplicate_ids(&name, &span, &prev_pos));
+        if let Some(Symbol(_, prev_pos, _)) = self.local_scope().add_local(name, symbol) {
+            return Err(self.duplicate_ids(name, span, &prev_pos));
         }
 
         Ok(())
@@ -217,9 +217,7 @@ impl Analyzer {
             item: Item::new(span, name),
         };
 
-        let err = SyntaxError::new(err_kind);
-
-        err
+        SyntaxError::new(err_kind)
     }
 
     /// Create a duplicate identifier error.
@@ -229,18 +227,17 @@ impl Analyzer {
             second: Item::new(pos, name),
         };
 
-        let err = SyntaxError::new(err_kind);
-
-        err
+        SyntaxError::new(err_kind)
     }
 
-    fn param_list(&mut self, params: &Vec<Ident>) -> Result<(), SyntaxError> {
+    fn param_list(&mut self, params: &[Ident]) -> Result<(), SyntaxError> {
         let depth = self.scopes.len() - 1;
 
         for param in params {
-            if let Some(_) = self
+            if self
                 .local_scope()
                 .add_local(&param.name, Symbol::var(&param.pos, depth))
+                .is_some()
             {
                 let err_kind = SyntaxErrorKind::DuplicateParam {
                     param: Item::new(&param.pos, &param.name),
@@ -339,21 +336,13 @@ impl Visitor<'_> for Analyzer {
         _kind: VarKind,
     ) -> VisitorResult {
         // check the right hand expression if it exists.
-        match expr {
-            Some(expr) => {
-                self.visit_expr(expr)?;
-            }
-            _ => {}
+        if let Some(expr) = expr {
+            self.visit_expr(expr)?;
         }
 
         // check if this is the definition of a previously unresolved global variable.
-        if self.scopes.len() == 1 {
-            match self.unresolved.get(&id) {
-                Some(_) => {
-                    self.unresolved.remove(&id);
-                }
-                None => {}
-            };
+        if self.scopes.len() == 1 && self.unresolved.get(id).is_some() {
+            self.unresolved.remove(id);
         }
 
         // add this variable to the current scope, checking for duplicates.

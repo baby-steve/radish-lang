@@ -214,14 +214,11 @@ impl Token {
     }
 
     pub fn is_delimiter(&self) -> bool {
-        match &self.token_type {
-            TokenType::RightBrace
+        matches!(&self.token_type, TokenType::RightBrace
             | TokenType::Else
             | TokenType::EndLoop
             | TokenType::EndIf
-            | TokenType::RightParen => true,
-            _ => false,
-        }
+            | TokenType::RightParen)
     }
 
     pub fn lookup_from_string(&self, syntax: &str) -> Option<TokenType> {

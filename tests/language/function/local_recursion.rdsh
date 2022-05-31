@@ -1,0 +1,12 @@
+// ignore
+
+{
+    fun fib(n) {
+        if n < 2 then 
+            return n 
+        endif
+        return fib(n - 1) + fib(n - 2)
+    }
+
+    print fib(9) // expect: 34
+}

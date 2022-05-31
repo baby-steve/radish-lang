@@ -1,0 +1,9 @@
+var i = 0
+while i < 3 loop
+    print i
+    i += 1
+endloop
+
+// expect: 0
+// expect: 1
+// expect: 2

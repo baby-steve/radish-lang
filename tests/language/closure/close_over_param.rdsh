@@ -1,0 +1,10 @@
+fun outer(p) {
+    fun inner() {
+        print p
+    }
+
+    return inner
+}
+
+var a = outer("cat")
+a() // expect: "cat"
