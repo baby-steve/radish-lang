@@ -410,9 +410,11 @@ dependencies = [
 name = "tests"
 version = "0.1.0"
 dependencies = [
+ "colored",
  "lazy_static",
  "radish",
  "regex",
+ "termcolor",
 ]
 
 [[package]]

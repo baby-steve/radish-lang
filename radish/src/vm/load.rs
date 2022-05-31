@@ -58,14 +58,14 @@ impl VM {
     ///
     /// # Examples
     /// 
-    /// ```
+    /// ```no_run,
     /// # fn main() -> Result<(), radish::RadishError> {
     /// use radish::{VM, Namespace, Module, NamespaceBuilder};
     ///
     /// struct SomeNamespace;
     ///
     /// impl Namespace for SomeNamespace {
-    ///     fn name(&self) -> String {
+    ///     fn name(&self) -> &str {
     ///         "some_namespace"
     ///     }
     ///
