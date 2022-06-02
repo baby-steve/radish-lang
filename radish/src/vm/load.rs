@@ -48,7 +48,7 @@ impl VM {
 
         let name = module.name.to_string();
 
-        self.resolver.load(name, module);
+        self.loader.load_module(&name, module);
 
         Ok(self)
     }

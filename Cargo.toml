@@ -1,9 +1,8 @@
 [workspace]
-
 members = [ 
     "radish", 
     "cli", 
-    
+    "examples",
     "tests" 
 ]
 

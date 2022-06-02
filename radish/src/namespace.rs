@@ -28,6 +28,11 @@ impl NamespaceBuilder {
             namespace.add_module(module);
         }
 
+        for module in namespace.modules().iter() {
+            let name = name.clone() + "/" + &*module.borrow().name;
+            vm.loader.load_ref(&name, std::rc::Rc::clone(module));
+        }
+
         vm.load_module(namespace)
             .expect(&format!("failed to load namespace: {}", name));
     }
