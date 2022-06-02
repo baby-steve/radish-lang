@@ -1,0 +1,8 @@
+[package]
+name = "radish-examples"
+version = "0.1.0"
+edition = "2018"
+publish = false
+
+[dependencies]
+radish = { path = "../radish" }
