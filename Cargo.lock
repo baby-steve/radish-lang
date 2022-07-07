@@ -274,6 +274,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "radish-examples"
+version = "0.1.0"
+dependencies = [
+ "radish",
+]
+
+[[package]]
 name = "radix_trie"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

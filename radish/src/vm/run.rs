@@ -8,7 +8,7 @@ use crate::{
 
 use crate::vm::{CallFrame, VM};
 
-use super::value::UpValue;
+use super::{value::UpValue, native::NativeFunction};
 
 impl VM {
     /// Create a new [`Trace`] with the given message, adding context to it.
@@ -107,6 +107,7 @@ impl VM {
     fn call_value(&mut self, callee: Value, arg_count: usize) -> Result<(), Trace> {
         match callee {
             Value::Closure(fun) => self.call_function(fun, arg_count),
+            Value::NativeFunction(fun) => self.call_native(fun),
             _ => {
                 let message = format!("'{}' is not callable", callee);
                 let trace = self.error(message);
@@ -137,6 +138,20 @@ impl VM {
 
         self.frames.push(frame);
         self.frame_count += 1;
+
+        Ok(())
+    }
+
+    #[inline]
+    fn call_native(&mut self, fun: Rc<NativeFunction>) -> Result<(), Trace> {
+        let mut args = vec![];
+        for _ in 0..fun.arity {
+            args.push(self.stack.pop());
+        }
+
+        let result = (fun.fun)(self, args)?;
+        self.stack.pop();
+        self.stack.push(result);
 
         Ok(())
     }
@@ -370,7 +385,10 @@ impl VM {
 
         let upvalues = &closure.non_locals;
 
-        debug_assert!(!upvalues.borrow().is_empty(), "the closure's upvalue list should not be empty");
+        debug_assert!(
+            !upvalues.borrow().is_empty(),
+            "the closure's upvalue list should not be empty"
+        );
 
         //println!(
         //    "[vm] closure \"{}\" has the following upvalues: {:?}",
@@ -392,7 +410,7 @@ impl VM {
         let index = self.read_long() as usize;
 
         let frame = &self.frames[self.frame_count - 1].closure.non_locals;
-        let upval =  &mut frame.borrow_mut()[index];
+        let upval = &mut frame.borrow_mut()[index];
         let val = self.stack.peek().unwrap();
 
         upval.set_value(&self.frames, &mut self.stack, val);
@@ -443,20 +461,10 @@ impl VM {
             .into_string()
             .expect("path is not a string");
 
-        // TODO: find a better way to get this.
-        let source_path = "";
-
-        // TODO: figure out import semantics.
-        // currently any import will only ever be runned once. While this seems
-        // to be a common trend, I'm not sure if its the best choice.
-        if self.resolver.is_cached(&*path.borrow(), Some(source_path)) {
-            return Ok(());
-        };
-
         let module =
             match self
-                .resolver
-                .resolve(Some(source_path), &path.borrow(), &mut self.compiler)
+                .loader
+                .load(&path.borrow(), &mut self.compiler)
             {
                 Ok(m) => m,
                 Err(e) => {
@@ -466,14 +474,26 @@ impl VM {
                 }
             };
 
+        self.stack.push(Value::Module(Rc::clone(&module)));
+
+        if self.loader.is_cached(&*path.borrow()) {
+            return Ok(());
+        };
+
+        if !module.borrow().has_entry() {
+            return Ok(())
+        }
+
         // swap out the last module with the new one.
         let last_module = std::mem::replace(&mut self.last_module, module);
+
+        // load and run the module's top level code.
+        let entry = self.last_module.borrow().entry().unwrap();
 
         // store the last module.
         self.modules.push(last_module);
 
-        // load and run the module's top level code.
-        let closure = Rc::new(Closure::new(self.last_module.borrow().entry()));
+        let closure = Rc::new(Closure::new(entry));
         self.stack.push(Value::Closure(Rc::clone(&closure)));
         self.call_function(closure, 0)?;
 

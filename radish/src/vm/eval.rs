@@ -1,10 +1,9 @@
 //! Module containing the VM's evaluation methods.
 
 use crate::{
-    common::{CompiledModule},
-    vm::{trace::Trace, VM, from_value::FromValue, value::Closure},
-    RadishError,
-    Value,
+    common::CompiledModule,
+    vm::{from_value::FromValue, trace::Trace, value::Closure, VM},
+    RadishError, Value,
 };
 
 impl VM {
@@ -99,7 +98,7 @@ impl VM {
 
     /// Evaluate a file.
     fn _eval_file(&mut self, file_name: &str) -> Result<Value, RadishError> {
-        let module = self.resolver.resolve(None, file_name, &mut self.compiler)?;
+        let module = self.loader.load(file_name, &mut self.compiler)?;
 
         match self.interpret(module) {
             Ok(res) => Ok(res),
@@ -119,9 +118,18 @@ impl VM {
 
     /// Interprete a compiled module.
     fn interpret(&mut self, module: CompiledModule) -> Result<Value, Trace> {
+        use std::rc::Rc;
+
         self.last_module = module;
 
-        let closure = std::rc::Rc::new(Closure::new(self.last_module.borrow().entry()));
+        let entry = self
+            .last_module
+            .borrow()
+            .entry()
+            .expect("compiled module must have an entry point.");
+
+        let closure = Rc::new(Closure::new(entry));
+
         self.stack.push(Value::Closure(closure.clone()));
         self.call_function(closure, 0)?;
 
