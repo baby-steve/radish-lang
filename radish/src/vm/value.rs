@@ -21,8 +21,8 @@ pub enum Value {
     Class(Rc<Class>),
     Instance(Rc<Instance>),
     Module(Rc<RefCell<Module>>),
-    //Map(Rc<RefCell<ValueMap>>),
     NativeFunction(Rc<NativeFunction>),
+    Array(Rc<RefCell<Vec<Value>>>),
     Nil,
 }
 
@@ -117,6 +117,7 @@ impl Clone for Value {
             Self::Instance(inst) => Self::Instance(Rc::clone(inst)),
             Self::Module(module) => Self::Module(Rc::clone(module)),
             Self::NativeFunction(val) => Self::NativeFunction(Rc::clone(val)),
+            Self::Array(arr) => Self::Array(Rc::clone(arr)),
         }
     }
 }
@@ -134,7 +135,16 @@ impl fmt::Display for Value {
             Value::Instance(val) => write!(f, "<{:?} instance>", val.class.name.borrow()),
             Value::Module(module) => write!(f, "<mod {}>", module.borrow().name),
             Value::NativeFunction(_) => write!(f, "<native fun>"),
-            //Value::Map(map) => write!(f, "{:?}", map.borrow().to_string()),
+            Value::Array(arr) => {
+                write!(f, "[")?;
+
+                for (index, element) in arr.borrow().iter().enumerate() {
+                    let end = if index == arr.borrow().len() - 1 { "" } else { ", " };
+                    write!(f, "{}{}", element, end)?;
+                }
+
+                write!(f, "]")
+            }
             Value::Nil => f.write_str("nil"),
         }
     }

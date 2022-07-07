@@ -53,6 +53,10 @@ pub enum TokenType {
     LeftBrace,
     // }
     RightBrace,
+    // [
+    LeftBracket,
+    // ]
+    RightBracket,
     // ,
     Comma,
     // .
@@ -145,6 +149,8 @@ impl TokenType {
             Newline => "\\n",
             LeftParen => "(",
             RightParen => ")",
+            LeftBracket => "[",
+            RightBracket => "]",
             LeftBrace => "{",
             RightBrace => "}",
             Comma => ",",
@@ -246,6 +252,8 @@ impl Token {
             ")" => TokenType::RightParen,
             "{" => TokenType::LeftBrace,
             "}" => TokenType::RightBrace,
+            "[" => TokenType::LeftBracket,
+            "]" => TokenType::RightBracket,
             "," => TokenType::Comma,
             "." => TokenType::Dot,
             "true" => TokenType::True,
@@ -287,46 +295,3 @@ impl fmt::Display for Token {
         )
     }
 }
-
-/*
-impl fmt::Display for TokenType {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use TokenType::*;
-
-        match *self {
-            Plus => write!(f, "Plus"),
-            Slash => write!(f, "Slash"),
-            Star => write!(f, "Star"),
-            Minus => write!(f, "Minus"),
-            Bang => write!(f, "Bang"),
-            Equals => write!(f, "Equals"),
-            LessThan => write!(f, "LessThan"),
-            LessThanEquals => write!(f, "LessThanEquals"),
-            GreaterThan => write!(f, "GreaterThan"),
-            GreaterThanEquals => write!(f, "GreaterThanEquals"),
-            EqualsTo => write!(f, "EqualsTo"),
-            NotEqual => write!(f, "NotEqual"),
-            Newline => write!(f, "Newline"),
-            LeftParen => write!(f, "LeftParen"),
-            RightParen => write!(f, "RightParen"),
-            LeftBrace => write!(f, "LeftBrace"),
-            RightBrace => write!(f, "RightBrace"),
-            True => write!(f, "True"),
-            False => write!(f, "False"),
-            Nil => write!(f, "Nil"),
-            Var => write!(f, "Var"),
-            Print => write!(f, "Print"),
-            And => write!(f, "And"),
-            Or => write!(f, "Or"),
-            If => write!(f, "If"),
-            Then => write!(f, "Then"),
-            End => write!(f, "End"),
-            Number(_) => write!(f, "Number"),
-            Ident(_) => write!(f, "Ident"),
-            Comment(_, _) => write!(f, "Comment"),
-            String(_) => write!(f, "String"),
-            Error(_) => write!(f, "Error"),
-            Eof => write!(f, "Eof"),
-        }
-    }
-} */

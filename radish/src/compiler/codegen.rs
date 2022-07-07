@@ -810,6 +810,7 @@ impl Compiler {
 
     fn expression(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         match expr {
+            Expr::ArrayExpr(array, _) => self.array(array),
             Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
             Expr::ParenExpr(expr, _) => self.expression(expr),
             Expr::UnaryExpr(op, arg, _) => self.unary(arg, op),
@@ -822,6 +823,22 @@ impl Compiler {
             Expr::Bool(val, _) => self.boolean(val),
             Expr::Nil(_) => self.nil(),
         }
+    }
+
+    fn array(&mut self, array: &[Expr]) -> Result<(), SyntaxError> {
+        for element in array.iter().rev() {
+            self.expression(element)?;
+        }
+
+        self.emit_byte(Opcode::BuildArray as u8);
+
+        let element_count = array.len() as u32;
+
+        for byte in element_count.to_le_bytes() {
+            self.emit_byte(byte);
+        }
+
+        Ok(())
     }
 
     fn binary_expression(&mut self, expr: &BinaryExpr) -> Result<(), SyntaxError> {

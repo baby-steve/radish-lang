@@ -102,6 +102,10 @@ impl AST {
         Stmt::PrintStmt(expr, span)
     }
 
+    pub fn array(elements: Vec<Expr>, span: Span) -> Expr {
+        Expr::ArrayExpr(elements, span)
+    }
+
     pub fn binary_expr(expr: Box<BinaryExpr>, span: Span) -> Expr {
         Expr::BinaryExpr(expr, span)
     }
@@ -273,6 +277,8 @@ impl Stmt {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
+    /// An array literal.
+    ArrayExpr(Vec<Expr>, Span),
     /// A binary expression
     /// ```txt
     /// <expr> <op> <expr>
@@ -321,7 +327,8 @@ pub enum Expr {
 impl Expr {
     pub fn position(&self) -> Span {
         match self {
-            Self::BinaryExpr(_, pos)
+            Self::ArrayExpr(_, pos)
+            | Self::BinaryExpr(_, pos)
             | Self::ParenExpr(_, pos)
             | Self::UnaryExpr(_, _, pos)
             | Self::LogicalExpr(_, pos)

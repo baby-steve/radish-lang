@@ -151,6 +151,7 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_expr(&mut self, expr: &mut Expr) -> VisitorResult {
         match expr {
+            Expr::ArrayExpr(array, _) => self.visit_array(array),
             Expr::BinaryExpr(expr, _) => self.visit_binary_expr(expr),
             Expr::ParenExpr(expr, _) => self.visit_paren_expr(expr),
             Expr::UnaryExpr(op, arg, _) => self.visit_unary_expr(op, arg),
@@ -160,6 +161,14 @@ pub trait Visitor<'a>: Sized {
             Expr::Identifier(ident) => self.visit_ident(ident),
             Expr::Number(_, _) | Expr::Bool(_, _) | Expr::String(_, _) | Expr::Nil(_) => Ok(()),
         }
+    }
+
+    fn visit_array(&mut self, array: &mut [Expr]) -> VisitorResult {
+        for element in array.iter_mut() {
+            self.visit_expr(element)?;
+        }
+
+        Ok(())
     }
 
     fn visit_binary_expr(&mut self, expr: &mut BinaryExpr) -> VisitorResult {

@@ -593,7 +593,7 @@ impl Parser {
                     let expected_expr = self.error(err_kind).set_cause(err);
                     Err(expected_expr)
                 }
-                _ => Err(err)
+                _ => Err(err),
             },
         }
     }
@@ -829,6 +829,8 @@ impl Parser {
                 }
                 // ( ...
                 TokenType::LeftParen => return self.parse_paren(),
+                // [
+                TokenType::LeftBracket => return self.parse_array_literal(),
                 // - ...
                 TokenType::Minus => {
                     self.consume(TokenType::Minus);
@@ -990,5 +992,37 @@ impl Parser {
         );
 
         Ok(AST::paren_expr(Box::new(expr), span))
+    }
+
+    fn parse_array_literal(&mut self) -> Result<Expr, SyntaxError> {
+        // TODO: trailing comma?
+
+        let start = self.current.span.clone();
+        let mut elements = vec![];
+
+        // [ ...
+        self.consume(TokenType::LeftBracket);
+
+        // [ x, y, z ...
+        if !self.check(&TokenType::RightBracket) {
+            loop {
+                let expr = self.parse_sum()?;
+                elements.push(expr);
+
+                if !self.match_token(&TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        // [ ... ]
+        self.expect(TokenType::RightBracket)?;
+
+        let span = Span::combine(
+            &start,
+            &self.current.span,
+        );
+
+        Ok(AST::array(elements, span))
     }
 }

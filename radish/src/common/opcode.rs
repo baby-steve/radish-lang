@@ -174,6 +174,7 @@ pub enum Opcode {
     ///
     /// [function][arg_1][arg_2]...[arg_n]
     Call,
+    BuildArray,
     /// TODO:
     BuildClass,
     /// TODO:

@@ -1,3 +1,5 @@
+// TODO: rewrite this entire thing as it's gotten quite gnarly and is due for a refactor.
+
 use crate::vm::value::Function;
 
 pub struct Disassembler<'a> {
@@ -93,6 +95,7 @@ impl<'a> Disassembler<'a> {
                 offset + 2
             }
 
+            Opcode::BuildArray => self.long_const_instruction("BuildArray", offset, false),
             Opcode::Closure => self.closure(offset),
             Opcode::BuildClass => self.simple_instruction("Class", offset),
             Opcode::BuildCon => self.simple_instruction("BuildCon", offset),

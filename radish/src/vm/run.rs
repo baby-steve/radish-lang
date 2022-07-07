@@ -1,4 +1,4 @@
-use std::{convert::TryInto, rc::Rc};
+use std::{convert::TryInto, rc::Rc, cell::RefCell};
 
 use crate::{
     common::{Disassembler, Opcode},
@@ -137,6 +137,23 @@ impl VM {
 
         self.frames.push(frame);
         self.frame_count += 1;
+
+        Ok(())
+    }
+
+    fn make_array(&mut self) -> Result<(), Trace> {
+        let element_count = self.read_long() as usize;
+        let mut elements = Vec::with_capacity(element_count);
+
+        for _ in 0..element_count {
+            let value = self.stack.pop();
+
+            elements.push(value);
+        }
+
+        let array = Value::Array(Rc::new(RefCell::new(elements)));
+        
+        self.stack.push(array);
 
         Ok(())
     }
@@ -370,7 +387,10 @@ impl VM {
 
         let upvalues = &closure.non_locals;
 
-        debug_assert!(!upvalues.borrow().is_empty(), "the closure's upvalue list should not be empty");
+        debug_assert!(
+            !upvalues.borrow().is_empty(),
+            "the closure's upvalue list should not be empty"
+        );
 
         //println!(
         //    "[vm] closure \"{}\" has the following upvalues: {:?}",
@@ -392,7 +412,7 @@ impl VM {
         let index = self.read_long() as usize;
 
         let frame = &self.frames[self.frame_count - 1].closure.non_locals;
-        let upval =  &mut frame.borrow_mut()[index];
+        let upval = &mut frame.borrow_mut()[index];
         let val = self.stack.peek().unwrap();
 
         upval.set_value(&self.frames, &mut self.stack, val);
@@ -589,6 +609,7 @@ impl VM {
                 Opcode::JumpIfTrue => self.jump_if_true()?,
                 Opcode::Jump => self.jump()?,
                 Opcode::Loop => self.loop_()?,
+                Opcode::BuildArray => self.make_array()?,
                 Opcode::Closure => self.make_closure()?,
                 Opcode::BuildClass => self.make_class()?,
                 Opcode::BuildCon => self.make_constructor()?,
@@ -600,11 +621,6 @@ impl VM {
                     self.call_value(callee, arg_count)?;
                 }
                 Opcode::Return => {
-                    //println!(
-                    //    "[vm] returning from {}",
-                    //    self.current_frame().closure.function.name
-                    //);
-
                     let result = self.stack.pop(); // pop return value
 
                     // if that was the last frame, exit the VM.
