@@ -1,12 +1,13 @@
 //! Module containing Radish's runtime implementation and
 //! its datastructures.
 
-use std::{rc::Rc, collections::HashMap};
+use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    common::{resolver::FileResolver, CompiledModule, Module},
+    common::{loader::Loader, CompiledModule, Module},
     compiler::pipeline::CompilerPipeLine,
     config::Config,
+    RadishCore,
 };
 
 use self::stack::Stack;
@@ -17,6 +18,7 @@ mod load;
 pub(crate) mod native;
 mod run;
 mod stack;
+pub mod to_value;
 pub mod trace;
 pub mod value;
 
@@ -51,15 +53,20 @@ pub struct VM {
     last_module: CompiledModule,
     /// A list of all modules loaded into the VM.
     modules: Vec<CompiledModule>,
-    /// VM's file resolver.
-    resolver: FileResolver,
     /// Frontend pipeline.
     compiler: CompilerPipeLine,
+    /// VM's loader.
+    pub(crate) loader: Loader,
 }
 
 impl VM {
     pub fn new() -> Self {
-        VM::with_config(Config::new())
+        let mut vm = VM::with_config(Config::new());
+
+        vm.load_namespace(RadishCore)
+            .expect("Failed to load standard library");
+
+        vm
     }
 
     pub fn with_config(config: Config) -> Self {
@@ -75,7 +82,7 @@ impl VM {
             upvalues: HashMap::new(),
             last_module: Module::empty(),
             modules: Vec::new(),
-            resolver: FileResolver::new(),
+            loader: Loader::new(),
             compiler: pipeline,
         }
     }

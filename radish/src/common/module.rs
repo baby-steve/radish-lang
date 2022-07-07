@@ -1,5 +1,7 @@
 use crate::vm::from_value::FromValue;
 use crate::vm::native::NativeFunction;
+use crate::vm::to_value::ToValue;
+use crate::vm::trace::Trace;
 use crate::vm::value::Function;
 use crate::{Value, VM};
 
@@ -34,7 +36,7 @@ impl Module {
 
     pub fn add_native<F: 'static>(&mut self, name: &str, airty: u8, fun: F) -> &mut Self
     where
-        F: FnMut(&mut VM, Vec<Value>) -> Result<Value, String>,
+        F: Fn(&mut VM, Vec<Value>) -> Result<Value, Trace>,
     {
         let native_fun = NativeFunction::new::<F>(Rc::new(fun), airty);
 
@@ -58,13 +60,16 @@ impl Module {
         self
     }
 
-    //pub fn add_variable<I: FromValue>(&mut self, name: impl ToString, value: I) -> &mut Self {
-    //    let index = self.add_symbol(name.to_string());
-    //
-    //    self.set_value_at_index(index, Value::Nil);
-    //
-    //    self
-    //}
+    pub fn add_value<T>(&mut self, name: impl ToString, value: T) -> &mut Self
+    where
+        T: ToValue,
+    {
+        let index = self.add_symbol(name.to_string());
+
+        self.set_value_at_index(index, value.to_value());
+
+        self
+    }
 
     pub fn get_variable<F: FromValue>(&self, name: &str) -> Option<F> {
         let index = match self.get_index(name) {
@@ -110,24 +115,34 @@ impl Module {
         self.symbols.insert(String::from(""), index);
     }
 
-    pub(crate) fn entry(&self) -> Rc<Function> {
+    pub(crate) fn entry(&self) -> Option<Rc<Function>> {
         if let Some(index) = self.symbols.get("") {
             match &self.variables[*index] {
-                Value::Function(fun) => Rc::clone(fun),
+                Value::Function(fun) => Some(Rc::clone(fun)),
                 _ => unreachable!(
                     "The entry point for module '{}' is not a function.",
                     self.name.to_string()
                 ),
             }
         } else {
-            panic!("Module '{}' doesn't have an entry point", self.name);
+            //panic!("Module '{}' doesn't have an entry point", self.name);
+            None
         }
     }
 
-    // functions to:
-    //  a. declare a global
-    //  b. set a global's value
-    //  c. get a global's value
+    pub(crate) fn has_entry(&self) -> bool {
+        self.symbols.contains_key("")
+    }
+
+    pub(crate) fn modules(&self) -> Vec<CompiledModule> {
+        self.variables
+            .iter()
+            .filter_map(|v| match v {
+                Value::Module(m) => Some(Rc::clone(m)),
+                _ => None,
+            })
+            .collect()
+    }
 }
 
 impl PartialEq for Module {
@@ -217,6 +232,6 @@ mod tests {
 
         assert_eq!(module.borrow().variables.len(), 1);
 
-        assert_eq!(module.borrow().entry(), Rc::new(fun));
+        assert_eq!(module.borrow().entry(), Some(Rc::new(fun)));
     }
 }

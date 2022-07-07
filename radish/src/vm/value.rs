@@ -8,8 +8,8 @@ use std::fmt::{self};
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use std::rc::{Rc, Weak};
 
-use super::CallFrame;
 use super::stack::Stack;
+use super::CallFrame;
 
 #[derive(Debug, PartialEq, PartialOrd)]
 pub enum Value {
@@ -234,6 +234,15 @@ pub struct Function {
 }
 
 impl Function {
+    pub fn new(name: impl Into<Box<str>>, module: Weak<RefCell<Module>>) -> Function {
+        Function {
+            arity: 0,
+            chunk: Chunk::new(vec![], vec![]),
+            name: name.into(),
+            module,
+        }
+    }
+
     pub fn format_name(&self) -> &str {
         if self.name.is_empty() {
             "script"
@@ -369,13 +378,13 @@ impl UpValue {
             match location {
                 UpValueLocation::StackIndex(idx) => {
                     stack.stack[*idx] = new_val;
-                },
+                }
                 UpValueLocation::UpValueIndex(idx) => {
                     let frame_count = frames.len();
                     let prev_frame = &frames[frame_count - 1].closure;
 
                     prev_frame.non_locals.borrow_mut()[*idx].set_value(frames, stack, new_val);
-                },
+                }
             }
         } else {
             unreachable!("Can't set new value: Upvalue doesn't have a location or a value");

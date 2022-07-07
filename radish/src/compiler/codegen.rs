@@ -405,6 +405,9 @@ impl Compiler {
                     // define the class in the global scope.
                     self.define_global(index as u32);
                 }
+                Stmt::ImportStmt(import) => {
+                    self.module.borrow_mut().add_symbol(import.name().unwrap().name.clone());
+                }
                 _ => continue,
             }
         }

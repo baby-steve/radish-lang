@@ -1,17 +1,9 @@
 use crate::{
     common::{module::ModuleBuilder, Module},
-    Value, VM, Namespace,
+    Value, VM, Namespace, vm::trace::Trace,
 };
 
-pub fn _sys() -> Module {
-    let mut module = Module::new_("sys");
-
-    module.add_native("test_fun", 0, test);
-
-    module
-}
-
-pub fn test(_vm: &mut VM, _args: Vec<Value>) -> Result<Value, String> {
+pub fn test(_vm: &mut VM, _args: Vec<Value>) -> Result<Value, Trace> {
     println!("this is just for testing");
 
     Ok(Value::Nil)
@@ -29,6 +21,18 @@ impl ModuleBuilder for System {
     }
 }
 
+pub struct Math;
+
+impl ModuleBuilder for Math {
+    fn build(self) -> Result<Module, String> {
+        let mut module = Module::new_("math");
+
+        module.add_value("pi", 3.14);
+
+        Ok(module)
+    }
+}
+
 pub struct RadishCore;
 
 impl Namespace for RadishCore {
@@ -37,6 +41,6 @@ impl Namespace for RadishCore {
     }
 
     fn build(&mut self, namespace: &mut crate::NamespaceBuilder) {
-        namespace.add(System);    
+        namespace.add(System).add(Math);    
     }
 }
