@@ -1,14 +1,14 @@
-//! Module containing an AST visitor. 
+//! Module containing an AST visitor.
 
 use crate::compiler::ast::*;
 
 use super::SyntaxError;
 
-/// Alias for the Visitor method's return type. 
+/// Alias for the Visitor method's return type.
 pub type VisitorResult = Result<(), SyntaxError>;
 
 /// Transverses an AST's nodes. By default, it recursively walks the
-/// tree and does absolutely nothing. 
+/// tree and does absolutely nothing.
 pub trait Visitor<'a>: Sized {
     fn visit_stmt(&mut self, stmt: &mut Stmt) -> VisitorResult {
         match stmt {
@@ -18,7 +18,7 @@ pub trait Visitor<'a>: Sized {
             Stmt::ConDeclaration(con, _) => self.visit_con_decl(con),
             Stmt::ClassDeclaration(class, _) => self.visit_class_decl(class),
             Stmt::VarDeclaration(id, expr, kind, _) => self.visit_var_decl(id, expr, *kind),
-            Stmt::Assignment(id, op, expr, _) => self.visit_assignment(id, op, expr),
+            Stmt::AssignmentStmt(stmt, _) => self.visit_assignment(stmt),
             Stmt::IfStmt(condition, body, alt, _) => self.visit_if_stmt(condition, body, alt),
             Stmt::LoopStmt(body, _) => self.visit_loop_stmt(body),
             Stmt::WhileStmt(condition, body, _) => self.visit_while_stmt(condition, body),
@@ -42,7 +42,7 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_class_decl(&mut self, class: &mut ClassDecl) -> VisitorResult {
         self.visit_name(&mut class.id)?;
-        
+
         for constructor in class.constructors.iter_mut() {
             self.visit_con_decl(constructor)?;
         }
@@ -135,14 +135,9 @@ pub trait Visitor<'a>: Sized {
         self.visit_expr(expr)
     }
 
-    fn visit_assignment(
-        &mut self,
-        id: &mut Ident,
-        _op: &mut OpAssignment,
-        expr: &mut Expr,
-    ) -> VisitorResult {
-        self.visit_ident(id)?;
-        self.visit_expr(expr)
+    fn visit_assignment(&mut self, stmt: &mut AssignmentStmt) -> VisitorResult {
+        self.visit_expr(&mut stmt.lhs)?;
+        self.visit_expr(&mut stmt.rhs)
     }
 
     fn visit_expr_stmt(&mut self, expr: &mut Expr) -> VisitorResult {

@@ -55,7 +55,7 @@ impl<'a> Disassembler<'a> {
             Opcode::SaveCapture => self.upvalue_instruction("SaveCapture", offset),
 
             Opcode::LoadField => self.simple_instruction("LoadField", offset),
-            Opcode::SaveField => self.long_const_instruction("SaveField", offset, false),
+            Opcode::SaveField => self.simple_instruction("SaveField", offset),
 
             Opcode::True => self.simple_instruction("True", offset),
             Opcode::False => self.simple_instruction("False", offset),

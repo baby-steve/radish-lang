@@ -522,7 +522,7 @@ impl Parser {
     }
 
     fn parse_assignment_statement(&mut self) -> Result<Stmt, SyntaxError> {
-        let node = self.parse_expression()?;
+        let lhs = self.parse_expression()?;
 
         let op = match self.current.token_type {
             // expr = ...
@@ -556,25 +556,17 @@ impl Parser {
                 OpAssignment::RemAssign
             }
             // expr
-            _ => return Ok(Stmt::ExpressionStmt(Box::new(node))),
-        };
-
-        let id = match node {
-            Expr::Identifier(id) => id,
-            _ => {
-                let err_kind = SyntaxErrorKind::ExpectedIdent {
-                    actual: Item::new(&self.current.span, self.current.syntax()),
-                };
-                let err = SyntaxError::new(err_kind);
-                return Err(err);
-            }
+            _ => return Ok(Stmt::ExpressionStmt(Box::new(lhs))),
         };
 
         // id op ....
-        let right = self.parse_expression()?;
+        let rhs = self.parse_expression()?;
 
-        let span = Span::combine(&id.pos, &right.position());
-        Ok(AST::assignment(id, op, right, span))
+        let span = Span::combine(&lhs.position(), &rhs.position());
+        
+        let stmt = AssignmentStmt::new(op, lhs, rhs);
+        
+        Ok(AST::assignment(stmt, span))
     }
 
     fn parse_expression(&mut self) -> Result<Expr, SyntaxError> {
@@ -798,6 +790,14 @@ impl Parser {
                 TokenType::Dot => {
                     self.consume(TokenType::Dot);
                     let property = Box::new(self.parse_factor()?);
+                    let span = Span::combine(&node.position(), &self.current.span);
+                    node = AST::member_expr(Box::new(node), property, span)
+                }
+                // <expr> '[' ...
+                TokenType::LeftBracket => {
+                    self.consume(TokenType::LeftBracket);
+                    let property = Box::new(self.parse_sum()?);
+                    self.consume(TokenType::RightBracket);
                     let span = Span::combine(&node.position(), &self.current.span);
                     node = AST::member_expr(Box::new(node), property, span)
                 }

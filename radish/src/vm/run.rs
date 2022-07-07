@@ -347,21 +347,54 @@ impl VM {
 
     #[inline]
     fn load_field(&mut self) -> Result<(), Trace> {
-        let from = self.stack.pop();
-        let field_name = self.stack.pop();
+        let obj = self.stack.pop();
+        let prop = self.stack.pop();
 
-        match from {
+        match obj {
             Value::Module(module) => {
                 let index = module
                     .borrow()
-                    .get_index(&field_name.into_string().unwrap().borrow())
+                    .get_index(&prop.into_string().unwrap().borrow())
                     .expect("no value at index");
 
                 let val = module.borrow().get_value_at_index(index).clone();
 
                 self.stack.push(val);
             }
-            _ => unimplemented!("field access on {} is unsupported", from),
+            Value::Array(elements) => {
+                // check if the index is a number.
+                let index = match prop {
+                    Value::Number(val) => val,
+                    _ => {
+                        return Err(self.error("Array indices must be integers"));
+                    }
+                };
+
+                // check if the index has a fraction.
+                if index.fract() != 0.0 {
+                    return Err(self.error("Array indices must be integers"));
+                }
+
+                let array = elements.borrow();
+                let length = array.len();
+
+                // check if index is negative
+                let index = if index < 0.0 {
+                    length - index.abs() as usize
+                } else {
+                    index as usize
+                };
+
+                // check if the index is out of bounds.
+                if index >= length {
+                    return Err(self.error("Index out of bounds"));
+                }
+
+                let value = array[index].clone();
+
+                self.stack.push(value);
+            }
+            _ => unimplemented!("field access on {} is unsupported", obj),
         }
 
         Ok(())
@@ -369,24 +402,54 @@ impl VM {
 
     #[inline]
     fn save_field(&mut self) -> Result<(), Trace> {
-        todo!()
+        let val = self.stack.pop();
+        let idx = self.stack.pop();
+        let obj = self.stack.pop();
+
+        match obj {
+            Value::Array(elements) => {
+                // check if the index is a number.
+                let index = match idx {
+                    Value::Number(val) => val,
+                    _ => {
+                        return Err(self.error("Array indices must be integers"));
+                    }
+                };
+
+                // check if the index has a fraction.
+                if index.fract() != 0.0 {
+                    return Err(self.error("Array indices must be integers"));
+                }
+
+                let length = elements.borrow().len();
+
+                // check if index is negative
+                let index = if index < 0.0 {
+                    length - index.abs() as usize
+                } else {
+                    index as usize
+                };
+
+                // check if the index is out of bounds.
+                if index >= length {
+                    return Err(self.error("Index out of bounds"));
+                }
+
+                elements.borrow_mut()[index] = val;
+            }
+            _ => unimplemented!("field access on {} is unsupported", obj),
+        }
+
+        Ok(())
     }
 
     #[inline]
     fn def_upvalue(&mut self) -> Result<(), Trace> {
-        //let slot_index = self.read_long() as usize;
-        //println!("[vm] defining upvalue");
-
         let slot_index = self.stack.stack.len() - 1;
 
         let offset = self.current_frame().offset;
 
         let relative_index = slot_index - offset;
-
-        //println!(
-        //    "[vm] defining upvalue with a slot index of {} and a relative index of {} ",
-        //    slot_index, relative_index,
-        //);
 
         self.upvalues.insert(relative_index, slot_index);
 

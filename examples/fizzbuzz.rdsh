@@ -10,7 +10,8 @@ fun fizzbuzz(start, end) {
         else 
             print i
         endif
-        i += 1
+        //i += 1
+        i = i + 1
     endloop
 }
 
