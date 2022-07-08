@@ -831,6 +831,8 @@ impl Parser {
                 TokenType::LeftParen => return self.parse_paren(),
                 // [
                 TokenType::LeftBracket => return self.parse_array_literal(),
+                // {
+                TokenType::LeftBrace => return self.parse_map_literal(),
                 // - ...
                 TokenType::Minus => {
                     self.consume(TokenType::Minus);
@@ -1024,5 +1026,40 @@ impl Parser {
         );
 
         Ok(AST::array(elements, span))
+    }
+
+    fn parse_map_literal(&mut self) -> Result<Expr, SyntaxError> {
+        // TODO: trailing comma?
+
+        let start = self.current.span.clone();
+        let mut elements = vec![];
+
+        // { ...
+        self.consume(TokenType::LeftBrace);
+
+        // { x: a, y: b, z: c ...
+        if !self.check(&TokenType::RightBrace) {
+            loop {
+                elements.push(self.parse_sum()?);
+
+                self.expect(TokenType::Colon)?;
+
+                elements.push(self.parse_sum()?);
+
+                if !self.match_token(&TokenType::Comma) {
+                    break;
+                }
+            }
+        }
+
+        // { ... }
+        self.expect(TokenType::RightBrace)?;
+
+        let span = Span::combine(
+            &start,
+            &self.current.span,
+        );
+
+        Ok(AST::map(elements, span))
     }
 }

@@ -106,6 +106,10 @@ impl AST {
         Expr::ArrayExpr(elements, span)
     }
 
+    pub fn map(values: Vec<Expr>, span: Span) -> Expr {
+        Expr::MapExpr(values, span)
+    }
+
     pub fn binary_expr(expr: Box<BinaryExpr>, span: Span) -> Expr {
         Expr::BinaryExpr(expr, span)
     }
@@ -294,6 +298,8 @@ impl AssignmentStmt {
 pub enum Expr {
     /// An array literal.
     ArrayExpr(Vec<Expr>, Span),
+    /// A map literal.
+    MapExpr(Vec<Expr>, Span),
     /// A binary expression
     /// ```txt
     /// <expr> <op> <expr>
@@ -343,6 +349,7 @@ impl Expr {
     pub fn position(&self) -> Span {
         match self {
             Self::ArrayExpr(_, pos)
+            | Self::MapExpr(_, pos)
             | Self::BinaryExpr(_, pos)
             | Self::ParenExpr(_, pos)
             | Self::UnaryExpr(_, _, pos)

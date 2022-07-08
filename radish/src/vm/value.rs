@@ -11,7 +11,7 @@ use std::rc::{Rc, Weak};
 use super::stack::Stack;
 use super::CallFrame;
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq/*, PartialOrd*/)]
 pub enum Value {
     Number(f64),
     Boolean(bool),
@@ -23,6 +23,7 @@ pub enum Value {
     Module(Rc<RefCell<Module>>),
     NativeFunction(Rc<NativeFunction>),
     Array(Rc<RefCell<Vec<Value>>>),
+    Map(Rc<RefCell<HashMap<String, Value>>>),
     Nil,
 }
 
@@ -118,6 +119,7 @@ impl Clone for Value {
             Self::Module(module) => Self::Module(Rc::clone(module)),
             Self::NativeFunction(val) => Self::NativeFunction(Rc::clone(val)),
             Self::Array(arr) => Self::Array(Rc::clone(arr)),
+            Self::Map(obj) => Self::Map(Rc::clone(obj)),
         }
     }
 }
@@ -144,6 +146,16 @@ impl fmt::Display for Value {
                 }
 
                 write!(f, "]")
+            }
+            Value::Map(obj) => {
+                write!(f, "{{")?;
+
+                for (index, (key, value)) in obj.borrow().iter().enumerate() {
+                    let end = if index == obj.borrow().len() - 1 { "" } else { ", " };
+                    write!(f, "{}: {}{}", key, value, end)?;
+                }
+
+                write!(f, "}}")
             }
             Value::Nil => f.write_str("nil"),
         }
@@ -221,6 +233,15 @@ impl Not for Value {
         match self {
             Value::Boolean(val) => Value::Boolean(!val),
             _ => panic!("Operand must be boolean"),
+        }
+    }
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (Value::Number(val1), Value::Number(val2)) => val1.partial_cmp(val2),
+            _ => None,
         }
     }
 }

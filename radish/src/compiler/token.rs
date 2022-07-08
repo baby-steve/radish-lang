@@ -61,6 +61,8 @@ pub enum TokenType {
     Comma,
     // .
     Dot,
+    // :
+    Colon,
     // true
     True,
     // false
@@ -155,6 +157,7 @@ impl TokenType {
             RightBrace => "}",
             Comma => ",",
             Dot => ".",
+            Colon => ":",
             True => "true",
             False => "false",
             Nil => "nil",
@@ -256,6 +259,7 @@ impl Token {
             "]" => TokenType::RightBracket,
             "," => TokenType::Comma,
             "." => TokenType::Dot,
+            ":" => TokenType::Colon,
             "true" => TokenType::True,
             "false" => TokenType::False,
             "nil" => TokenType::Nil,

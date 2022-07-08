@@ -1,4 +1,4 @@
-use std::{convert::TryInto, rc::Rc, cell::RefCell};
+use std::{cell::RefCell, collections::HashMap, convert::TryInto, rc::Rc};
 
 use crate::{
     common::{Disassembler, Opcode},
@@ -8,7 +8,7 @@ use crate::{
 
 use crate::vm::{CallFrame, VM};
 
-use super::{value::UpValue, native::NativeFunction};
+use super::{native::NativeFunction, value::UpValue};
 
 impl VM {
     /// Create a new [`Trace`] with the given message, adding context to it.
@@ -153,12 +153,30 @@ impl VM {
         }
 
         let array = Value::Array(Rc::new(RefCell::new(elements)));
-        
+
         self.stack.push(array);
 
         Ok(())
     }
-    
+
+    fn make_object(&mut self) -> Result<(), Trace> {
+        let element_count = self.read_long() as usize;
+        let mut elements = HashMap::with_capacity(element_count);
+
+        for _ in 0..element_count {
+            let value = self.stack.pop();
+            let key = self.stack.pop();
+
+            elements.insert(key.to_string(), value);
+        }
+
+        let array = Value::Map(Rc::new(RefCell::new(elements)));
+
+        self.stack.push(array);
+
+        Ok(())
+    }
+
     #[inline]
     fn call_native(&mut self, fun: Rc<NativeFunction>) -> Result<(), Trace> {
         let mut args = vec![];
@@ -394,6 +412,16 @@ impl VM {
 
                 self.stack.push(value);
             }
+            Value::Map(map) => {
+                let key = prop.to_string();
+
+                let value = match map.borrow().get(&key) {
+                    Some(val) => val.clone(),
+                    None => Value::Nil,
+                };
+
+                self.stack.push(value);
+            }
             _ => unimplemented!("field access on {} is unsupported", obj),
         }
 
@@ -437,6 +465,11 @@ impl VM {
 
                 elements.borrow_mut()[index] = val;
             }
+            Value::Map(map) => {
+                let key = idx.to_string();
+
+                map.borrow_mut().insert(key, val);
+            }
             _ => unimplemented!("field access on {} is unsupported", obj),
         }
 
@@ -469,14 +502,6 @@ impl VM {
             !upvalues.borrow().is_empty(),
             "the closure's upvalue list should not be empty"
         );
-
-        //println!(
-        //    "[vm] closure \"{}\" has the following upvalues: {:?}",
-        //    closure.function.name,
-        //    upvalues.borrow()
-        //);
-
-        //debug_assert!(index >= upvalues.borrow().len());
 
         let val = upvalues.borrow()[index - 1].inner(&self);
 
@@ -541,18 +566,14 @@ impl VM {
             .into_string()
             .expect("path is not a string");
 
-        let module =
-            match self
-                .loader
-                .load(&path.borrow(), &mut self.compiler)
-            {
-                Ok(m) => m,
-                Err(e) => {
-                    e.emit();
-                    let msg = "failed to load module";
-                    return Err(Trace::new(msg));
-                }
-            };
+        let module = match self.loader.load(&path.borrow(), &mut self.compiler) {
+            Ok(m) => m,
+            Err(e) => {
+                e.emit();
+                let msg = "failed to load module";
+                return Err(Trace::new(msg));
+            }
+        };
 
         self.stack.push(Value::Module(Rc::clone(&module)));
 
@@ -561,7 +582,7 @@ impl VM {
         };
 
         if !module.borrow().has_entry() {
-            return Ok(())
+            return Ok(());
         }
 
         // swap out the last module with the new one.
@@ -690,6 +711,7 @@ impl VM {
                 Opcode::Jump => self.jump()?,
                 Opcode::Loop => self.loop_()?,
                 Opcode::BuildArray => self.make_array()?,
+                Opcode::BuildMap => self.make_object()?,
                 Opcode::Closure => self.make_closure()?,
                 Opcode::BuildClass => self.make_class()?,
                 Opcode::BuildCon => self.make_constructor()?,

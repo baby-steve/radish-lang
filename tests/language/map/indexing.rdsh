@@ -1,0 +1,7 @@
+var test = {"a": 23, 0: 45}
+
+print test["a"] // expect: 23
+print test[0] // expect: 45
+
+print test["c"] // expect: nil
+print test["0"] // expect: nil

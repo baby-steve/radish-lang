@@ -96,6 +96,7 @@ impl<'a> Disassembler<'a> {
             }
 
             Opcode::BuildArray => self.long_const_instruction("BuildArray", offset, false),
+            Opcode::BuildMap => self.long_const_instruction("BuildMap", offset, false),
             Opcode::Closure => self.closure(offset),
             Opcode::BuildClass => self.simple_instruction("Class", offset),
             Opcode::BuildCon => self.simple_instruction("BuildCon", offset),

@@ -819,6 +819,7 @@ impl Compiler {
     fn expression(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         match expr {
             Expr::ArrayExpr(array, _) => self.array(array),
+            Expr::MapExpr(values, _) => self.map(values),
             Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
             Expr::ParenExpr(expr, _) => self.expression(expr),
             Expr::UnaryExpr(op, arg, _) => self.unary(arg, op),
@@ -841,6 +842,23 @@ impl Compiler {
         self.emit_byte(Opcode::BuildArray as u8);
 
         let element_count = array.len() as u32;
+
+        for byte in element_count.to_le_bytes() {
+            self.emit_byte(byte);
+        }
+
+        Ok(())
+    }
+
+    fn map(&mut self, values: &[Expr]) -> Result<(), SyntaxError> {
+        for pair in values.chunks(2).rev() {
+            self.expression(&pair[0])?;
+            self.expression(&pair[1])?;
+        }
+
+        self.emit_byte(Opcode::BuildMap as u8);
+
+        let element_count = values.len() as u32 / 2;
 
         for byte in element_count.to_le_bytes() {
             self.emit_byte(byte);
