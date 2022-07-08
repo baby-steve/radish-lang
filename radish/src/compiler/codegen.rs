@@ -289,7 +289,7 @@ impl Compiler {
                 self.emit_byte(Opcode::LoadCapture as u8);
                 for byte in id.index.to_le_bytes() {
                     self.emit_byte(byte);
-                } 
+                }
             }
             Global => {
                 self.emit_byte(Opcode::LoadGlobal as u8);
@@ -406,7 +406,9 @@ impl Compiler {
                     self.define_global(index as u32);
                 }
                 Stmt::ImportStmt(import) => {
-                    self.module.borrow_mut().add_symbol(import.name().unwrap().name.clone());
+                    self.module
+                        .borrow_mut()
+                        .add_symbol(import.name().unwrap().name.clone());
                 }
                 _ => continue,
             }
@@ -520,7 +522,7 @@ impl Compiler {
             Stmt::ConDeclaration(con, _) => self.constructor_declaration(con),
             Stmt::ClassDeclaration(class, _) => self.class_declaration(class),
             Stmt::VarDeclaration(id, init, kind, _) => self.var_declaration(id, init, kind),
-            Stmt::Assignment(id, op, expr, _) => self.assignment(id, op, expr),
+            Stmt::AssignmentStmt(stmt, _) => self.assignment(stmt),
             Stmt::IfStmt(expr, body, alt, _) => self.if_statement(expr, body, alt),
             Stmt::LoopStmt(body, _) => self.loop_statement(body),
             Stmt::WhileStmt(expr, body, _) => self.while_statement(expr, body),
@@ -761,44 +763,47 @@ impl Compiler {
         Ok(())
     }
 
-    fn assignment(
-        &mut self,
-        id: &Ident,
-        op: &OpAssignment,
-        expr: &Expr,
-    ) -> Result<(), SyntaxError> {
-        match op {
-            OpAssignment::AddAssign => {
-                self.load_variable(&id);
-                self.expression(expr)?;
-                self.emit_byte(Opcode::Add as u8);
-            }
-            OpAssignment::SubAssign => {
-                self.load_variable(&id);
-                self.expression(expr)?;
-                self.emit_byte(Opcode::Sub as u8);
-            }
-            OpAssignment::MulAssign => {
-                self.load_variable(&id);
-                self.expression(expr)?;
-                self.emit_byte(Opcode::Mul as u8);
-            }
-            OpAssignment::DivAssign => {
-                self.load_variable(&id);
-                self.expression(expr)?;
-                self.emit_byte(Opcode::Div as u8);
-            }
-            OpAssignment::RemAssign => {
-                self.load_variable(&id);
-                self.expression(expr)?;
-                self.emit_byte(Opcode::Rem as u8);
-            }
-            OpAssignment::Equals => {
-                self.expression(expr)?;
-            }
+    fn assignment(&mut self, stmt: &AssignmentStmt) -> Result<(), SyntaxError> {
+        let op = match stmt.op {
+            OpAssignment::AddAssign => Some(Opcode::Add),
+            OpAssignment::SubAssign => Some(Opcode::Sub),
+            OpAssignment::MulAssign => Some(Opcode::Mul),
+            OpAssignment::DivAssign => Some(Opcode::Div),
+            OpAssignment::RemAssign => Some(Opcode::Rem),
+            OpAssignment::Equals => None,
         };
 
-        self.save_variable(&id);
+        match &stmt.lhs {
+            Expr::Identifier(id) => {
+                if let Some(op) = op {
+                    self.load_variable(&id);
+                    self.expression(&stmt.rhs)?;
+                    self.emit_byte(op as u8);
+                } else {
+                    self.expression(&stmt.rhs)?;
+                }
+
+                self.save_variable(id);
+            }
+            Expr::MemberExpr(obj, prop, _) => {
+                self.expression(obj)?;
+                self.expression(prop)?;
+
+                if let Some(op) = op {
+                    self.expression(obj)?;
+                    self.expression(prop)?;
+                    self.emit_byte(Opcode::LoadField as u8);
+
+                    self.expression(&stmt.rhs)?;
+                    self.emit_byte(op as u8);
+                } else {
+                    self.expression(&stmt.rhs)?;
+                }
+
+                self.emit_byte(Opcode::SaveField as u8);
+            }
+            _ => unreachable!("Invalid left hand side of assignment statement"),
+        }
 
         Ok(())
     }
@@ -814,6 +819,7 @@ impl Compiler {
     fn expression(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         match expr {
             Expr::ArrayExpr(array, _) => self.array(array),
+            Expr::MapExpr(values, _) => self.map(values),
             Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
             Expr::ParenExpr(expr, _) => self.expression(expr),
             Expr::UnaryExpr(op, arg, _) => self.unary(arg, op),
@@ -836,6 +842,23 @@ impl Compiler {
         self.emit_byte(Opcode::BuildArray as u8);
 
         let element_count = array.len() as u32;
+
+        for byte in element_count.to_le_bytes() {
+            self.emit_byte(byte);
+        }
+
+        Ok(())
+    }
+
+    fn map(&mut self, values: &[Expr]) -> Result<(), SyntaxError> {
+        for pair in values.chunks(2).rev() {
+            self.expression(&pair[0])?;
+            self.expression(&pair[1])?;
+        }
+
+        self.emit_byte(Opcode::BuildMap as u8);
+
+        let element_count = values.len() as u32 / 2;
 
         for byte in element_count.to_le_bytes() {
             self.emit_byte(byte);
@@ -914,13 +937,7 @@ impl Compiler {
     }
 
     fn member_expr(&mut self, object: &Expr, property: &Expr) -> Result<(), SyntaxError> {
-        match property {
-            Expr::Identifier(id) => {
-                self.string(&id.name)?;
-            }
-            _ => unimplemented!(),
-        };
-
+        self.expression(property)?;
         self.expression(object)?;
 
         self.emit_byte(Opcode::LoadField as u8);

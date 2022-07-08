@@ -169,7 +169,7 @@ impl Analyzer {
             Expr::MemberExpr(object, _, _) => {
                 self.resolve_member_expression(object)?;
             }
-            _ => unimplemented!(),
+            _ => return Ok(()),
         };
 
         Ok(())

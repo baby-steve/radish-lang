@@ -1,14 +1,14 @@
-//! Module containing an AST visitor. 
+//! Module containing an AST visitor.
 
 use crate::compiler::ast::*;
 
 use super::SyntaxError;
 
-/// Alias for the Visitor method's return type. 
+/// Alias for the Visitor method's return type.
 pub type VisitorResult = Result<(), SyntaxError>;
 
 /// Transverses an AST's nodes. By default, it recursively walks the
-/// tree and does absolutely nothing. 
+/// tree and does absolutely nothing.
 pub trait Visitor<'a>: Sized {
     fn visit_stmt(&mut self, stmt: &mut Stmt) -> VisitorResult {
         match stmt {
@@ -18,7 +18,7 @@ pub trait Visitor<'a>: Sized {
             Stmt::ConDeclaration(con, _) => self.visit_con_decl(con),
             Stmt::ClassDeclaration(class, _) => self.visit_class_decl(class),
             Stmt::VarDeclaration(id, expr, kind, _) => self.visit_var_decl(id, expr, *kind),
-            Stmt::Assignment(id, op, expr, _) => self.visit_assignment(id, op, expr),
+            Stmt::AssignmentStmt(stmt, _) => self.visit_assignment(stmt),
             Stmt::IfStmt(condition, body, alt, _) => self.visit_if_stmt(condition, body, alt),
             Stmt::LoopStmt(body, _) => self.visit_loop_stmt(body),
             Stmt::WhileStmt(condition, body, _) => self.visit_while_stmt(condition, body),
@@ -42,7 +42,7 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_class_decl(&mut self, class: &mut ClassDecl) -> VisitorResult {
         self.visit_name(&mut class.id)?;
-        
+
         for constructor in class.constructors.iter_mut() {
             self.visit_con_decl(constructor)?;
         }
@@ -135,14 +135,9 @@ pub trait Visitor<'a>: Sized {
         self.visit_expr(expr)
     }
 
-    fn visit_assignment(
-        &mut self,
-        id: &mut Ident,
-        _op: &mut OpAssignment,
-        expr: &mut Expr,
-    ) -> VisitorResult {
-        self.visit_ident(id)?;
-        self.visit_expr(expr)
+    fn visit_assignment(&mut self, stmt: &mut AssignmentStmt) -> VisitorResult {
+        self.visit_expr(&mut stmt.lhs)?;
+        self.visit_expr(&mut stmt.rhs)
     }
 
     fn visit_expr_stmt(&mut self, expr: &mut Expr) -> VisitorResult {
@@ -152,6 +147,7 @@ pub trait Visitor<'a>: Sized {
     fn visit_expr(&mut self, expr: &mut Expr) -> VisitorResult {
         match expr {
             Expr::ArrayExpr(array, _) => self.visit_array(array),
+            Expr::MapExpr(values, _) => self.visit_map(values),
             Expr::BinaryExpr(expr, _) => self.visit_binary_expr(expr),
             Expr::ParenExpr(expr, _) => self.visit_paren_expr(expr),
             Expr::UnaryExpr(op, arg, _) => self.visit_unary_expr(op, arg),
@@ -166,6 +162,14 @@ pub trait Visitor<'a>: Sized {
     fn visit_array(&mut self, array: &mut [Expr]) -> VisitorResult {
         for element in array.iter_mut() {
             self.visit_expr(element)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_map(&mut self, values: &mut [Expr]) -> VisitorResult {
+        for expr in values.iter_mut() {
+            self.visit_expr(expr)?;
         }
 
         Ok(())
@@ -214,83 +218,3 @@ pub trait Visitor<'a>: Sized {
         Ok(())
     }
 }
-/*
-fn walk_fun_decl<'a, V: Visitor<'a>>(visitor: &mut V, fun: &mut FunctionDecl) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_class_decl(visitor: &mut Visitor, class: &mut ClassDecl) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_con_decl(visitor: &mut Visitor, con: &mut ConstructorDecl) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_var_decl(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_block_stmt(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_if_stmt(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_loop_stmt(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_while_stmt(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_break_stmt(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_continue_stmt(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_return_stmt(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_print_stmt(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_binary_expr(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_paren_expr(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_unary_expr(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_logical_expr(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_call_expr(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_member_expr(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_assignment(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}
-
-fn walk_expr_stmt(visitor: &mut Visitor) -> VisitorResult {
-    Ok(())
-}*/

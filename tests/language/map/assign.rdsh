@@ -1,0 +1,13 @@
+var test = {"a": "before", "b": 54}
+
+print test["a"] // expect: "before"
+
+test["a"] = "after"
+
+print test["a"] // expect: "after"
+
+print test["c"] // expect: nil
+
+test["c"] = "some value"
+
+print test["c"] // expect: "some value"

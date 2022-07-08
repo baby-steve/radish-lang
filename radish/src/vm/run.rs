@@ -1,4 +1,4 @@
-use std::{convert::TryInto, rc::Rc, cell::RefCell};
+use std::{cell::RefCell, collections::HashMap, convert::TryInto, rc::Rc};
 
 use crate::{
     common::{Disassembler, Opcode},
@@ -8,7 +8,7 @@ use crate::{
 
 use crate::vm::{CallFrame, VM};
 
-use super::{value::UpValue, native::NativeFunction};
+use super::{native::NativeFunction, value::UpValue};
 
 impl VM {
     /// Create a new [`Trace`] with the given message, adding context to it.
@@ -153,12 +153,30 @@ impl VM {
         }
 
         let array = Value::Array(Rc::new(RefCell::new(elements)));
-        
+
         self.stack.push(array);
 
         Ok(())
     }
-    
+
+    fn make_object(&mut self) -> Result<(), Trace> {
+        let element_count = self.read_long() as usize;
+        let mut elements = HashMap::with_capacity(element_count);
+
+        for _ in 0..element_count {
+            let value = self.stack.pop();
+            let key = self.stack.pop();
+
+            elements.insert(key.to_string(), value);
+        }
+
+        let array = Value::Map(Rc::new(RefCell::new(elements)));
+
+        self.stack.push(array);
+
+        Ok(())
+    }
+
     #[inline]
     fn call_native(&mut self, fun: Rc<NativeFunction>) -> Result<(), Trace> {
         let mut args = vec![];
@@ -347,21 +365,64 @@ impl VM {
 
     #[inline]
     fn load_field(&mut self) -> Result<(), Trace> {
-        let from = self.stack.pop();
-        let field_name = self.stack.pop();
+        let obj = self.stack.pop();
+        let prop = self.stack.pop();
 
-        match from {
+        match obj {
             Value::Module(module) => {
                 let index = module
                     .borrow()
-                    .get_index(&field_name.into_string().unwrap().borrow())
+                    .get_index(&prop.into_string().unwrap().borrow())
                     .expect("no value at index");
 
                 let val = module.borrow().get_value_at_index(index).clone();
 
                 self.stack.push(val);
             }
-            _ => unimplemented!("field access on {} is unsupported", from),
+            Value::Array(elements) => {
+                // check if the index is a number.
+                let index = match prop {
+                    Value::Number(val) => val,
+                    _ => {
+                        return Err(self.error("Array indices must be integers"));
+                    }
+                };
+
+                // check if the index has a fraction.
+                if index.fract() != 0.0 {
+                    return Err(self.error("Array indices must be integers"));
+                }
+
+                let array = elements.borrow();
+                let length = array.len();
+
+                // check if index is negative
+                let index = if index < 0.0 {
+                    length - index.abs() as usize
+                } else {
+                    index as usize
+                };
+
+                // check if the index is out of bounds.
+                if index >= length {
+                    return Err(self.error("Index out of bounds"));
+                }
+
+                let value = array[index].clone();
+
+                self.stack.push(value);
+            }
+            Value::Map(map) => {
+                let key = prop.to_string();
+
+                let value = match map.borrow().get(&key) {
+                    Some(val) => val.clone(),
+                    None => Value::Nil,
+                };
+
+                self.stack.push(value);
+            }
+            _ => unimplemented!("field access on {} is unsupported", obj),
         }
 
         Ok(())
@@ -369,24 +430,59 @@ impl VM {
 
     #[inline]
     fn save_field(&mut self) -> Result<(), Trace> {
-        todo!()
+        let val = self.stack.pop();
+        let idx = self.stack.pop();
+        let obj = self.stack.pop();
+
+        match obj {
+            Value::Array(elements) => {
+                // check if the index is a number.
+                let index = match idx {
+                    Value::Number(val) => val,
+                    _ => {
+                        return Err(self.error("Array indices must be integers"));
+                    }
+                };
+
+                // check if the index has a fraction.
+                if index.fract() != 0.0 {
+                    return Err(self.error("Array indices must be integers"));
+                }
+
+                let length = elements.borrow().len();
+
+                // check if index is negative
+                let index = if index < 0.0 {
+                    length - index.abs() as usize
+                } else {
+                    index as usize
+                };
+
+                // check if the index is out of bounds.
+                if index >= length {
+                    return Err(self.error("Index out of bounds"));
+                }
+
+                elements.borrow_mut()[index] = val;
+            }
+            Value::Map(map) => {
+                let key = idx.to_string();
+
+                map.borrow_mut().insert(key, val);
+            }
+            _ => unimplemented!("field access on {} is unsupported", obj),
+        }
+
+        Ok(())
     }
 
     #[inline]
     fn def_upvalue(&mut self) -> Result<(), Trace> {
-        //let slot_index = self.read_long() as usize;
-        //println!("[vm] defining upvalue");
-
         let slot_index = self.stack.stack.len() - 1;
 
         let offset = self.current_frame().offset;
 
         let relative_index = slot_index - offset;
-
-        //println!(
-        //    "[vm] defining upvalue with a slot index of {} and a relative index of {} ",
-        //    slot_index, relative_index,
-        //);
 
         self.upvalues.insert(relative_index, slot_index);
 
@@ -406,14 +502,6 @@ impl VM {
             !upvalues.borrow().is_empty(),
             "the closure's upvalue list should not be empty"
         );
-
-        //println!(
-        //    "[vm] closure \"{}\" has the following upvalues: {:?}",
-        //    closure.function.name,
-        //    upvalues.borrow()
-        //);
-
-        //debug_assert!(index >= upvalues.borrow().len());
 
         let val = upvalues.borrow()[index - 1].inner(&self);
 
@@ -478,18 +566,14 @@ impl VM {
             .into_string()
             .expect("path is not a string");
 
-        let module =
-            match self
-                .loader
-                .load(&path.borrow(), &mut self.compiler)
-            {
-                Ok(m) => m,
-                Err(e) => {
-                    e.emit();
-                    let msg = "failed to load module";
-                    return Err(Trace::new(msg));
-                }
-            };
+        let module = match self.loader.load(&path.borrow(), &mut self.compiler) {
+            Ok(m) => m,
+            Err(e) => {
+                e.emit();
+                let msg = "failed to load module";
+                return Err(Trace::new(msg));
+            }
+        };
 
         self.stack.push(Value::Module(Rc::clone(&module)));
 
@@ -498,7 +582,7 @@ impl VM {
         };
 
         if !module.borrow().has_entry() {
-            return Ok(())
+            return Ok(());
         }
 
         // swap out the last module with the new one.
@@ -627,6 +711,7 @@ impl VM {
                 Opcode::Jump => self.jump()?,
                 Opcode::Loop => self.loop_()?,
                 Opcode::BuildArray => self.make_array()?,
+                Opcode::BuildMap => self.make_object()?,
                 Opcode::Closure => self.make_closure()?,
                 Opcode::BuildClass => self.make_class()?,
                 Opcode::BuildCon => self.make_constructor()?,

@@ -66,8 +66,8 @@ impl AST {
         Stmt::VarDeclaration(id, expr, kind, span)
     }
 
-    pub fn assignment(id: Ident, op: OpAssignment, expr: Expr, span: Span) -> Stmt {
-        Stmt::Assignment(id, op, expr, span)
+    pub fn assignment(stmt: AssignmentStmt, span: Span) -> Stmt {
+        Stmt::AssignmentStmt(stmt, span)
     }
 
     pub fn if_stmt(condition: Expr, block: Vec<Stmt>, alt: Option<Box<Stmt>>, span: Span) -> Stmt {
@@ -104,6 +104,10 @@ impl AST {
 
     pub fn array(elements: Vec<Expr>, span: Span) -> Expr {
         Expr::ArrayExpr(elements, span)
+    }
+
+    pub fn map(values: Vec<Expr>, span: Span) -> Expr {
+        Expr::MapExpr(values, span)
     }
 
     pub fn binary_expr(expr: Box<BinaryExpr>, span: Span) -> Expr {
@@ -188,7 +192,7 @@ pub enum Stmt {
     /// ```txt
     /// <ident> <op>'=' <expr>
     /// ```
-    Assignment(Ident, OpAssignment, Expr, Span),
+    AssignmentStmt(AssignmentStmt, Span),
     /// An `if` statement.
     /// ```txt
     /// 'if' <expr> 'then' stmt... ['else' stmt...] 'endif'
@@ -248,7 +252,7 @@ impl Stmt {
             | Self::ClassDeclaration(_, pos)
             | Self::PrintStmt(_, pos)
             | Self::BlockStmt(_, pos)
-            | Self::Assignment(_, _, _, pos)
+            | Self::AssignmentStmt(_, pos)
             | Self::IfStmt(_, _, _, pos)
             | Self::LoopStmt(_, pos)
             | Self::WhileStmt(_, _, pos)
@@ -275,10 +279,27 @@ impl Stmt {
     }
 }
 
+
+/// An assignment statement.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AssignmentStmt {
+    pub lhs: Expr,
+    pub op: OpAssignment,
+    pub rhs: Expr,
+}
+
+impl AssignmentStmt {
+    pub fn new(op: OpAssignment, lhs: Expr, rhs: Expr) -> Self {
+        Self { op, lhs, rhs }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Expr {
     /// An array literal.
     ArrayExpr(Vec<Expr>, Span),
+    /// A map literal.
+    MapExpr(Vec<Expr>, Span),
     /// A binary expression
     /// ```txt
     /// <expr> <op> <expr>
@@ -328,6 +349,7 @@ impl Expr {
     pub fn position(&self) -> Span {
         match self {
             Self::ArrayExpr(_, pos)
+            | Self::MapExpr(_, pos)
             | Self::BinaryExpr(_, pos)
             | Self::ParenExpr(_, pos)
             | Self::UnaryExpr(_, _, pos)
