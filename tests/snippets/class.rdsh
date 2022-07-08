@@ -1,8 +1,0 @@
-// Test classes
-
-class Cat {
-    con new() {}
-    con kitten() {}
-}
-
-print Cat // expect: <class Cat>
