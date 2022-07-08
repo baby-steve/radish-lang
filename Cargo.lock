@@ -71,17 +71,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "colored",
- "radish",
- "rustyline",
- "term_size",
-]
-
-[[package]]
 name = "clipboard-win"
 version = "4.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -271,6 +260,17 @@ dependencies = [
  "regex",
  "rustc-hash",
  "termcolor",
+]
+
+[[package]]
+name = "radish-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "colored",
+ "radish",
+ "rustyline",
+ "term_size",
 ]
 
 [[package]]

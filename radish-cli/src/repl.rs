@@ -41,7 +41,7 @@ impl<'a> Repl<'a> {
     }
 
     /// Fire up the REPL
-    pub fn run(&mut self) -> Result<(), String> {
+    pub fn run(&mut self) {
         self.print_welcome();
 
         let helper = RadishRustylineHelper::new(register_hints());
@@ -71,8 +71,6 @@ impl<'a> Repl<'a> {
                 }
             }
         }
-
-        Ok(())
     }
 
     /// Read a line, also handling multiline input.
@@ -144,7 +142,7 @@ impl<'a> Repl<'a> {
 
         let max_msg_width = 93;
 
-        let welcome = "Welcome to VM!";
+        let welcome = "Welcome to Radish!";
         let help = format!("type '{}' for more information", HELP);
         let exit = "press Ctrl+D to exit";
         let version = format!("Version {}", env!("CARGO_PKG_VERSION"));

@@ -13,13 +13,16 @@ fn main() -> Result<(), RadishError> {
 
         let mut vm = VM::with_config(config);
 
-        vm.exec_file(&path)?;
+        match vm.exec_file(&path) {
+            Ok(_) => {}
+            Err(err) => err.emit(),
+        };
     } else {
         config.repl = true;
 
         let vm = VM::with_config(config);
         
-        repl::Repl::new(vm).run()?;
+        repl::Repl::new(vm).run();
     }
 
     Ok(())
