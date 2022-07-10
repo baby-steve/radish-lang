@@ -3,7 +3,7 @@ use crate::{
     Value, VM, Namespace, vm::trace::Trace,
 };
 
-pub fn test(_vm: &mut VM, _args: Vec<Value>) -> Result<Value, Trace> {
+pub fn test(_vm: &mut VM) -> Result<Value, Trace> {
     println!("this is just for testing");
 
     Ok(Value::Nil)
@@ -13,7 +13,7 @@ pub struct System;
 
 impl ModuleBuilder for System {
     fn build(self) -> Result<Module, String> {
-        let mut module = Module::new_("sys");
+        let mut module = Module::new("sys");
 
         module.add_native("test_fun", 0, test);
 
@@ -25,7 +25,7 @@ pub struct Math;
 
 impl ModuleBuilder for Math {
     fn build(self) -> Result<Module, String> {
-        let mut module = Module::new_("math");
+        let mut module = Module::new("math");
 
         module.add_value("pi", 3.14);
 

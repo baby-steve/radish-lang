@@ -1,11 +1,18 @@
-use crate::{common::module::ModuleBuilder, Namespace, NamespaceBuilder, RadishError, VM};
+use crate::common::module::ModuleBuilder;
+use crate::{Namespace, NamespaceBuilder, RadishError, VM};
+
+use super::register::RegisterFn;
 
 impl VM {
-    pub fn load_fn(&mut self) -> Result<(), RadishError> {
-        todo!();
+    pub fn load_fn<A, R>(&mut self, _name: impl ToString, _f: impl RegisterFn<A, R>) -> Result<(), RadishError> {
+        todo!()
     }
 
     /// Load a [`Module`][crate::common::module::Module] into the VM.
+    ///
+    /// # Errors
+    ///
+    /// This function will return an error if it fails to build the module.
     ///
     /// # Examples
     ///
@@ -14,7 +21,7 @@ impl VM {
     /// # fn main() -> Result<(), radish::RadishError> {
     /// use radish::{VM, Module};
     ///
-    /// let module = Module::new_("example_module");
+    /// let module = Module::new("example_module");
     ///
     /// let mut vm = VM::new();
     ///
@@ -33,7 +40,7 @@ impl VM {
     ///
     /// impl ModuleBuilder for SomeModule {
     ///     fn build(self) -> Result<Module, String> {
-    ///         Ok(Module::new_("some_module"))
+    ///         Ok(Module::new("some_module"))
     ///     }
     /// }
     ///
@@ -57,7 +64,7 @@ impl VM {
     /// Load a [`Namespace`][crate::namespace::Namespace].
     ///
     /// # Examples
-    /// 
+    ///
     /// ```no_run,
     /// # fn main() -> Result<(), radish::RadishError> {
     /// use radish::{VM, Namespace, Module, NamespaceBuilder};
@@ -70,35 +77,29 @@ impl VM {
     ///     }
     ///
     ///     fn build(&mut self, namespace: &mut NamespaceBuilder) {
-    ///         namespace.add(Module::new_("mod"))
-    ///             .add(Module::new_("other"));
+    ///         namespace
+    ///             .add(Module::new("mod"))
+    ///             .add(Module::new("other"));
     ///     }
     /// }
     ///
     /// let mut vm = VM::new();
-    /// vm.load_namespace(SomeNamespace)?;
+    /// vm.load_namespace(SomeNamespace);
     ///
     /// # Ok(())
     /// # }
     /// ```
-    pub fn load_namespace<N: Namespace>(
-        &mut self,
-        mut namespace: N,
-    ) -> Result<&mut Self, RadishError> {
+    pub fn load_namespace<N: Namespace>(&mut self, mut namespace: N) -> &mut Self {
         let mut builder = NamespaceBuilder::new();
 
         namespace.build(&mut builder);
 
         builder.finish(self, namespace.name().to_string());
 
-        Ok(self)
+        self
     }
 
     pub fn load_const(&mut self) -> Result<(), RadishError> {
-        todo!();
-    }
-
-    pub fn load_native_fn(&mut self) -> Result<(), RadishError> {
         todo!();
     }
 }

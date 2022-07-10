@@ -1,26 +1,27 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{Module, RadishError, Value};
+use crate::{Module, Value};
+use super::trace::Trace;
 
 pub trait FromValue: Sized {
-    fn from_value(val: Value) -> Result<Self, RadishError>;
+    fn from_value(val: Value) -> Result<Self, Trace>;
 }
 
 impl FromValue for () {
-    fn from_value(val: Value) -> Result<Self, RadishError> {
+    fn from_value(val: Value) -> Result<Self, Trace> {
         match val {
             Value::Nil => Ok(()),
-            _ => Err("cannot coerce type into unit".into()),
+            _ => Err(Trace::new("cannot coerce type into unit")),
         }
     }
 }
 
 impl FromValue for bool {
-    fn from_value(val: Value) -> Result<Self, RadishError> {
+    fn from_value(val: Value) -> Result<Self, Trace> {
         match val {
             Value::Boolean(true) => Ok(true),
             Value::Boolean(false) => Ok(false),
-            _ => Err("cannot coerce type into boolean".into()),
+            _ => Err(Trace::new("cannot coerce type into boolean")),
         }
     }
 }
@@ -28,10 +29,10 @@ impl FromValue for bool {
 macro_rules! impl_number {
     ($typ:ty) => {
         impl FromValue for $typ {
-            fn from_value(val: Value) -> Result<Self, RadishError> {
+            fn from_value(val: Value) -> Result<Self, Trace> {
                 let num = match val {
                     Value::Number(val) => val,
-                    _ => return Err("cannot coerce type into number".into()),
+                    _ => return Err(Trace::new("cannot coerce type into number")),
                 };
 
                 Ok(num as $typ)
@@ -56,7 +57,13 @@ impl_number!(u128);
 impl_number!(usize);
 
 impl FromValue for Rc<RefCell<Module>> {
-    fn from_value(val: Value) -> Result<Self, RadishError> {
-        val.into_module().map_err(|err| err.into())
+    fn from_value(val: Value) -> Result<Self, Trace> {
+        val.into_module().map_err(|err| Trace::new(err))
+    }
+}
+
+impl FromValue for Value {
+    fn from_value(val: Value) -> Result<Self, Trace> {
+        Ok(val)
     }
 }

@@ -91,7 +91,7 @@ impl VM {
     /// ```
     pub fn eval_file<I: FromValue>(&mut self, file_name: &str) -> Result<I, RadishError> {
         match self._eval_file(file_name) {
-            Ok(val) => I::from_value(val),
+            Ok(val) => I::from_value(val).map_err(|err| err.into()),
             Err(e) => Err(e),
         }
     }
@@ -111,12 +111,12 @@ impl VM {
         let module = self.compiler.compile(&self.config.default_filename, src)?;
 
         match self.interpret(module) {
-            Ok(val) => I::from_value(val),
+            Ok(val) => I::from_value(val).map_err(|err| err.into()),
             Err(e) => Err(e.into()),
         }
     }
 
-    /// Interprete a compiled module.
+    // Interprete a compiled module.
     fn interpret(&mut self, module: CompiledModule) -> Result<Value, Trace> {
         use std::rc::Rc;
 

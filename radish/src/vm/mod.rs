@@ -22,6 +22,9 @@ pub mod to_value;
 pub mod trace;
 pub mod value;
 
+pub(crate) mod register;
+pub mod args;
+
 use value::Closure;
 
 #[derive(Debug)]
@@ -63,8 +66,7 @@ impl VM {
     pub fn new() -> Self {
         let mut vm = VM::with_config(Config::new());
 
-        vm.load_namespace(RadishCore)
-            .expect("Failed to load standard library");
+        vm.load_namespace(RadishCore);
 
         vm
     }
