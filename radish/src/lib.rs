@@ -9,7 +9,7 @@ mod namespace;
 pub use vm::VM;
 
 pub use error::RadishError;
-pub use vm::value::Value;
-pub use common::module::{Module, ModuleBuilder};
+pub use common::Value;
+pub use common::{Module, ModuleBuilder};
 pub use namespace::{Namespace, NamespaceBuilder};
 pub use crate::core::RadishCore;

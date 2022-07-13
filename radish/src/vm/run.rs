@@ -2,16 +2,13 @@ use std::{cell::RefCell, collections::HashMap, convert::TryInto, rc::Rc};
 
 use crate::{
     common::{
-        class::{AccessType, Class},
-        Disassembler, Opcode,
+        AccessType, Class, Closure, Value,
+        Disassembler, Opcode, UpValue, NativeFunction, 
     },
     vm::trace::Trace,
-    vm::value::{Closure, Value},
 };
 
 use crate::vm::{CallFrame, VM};
-
-use super::{native::NativeFunction, value::UpValue};
 
 impl VM {
     /// Create a new [`Trace`] with the given message, adding context to it.

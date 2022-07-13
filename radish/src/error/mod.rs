@@ -5,7 +5,7 @@ pub mod views;
 use termcolor::WriteColor;
 
 pub use diagnostic::{AsDiagnostic, Diagnostic, Label, LabelStyle};
-use crate::{common::span::Span, compiler::SyntaxError, vm::trace::Trace};
+use crate::{common::Span, compiler::SyntaxError, vm::trace::Trace};
 
 use std::{io, fmt};
 
@@ -26,6 +26,7 @@ impl Item {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(dead_code)]
 pub enum DisplayStyle {
     Verbose,
     Short,

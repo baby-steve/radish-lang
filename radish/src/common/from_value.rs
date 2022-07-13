@@ -1,7 +1,7 @@
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{Module, Value};
-use super::trace::Trace;
+use super::{Module, Value};
+use crate::vm::trace::Trace;
 
 pub trait FromValue: Sized {
     fn from_value(val: Value) -> Result<Self, Trace>;

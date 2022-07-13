@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::{
-    common::{source::Source, CompiledModule},
+    common::{Source, CompiledModule},
     compiler::Compiler, compiler::Parser, compiler::SyntaxError, compiler::AST, config::Config,
 };
 
@@ -79,7 +79,7 @@ impl CompilerPipeLine {
     fn _compile(&mut self, file_name: &str, src: &str) -> Result<CompiledModule, SyntaxError> {
         let source = Source::new(src, &file_name);
 
-        let mut parser = Parser::with_config(source, &self.settings);
+        let mut parser = Parser::new(source, &self.settings);
 
         let mut ast = parser.parse()?;
 

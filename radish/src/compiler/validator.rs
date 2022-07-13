@@ -165,24 +165,3 @@ impl Visitor<'_> for AstValidator {
         Ok(())
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use crate::{common::source::Source, compiler::parser::Parser};
-
-    use super::*;
-
-    #[test]
-    fn walk_ast() {
-        let src = "1 + 2 - 3 * 4 / 5";
-        let source = Source::new(src, "");
-
-        let mut parser = Parser::new(source);
-
-        let mut ast = parser.parse().expect("expected an parser to succeed");
-
-        let res = ast.walk(validate_ast);
-
-        assert!(res.is_ok());
-    }
-}

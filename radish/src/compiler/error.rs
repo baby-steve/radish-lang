@@ -1,4 +1,4 @@
-use crate::common::span::Span;
+use crate::common::Span;
 use crate::error::{AsDiagnostic, Diagnostic, Item, Label};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -236,12 +236,6 @@ impl SyntaxError {
 #[derive(Debug, Clone, PartialEq)]
 pub struct CompileError {
     msg: String,
-}
-
-impl CompileError {
-    pub fn new(msg: String) -> CompileError {
-        CompileError { msg }
-    }
 }
 
 #[cfg(test)]

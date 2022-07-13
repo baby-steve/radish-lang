@@ -1,8 +1,6 @@
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap};
 
-use crate::Value;
-
-use super::immutable_string::ImmutableString;
+use super::{Value, ImmutableString};
 
 #[derive(Debug)]
 pub struct Class {

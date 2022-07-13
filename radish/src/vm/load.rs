@@ -1,10 +1,12 @@
-use crate::common::module::ModuleBuilder;
+use crate::common::{ModuleBuilder, RegisterFn};
 use crate::{Namespace, NamespaceBuilder, RadishError, VM};
 
-use super::register::RegisterFn;
-
 impl VM {
-    pub fn load_fn<A, R>(&mut self, _name: impl ToString, _f: impl RegisterFn<A, R>) -> Result<(), RadishError> {
+    pub fn load_fn<A, R>(
+        &mut self,
+        _name: impl ToString,
+        _f: impl RegisterFn<A, R>,
+    ) -> Result<(), RadishError> {
         todo!()
     }
 

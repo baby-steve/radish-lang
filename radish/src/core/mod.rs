@@ -1,6 +1,6 @@
 use crate::{
-    common::{module::ModuleBuilder, Module},
-    Value, VM, Namespace, vm::trace::Trace,
+    common::{ModuleBuilder, Module, Value},
+    VM, Namespace, vm::trace::Trace,
 };
 
 pub fn test(_vm: &mut VM) -> Result<Value, Trace> {

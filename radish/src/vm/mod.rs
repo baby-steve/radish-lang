@@ -4,28 +4,19 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    common::{loader::Loader, CompiledModule, Module},
+    common::{Loader, CompiledModule, Module, Closure},
     compiler::pipeline::CompilerPipeLine,
     config::Config,
     RadishCore,
 };
 
-use self::stack::Stack;
-
 mod eval;
-pub mod from_value;
 mod load;
-pub(crate) mod native;
 mod run;
 mod stack;
-pub mod to_value;
+pub(crate) use stack::Stack;
+
 pub mod trace;
-pub mod value;
-
-pub(crate) mod register;
-pub mod args;
-
-use value::Closure;
 
 #[derive(Debug)]
 pub struct CallFrame {
@@ -42,11 +33,11 @@ pub struct VM {
     /// VM configuration.
     config: Box<Config>,
     /// VM's operator stack.
-    stack: Stack,
+    pub(crate) stack: Stack,
     /// VM's call stack.
-    frames: Vec<CallFrame>,
+    pub(crate) frames: Vec<CallFrame>,
     /// Number of frame's current on the call stack.
-    frame_count: usize,
+    pub(crate) frame_count: usize,
 
     /// Store upvalues for later access by closures.
     /// Contains the locations of non-local values on the stack.

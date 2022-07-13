@@ -2,8 +2,10 @@ use std::{cell::RefCell, collections::BTreeMap, fs, rc::Rc};
 
 use crate::{
     common::{resolver::Resolver, CompiledModule},
-    Module, RadishError, compiler::pipeline::CompilerPipeLine,
+    RadishError, compiler::pipeline::CompilerPipeLine,
 };
+
+use super::Module;
 
 #[derive(Debug)]
 pub struct Loader {

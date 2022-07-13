@@ -1,29 +1,24 @@
-use crate::common::class::Class;
-use crate::common::immutable_string::ImmutableString;
-use crate::common::{Chunk, Module};
-use crate::vm::native::NativeFunction;
+use super::{Class, ImmutableString, Chunk, Module, NativeFunction};
+
 use crate::VM;
 use std::cell::RefCell;
 use std::cmp::{Ord, Ordering};
-use std::collections::{hash_map, HashMap};
+use std::collections::HashMap;
 use std::fmt::{self};
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use std::rc::{Rc, Weak};
 
-use super::stack::Stack;
-use super::CallFrame;
-use super::trace::Trace;
+use crate::vm::Stack;
+use crate::vm::CallFrame;
+use crate::vm::trace::Trace;
 
-#[derive(Debug, PartialEq/*, PartialOrd*/)]
+#[derive(Debug, PartialEq)]
 pub enum Value {
     Number(f64),
     Boolean(bool),
-    // String(Rc<RefCell<String>>),
     String(ImmutableString),
     Function(Rc<Function>),
     Closure(Rc<Closure>),
-    // Class(Rc<Class>),
-    // Instance(Rc<Instance>),
     Module(Rc<RefCell<Module>>),
     NativeFunction(Rc<NativeFunction>),
     Array(Rc<RefCell<Vec<Value>>>),
@@ -430,23 +425,6 @@ impl UpValue {
         };
 
         self.closed = Some(val);
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub struct ValueMap {
-    inner: HashMap<String, Value>,
-}
-
-impl ValueMap {
-    pub fn iter(&self) -> hash_map::Iter<String, Value> {
-        self.inner.iter()
-    }
-}
-
-impl PartialOrd for ValueMap {
-    fn partial_cmp(&self, _other: &Self) -> Option<Ordering> {
-        None
     }
 }
 

@@ -1,6 +1,5 @@
-use super::from_value::FromValue;
-use super::trace::Trace;
-use crate::{Value, VM};
+use super::{FromValue, Value};
+use crate::{vm::trace::Trace, VM};
 use std::rc::Rc;
 
 type ReturnTyp = Result<Value, Trace>;
@@ -21,7 +20,6 @@ impl<F: Fn(&mut VM) -> ReturnTyp + 'static> RegisterFn<ReturnTyp, ReturnTyp> for
         Rc::new(Box::new(move |vm: &mut VM, _: Vec<Value>| (self)(vm)))
     }
 }
-
 
 impl<F: Fn(Value) -> ReturnTyp + 'static> RegisterFn<Value, ReturnTyp> for F {
     fn register(self) -> Rc<Fun> {

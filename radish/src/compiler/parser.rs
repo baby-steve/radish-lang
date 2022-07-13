@@ -8,7 +8,7 @@ use crate::compiler::{
     token::{Token, TokenType},
 };
 
-use crate::common::{source::Source, span::Span};
+use crate::common::{Source, Span};
 use crate::error::Item;
 
 use super::pipeline::PipelineSettings;
@@ -46,17 +46,7 @@ pub struct Parser {
 }
 
 impl Parser {
-    pub fn new(source: Rc<Source>) -> Self {
-        Self {
-            settings: ParserSettings::default(),
-            source: Rc::clone(&source),
-            scanner: Scanner::new(source),
-            previous: Token::empty(),
-            current: Token::empty(),
-        }
-    }
-
-    pub fn with_config(source: Rc<Source>, settings: &PipelineSettings) -> Self {
+    pub fn new(source: Rc<Source>, settings: &PipelineSettings) -> Self {
         Self {
             settings: ParserSettings::from(settings),
             source: Rc::clone(&source),

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::common::{source::Source, span::Span};
+use crate::common::{Source, Span};
 use crate::compiler::token::{Token, TokenType};
 
 pub struct Scanner {

@@ -1,4 +1,4 @@
-use crate::{Value, common::immutable_string::ImmutableString};
+use super::{ImmutableString, Value};
 
 pub trait ToValue {
     fn to_value(self) -> Value;

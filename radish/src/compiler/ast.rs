@@ -1,7 +1,7 @@
 //! Module containing Radish's Abstract Syntax Tree (otherwise known as an AST),
 //! along with all its related data structures.
 
-use crate::common::span::Span;
+use crate::common::Span;
 
 use crate::compiler::scope::ScopeMap;
 
@@ -28,13 +28,6 @@ impl AST {
         }
     }
 
-    pub fn walk<F, T>(&mut self, mut callback: F) -> Result<T, SyntaxError>
-    where
-        F: FnMut(&mut AST) -> Result<T, SyntaxError>,
-    {
-        callback(self)
-    }
-
     pub fn visit<F, T>(&mut self, callback: &mut F) -> Result<T, SyntaxError>
     where
         F: FnMut(&mut AST) -> Result<T, SyntaxError>,
@@ -54,7 +47,7 @@ impl AST {
         Stmt::FunDeclaration(fun, span)
     }
 
-    pub fn con_decl(con: ConstructorDecl, span: Span) -> Stmt {
+    pub fn _con_decl(con: ConstructorDecl, span: Span) -> Stmt {
         Stmt::ConDeclaration(con, span)
     }
 
@@ -162,6 +155,7 @@ impl AST {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum Stmt {
     /// A block statement
     /// ```txt
@@ -249,33 +243,6 @@ pub enum VarKind {
 }
 
 impl Stmt {
-    pub fn position(&self) -> Span {
-        match self {
-            Self::VarDeclaration(_, pos)
-            | Self::FunDeclaration(_, pos)
-            | Self::ConDeclaration(_, pos)
-            | Self::ClassDeclaration(_, pos)
-            | Self::PrintStmt(_, pos)
-            | Self::BlockStmt(_, pos)
-            | Self::AssignmentStmt(_, pos)
-            | Self::IfStmt(_, _, _, pos)
-            | Self::LoopStmt(_, pos)
-            | Self::WhileStmt(_, _, pos)
-            | Self::ReturnStmt(_, pos)
-            | Self::ContinueStmt(pos)
-            | Self::BreakStmt(pos) => pos.clone(),
-            Self::ExpressionStmt(expr) => expr.position(),
-            Self::ImportStmt(stmt) => stmt.pos(),
-        }
-    }
-
-    pub fn as_function(&mut self) -> &mut FunctionDecl {
-        match self {
-            Stmt::FunDeclaration(fun, _) => fun,
-            _ => panic!("not a function"),
-        }
-    }
-
     pub fn into_var_decl(self) -> (VarDeclaration, Span) {
         match self {
             Stmt::VarDeclaration(decl, span) => (decl, span),
@@ -490,10 +457,6 @@ impl ImportStatement {
 
     pub fn path(&self) -> &str {
         &self.path
-    }
-
-    pub fn pos(&self) -> Span {
-        self.pos.clone()
     }
 }
 

@@ -1,8 +1,6 @@
 use crate::common::{Chunk, CompiledModule, Disassembler, Module, Opcode, Span};
 
-use crate::vm::value::Function as FunctionValue;
-
-use crate::Value;
+use crate::common::{Function as FunctionValue, Value};
 
 use crate::compiler::{ast::*, Rc, SyntaxError};
 

@@ -1,9 +1,4 @@
-use crate::vm::from_value::FromValue;
-use crate::vm::native::NativeFunction;
-use crate::vm::register::RegisterFn;
-use crate::vm::to_value::ToValue;
-use crate::vm::value::Function;
-use crate::Value;
+use super::{FromValue, NativeFunction, RegisterFn, ToValue, Function, Value};
 
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, rc::Rc};
 

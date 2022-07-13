@@ -1,4 +1,4 @@
-use crate::common::span::Span;
+use crate::common::Span;
 use crate::compiler::ast::{FunctionDecl, ClassDecl};
 use std::{collections::HashMap, fmt};
 
@@ -20,14 +20,6 @@ impl Symbol {
 
     pub fn var(span: &Span, depth: usize) -> Symbol {
         Symbol(SymbolKind::Var, Span::from(span), depth)
-    }
-
-    pub fn fun(arg_count: usize, span: &Span, depth: usize) -> Symbol {
-        Symbol(SymbolKind::Fun { arg_count }, Span::from(span), depth)
-    }
-
-    pub fn class(span: &Span, depth: usize) -> Symbol {
-        Symbol(SymbolKind::Class, Span::from(span), depth)
     }
 }
 
@@ -97,26 +89,6 @@ impl ScopeMap {
     pub fn add_non_local(&mut self, key: &str, value: Symbol) -> Option<Symbol> {
         self.non_locals.insert(key.to_string(), value)
     }
-    
-    pub fn get_local(&self, key: &str) -> Option<&Symbol> {
-        self.locals.get(key)
-    }
-
-    pub fn get_non_local(&self, key: &str) -> Option<&Symbol> {
-        self.non_locals.get(key)
-    }
-
-    pub fn has_local(&self, key: &str) -> bool {
-        self.locals.contains_key(key)
-    }
-
-    pub fn has_non_local(&self, key: &str) -> bool {
-        self.non_locals.contains_key(key)
-    }
-
-    pub fn all(&self) -> &HashMap<String, Symbol> {
-        &self.locals
-    }
 }
 
 impl Default for ScopeMap {
@@ -165,20 +137,5 @@ impl fmt::Display for ScopeMap {
         writeln!(f, "╰─{}─┴{}╯", "─".repeat(max_width), "─".repeat(l_width))?;
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn extend_table() {
-        let mut table = ScopeMap::new();
-        let mut other = ScopeMap::new();
-        other.add_local("a", Symbol::var(&Span::empty(), 0));
-        table.extend(other);
-
-        assert!(table.has_local("a"));
     }
 }

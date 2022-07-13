@@ -1,6 +1,6 @@
 // TODO: rewrite this entire thing as it's gotten quite gnarly and is due for a refactor.
 
-use crate::vm::value::Function;
+use super::Function;
 
 pub struct Disassembler<'a> {
     name: &'a str,
@@ -247,12 +247,6 @@ impl<'a> Disassembler<'a> {
         self.write_instruction("BuildClass", offset);
         println!();
         offset += 1;
-
-        // name of class
-        // offset += 1;
-
-        // something else...
-        // offset += 1;
 
         let num_fields = self.function.chunk.code[offset];
         let num_constructors = self.function.chunk.code[offset + 1];

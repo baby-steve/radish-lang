@@ -80,18 +80,7 @@ pub struct Scope {
 }
 
 impl Scope {
-    pub fn new() -> Self {
-        Self {
-            name: String::from(""),
-            locals: vec![],
-            upvalues: vec![],
-            alt_upvalues: vec![],
-            upvalue_indexes: HashMap::new(),
-            depth: 0,
-        }
-    }
-
-    pub fn named(name: impl ToString) -> Self {
+    pub fn new(name: impl ToString) -> Self {
         Self {
             name: name.to_string(),
             locals: vec![],
@@ -101,17 +90,6 @@ impl Scope {
             depth: 0,
         }
     }
-
-    /*
-    pub fn get_variable(&self, name: &str) -> Option<(ScopeTyp, usize)> {
-        if let Some(res) = self.get_local(name) {
-            Some(res)
-        } else if let Some(res) = self.get_upvalue(name) {
-            Some(res)
-        } else {
-            None
-        }
-    }*/
 
     fn get_local(&self, name: &str) -> Option<(ScopeTyp, usize)> {
         let mut index = self.locals.len();
@@ -244,7 +222,7 @@ impl Hoister {
 
     fn enter_scope(&mut self, name: impl ToString) {
         //println!("[hoist] entering scope \"{}\"", &name.to_string());
-        let new_scope = Scope::named(name);
+        let new_scope = Scope::new(name);
         self.scopes.push(new_scope);
     }
 

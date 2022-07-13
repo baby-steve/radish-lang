@@ -1,8 +1,8 @@
 use std::{rc::Rc, cmp::Ordering, fmt};
 
-use crate::{Value, VM};
+use crate::{vm::trace::Trace, VM};
 
-use super::trace::Trace;
+use super::Value;
 
 pub type InnerFn = dyn Fn(&mut VM, Vec<Value>) -> Result<Value, Trace>;
 

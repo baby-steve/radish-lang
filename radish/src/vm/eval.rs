@@ -1,9 +1,9 @@
 //! Module containing the VM's evaluation methods.
 
 use crate::{
-    common::CompiledModule,
-    vm::{from_value::FromValue, trace::Trace, value::Closure, VM},
-    RadishError, Value,
+    common::{Closure, CompiledModule, FromValue, Value},
+    vm::trace::Trace,
+    RadishError, VM,
 };
 
 impl VM {

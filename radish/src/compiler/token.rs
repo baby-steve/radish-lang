@@ -3,7 +3,7 @@ use std::{
     fmt,
 };
 
-use crate::common::span::Span;
+use crate::common::Span;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
@@ -228,65 +228,6 @@ impl Token {
             | TokenType::EndLoop
             | TokenType::EndIf
             | TokenType::RightParen)
-    }
-
-    pub fn lookup_from_string(&self, syntax: &str) -> Option<TokenType> {
-        Some(match syntax {
-            "+" => TokenType::Plus,
-            "-" => TokenType::Minus,
-            "*" => TokenType::Star,
-            "/" => TokenType::Slash,
-            "%" => TokenType::Percent,
-            "!" => TokenType::Bang,
-            "=" => TokenType::Equals,
-            "<" => TokenType::LessThan,
-            "<=" => TokenType::LessThanEquals,
-            ">" => TokenType::GreaterThan,
-            ">=" => TokenType::GreaterThanEquals, 
-            "==" => TokenType::EqualsTo,
-            "!=" => TokenType::NotEqual,
-            "+=" => TokenType::PlusEquals,
-            "-=" => TokenType::MinusEquals,
-            "*=" => TokenType::MultiplyEquals,
-            "/=" => TokenType::DivideEquals,
-            "%=" => TokenType::ModuloEquals,
-            "\\n" => TokenType::Newline,
-            "(" => TokenType::LeftParen,
-            ")" => TokenType::RightParen,
-            "{" => TokenType::LeftBrace,
-            "}" => TokenType::RightBrace,
-            "[" => TokenType::LeftBracket,
-            "]" => TokenType::RightBracket,
-            "," => TokenType::Comma,
-            "." => TokenType::Dot,
-            ":" => TokenType::Colon,
-            "true" => TokenType::True,
-            "false" => TokenType::False,
-            "nil" => TokenType::Nil,
-            "var" => TokenType::Var,
-            "fin" => TokenType::Fin,
-            "print" => TokenType::Print,
-            "and" => TokenType::And,
-            "or" => TokenType::Or,
-            "if" => TokenType::If,
-            "then" => TokenType::Then,
-            "else" => TokenType::Else,
-            "endif" => TokenType::EndIf,
-            "loop" => TokenType::Loop,
-            "while" => TokenType::While,
-            "endloop" => TokenType::EndLoop,
-            "break" => TokenType::Break,
-            "continue" => TokenType::Continue,
-            "fun" => TokenType::Fun,
-            "class" => TokenType::Class,
-            "con" => TokenType::Con,
-            "return" => TokenType::Return,
-            "for" => TokenType::For,
-            "import" => TokenType::Import,
-            "<Eof>" => TokenType::Eof,
-
-            _ => return None,
-        })
     }
 }
 
