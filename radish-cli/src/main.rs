@@ -1,4 +1,4 @@
-use radish::{VM, RadishError, config::Config};
+use radish::{VM, RadishError, Config};
 
 mod cli;
 mod repl;

@@ -1,4 +1,4 @@
-use radish::{self, Module, Namespace, NamespaceBuilder, RadishError, VM, Value, vm::trace::Trace};
+use radish::{self, Module, Namespace, NamespaceBuilder, RadishError, VM, Value, Trace};
 
 struct SomePackage;
 

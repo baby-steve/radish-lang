@@ -39,7 +39,7 @@ pub use native::NativeFunction;
 mod to_value;
 pub use to_value::ToValue;
 
-mod value;
+pub mod value;
 pub use value::*;
 
 mod register;

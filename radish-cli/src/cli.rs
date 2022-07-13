@@ -1,7 +1,7 @@
 //! CLI for the Radish programming langauge.
 
 use clap::{App, Arg};
-use radish::config::Config;
+use radish::Config;
 
 #[derive(Debug)]
 pub struct Cli {

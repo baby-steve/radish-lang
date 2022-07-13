@@ -1,15 +1,19 @@
-pub mod common;
-pub mod compiler;
-pub mod config;
-pub mod error;
-pub mod vm;
-mod core;
-mod namespace;
+mod common;
+pub use common::{Module, ModuleBuilder, Value, value::*, NativeFunction, FromValue, ToValue};
 
-pub use vm::VM;
+mod compiler;
 
+mod config;
+pub use config::Config;
+
+mod error;
 pub use error::RadishError;
-pub use common::Value;
-pub use common::{Module, ModuleBuilder};
-pub use namespace::{Namespace, NamespaceBuilder};
+
+mod vm;
+pub use vm::{VM, trace::Trace};
+
+mod core;
 pub use crate::core::RadishCore;
+
+mod namespace;
+pub use namespace::{Namespace, NamespaceBuilder};

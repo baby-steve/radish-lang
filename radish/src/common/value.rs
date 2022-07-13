@@ -334,7 +334,7 @@ impl From<Rc<Function>> for Closure {
 }
 
 #[derive(Debug, PartialEq, PartialOrd)]
-pub enum UpValueLocation {
+pub(crate) enum UpValueLocation {
     StackIndex(usize),
     UpValueIndex(usize),
 }
