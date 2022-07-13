@@ -11,6 +11,8 @@ use crate::compiler::error::{SyntaxError, SyntaxErrorKind};
 
 use crate::error::Item;
 
+use super::VarDeclaration;
+
 pub fn validate_ast(ast: &mut AST) -> Result<(), SyntaxError> {
     AstValidator::validate_ast(ast)
 }
@@ -63,15 +65,13 @@ impl Visitor<'_> for AstValidator {
     /// report an error.
     fn visit_var_decl(
         &mut self,
-        id: &mut super::Ident,
-        expr: &mut Option<Expr>,
-        kind: super::VarKind,
+        stmt: &mut VarDeclaration,
     ) -> VisitorResult {
-        match expr {
+        match &mut stmt.init {
             Some(expr) => self.visit_expr(expr),
-            None if kind == VarKind::Fin => {
+            None if stmt.kind == VarKind::Fin => {
                 let err_kind = SyntaxErrorKind::MissingConstInit {
-                    item: Item::new(&id.pos, &id.name),
+                    item: Item::new(&stmt.name.pos, &stmt.name.name),
                 };
 
                 Err(SyntaxError::new(err_kind))

@@ -17,7 +17,7 @@ pub trait Visitor<'a>: Sized {
             Stmt::FunDeclaration(fun, _) => self.visit_fun_decl(fun),
             Stmt::ConDeclaration(con, _) => self.visit_con_decl(con),
             Stmt::ClassDeclaration(class, _) => self.visit_class_decl(class),
-            Stmt::VarDeclaration(id, expr, kind, _) => self.visit_var_decl(id, expr, *kind),
+            Stmt::VarDeclaration(stmt, _) => self.visit_var_decl(stmt),
             Stmt::AssignmentStmt(stmt, _) => self.visit_assignment(stmt),
             Stmt::IfStmt(condition, body, alt, _) => self.visit_if_stmt(condition, body, alt),
             Stmt::LoopStmt(body, _) => self.visit_loop_stmt(body),
@@ -62,13 +62,11 @@ pub trait Visitor<'a>: Sized {
 
     fn visit_var_decl(
         &mut self,
-        id: &mut Ident,
-        expr: &mut Option<Expr>,
-        _kind: VarKind,
+        stmt: &mut VarDeclaration,
     ) -> VisitorResult {
-        self.visit_ident(id)?;
+        self.visit_ident(&mut stmt.name)?;
 
-        if let Some(init) = expr {
+        if let Some(init) = &mut stmt.init {
             self.visit_expr(init)?;
         }
 

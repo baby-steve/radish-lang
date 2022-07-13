@@ -1,12 +1,11 @@
 use std::collections::HashMap;
 
+use super::VarDeclaration;
 use super::visitor::VisitorResult;
-use super::Expr;
 use super::FunctionDecl;
 use super::Ident;
 use super::Stmt;
 use super::SyntaxError;
-use super::VarKind;
 use super::Visitor;
 use super::AST;
 
@@ -463,14 +462,14 @@ impl Hoister {
 
         for stmt in block.iter_mut() {
             match stmt {
-                Stmt::VarDeclaration(id, _, _, _) => {
+                Stmt::VarDeclaration(stmt, _) => {
                     for local in locals.iter() {
-                        if local.is_captured() && id.name == local.0 {
+                        if local.is_captured() && stmt.name.name == local.0 {
                             //println!(
                             //    "[hoist] found declaration location of captured variable {}",
                             //    &id.name
                             //);
-                            id.scope = VarScope::Local(true);
+                            stmt.name.scope = VarScope::Local(true);
                             captures.push(local);
                             break;
                         }
@@ -566,15 +565,13 @@ impl Visitor<'_> for Hoister {
 
     fn visit_var_decl(
         &mut self,
-        id: &mut Ident,
-        expr: &mut Option<Expr>,
-        _: VarKind,
+        stmt: &mut VarDeclaration,
     ) -> VisitorResult {
-        if let Some(expr) = expr {
+        if let Some(expr) = &mut stmt.init {
             self.visit_expr(expr)?;
         }
 
-        self.declare_local(id);
+        self.declare_local(&mut stmt.name);
 
         Ok(())
     }
@@ -583,41 +580,5 @@ impl Visitor<'_> for Hoister {
         self.resolve_ident(ident);
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    // TODO: add more tests for verfiying that variables have the correct indexes.
-
-    use crate::{common::source::Source, compiler::Parser};
-
-    use super::*;
-
-    #[test]
-    fn capture() {
-        let content = "
-            fun outer() {
-                var a = 23
-                fun inner() {
-                    print a
-                }
-                return inner
-            }
-        ";
-
-        let src = Source::new(content, "");
-        let mut parser = Parser::new(src);
-
-        let mut ast = parser.parse().expect("couldn't parse ast");
-
-        hoist(&mut ast).expect("failed to hoist ast");
-
-        let outer_fun = ast.items[0].as_function();
-        let (id, _, _, _) = outer_fun.body[0].as_ident();
-
-        assert_eq!(id.scope, VarScope::Local(true));
-
-        let _inner_fun = outer_fun.body[1].as_function();
     }
 }

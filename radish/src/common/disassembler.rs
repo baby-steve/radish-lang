@@ -98,7 +98,7 @@ impl<'a> Disassembler<'a> {
             Opcode::BuildArray => self.long_const_instruction("BuildArray", offset, false),
             Opcode::BuildMap => self.long_const_instruction("BuildMap", offset, false),
             Opcode::Closure => self.closure(offset),
-            Opcode::BuildClass => self.simple_instruction("Class", offset),
+            Opcode::BuildClass => self.class(offset),
             Opcode::BuildCon => self.simple_instruction("BuildCon", offset),
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Return => self.simple_instruction("Return", offset),
@@ -220,13 +220,11 @@ impl<'a> Disassembler<'a> {
         self.write_instruction("Closure", offset);
         offset += 1;
         println!();
-        let num_upvals = self.function.chunk.code[offset];// + 1];
+        let num_upvals = self.function.chunk.code[offset];
 
         offset += 1;
 
         for _ in 0..num_upvals {
-            //println!("{}; {}", self.function.chunk.code[offset], self.function.chunk.code[offset + 1]);
-
             let is_local = self.function.chunk.code[offset];
 
             self.write_instruction(&self.function.chunk.code[offset + 1].to_string(), offset + 1);
@@ -241,6 +239,30 @@ impl<'a> Disassembler<'a> {
 
             offset += 2;
         }
+
+        offset
+    }
+
+    fn class(&self, mut offset: usize) -> usize {
+        self.write_instruction("BuildClass", offset);
+        println!();
+        offset += 1;
+
+        // name of class
+        // offset += 1;
+
+        // something else...
+        // offset += 1;
+
+        let num_fields = self.function.chunk.code[offset];
+        let num_constructors = self.function.chunk.code[offset + 1];
+        let num_methods = self.function.chunk.code[offset + 2];
+
+        println!("      fields: {num_fields}");
+        println!("      constructors: {num_constructors}");
+        println!("      methods: {num_methods}");
+
+        offset += 3;
 
         offset
     }

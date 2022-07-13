@@ -270,6 +270,7 @@ impl Parser {
     fn parse_class_declaration(&mut self) -> Result<Stmt, SyntaxError> {
         let start = self.current.span.clone();
         let mut constructors = vec![];
+        let mut fields = vec![];
 
         // class ...
         self.consume(TokenType::Class);
@@ -282,18 +283,27 @@ impl Parser {
 
         // parse class body
         while self.current.token_type != TokenType::RightBrace {
-            match self.current.token_type {
+            match self.current.token_type.clone() {
                 // \n or //...
                 TokenType::Newline | TokenType::Comment(_, false) => {
                     // should single-line comments be parsed?
                     self.advance();
                     continue;
                 }
+                // a field
+                TokenType::Var => {
+                    let stmt = self.parse_var_declaration(false)?;
+
+                    fields.push(stmt.into_var_decl().0);
+                }
                 // a constructor
                 TokenType::Con => constructors.push(self.parse_constructor()?),
-                _ => {
-                    panic!("parsing a class");
+                err => {
+                    // panic!("parsing a class");
                     // break;
+                    return Err(self.error(SyntaxErrorKind::Unexpected {
+                        found: Item::new(&self.current.span, err.syntax()),
+                    }));
                 }
             };
         }
@@ -301,7 +311,7 @@ impl Parser {
         // class <id> { ... }
         self.expect(TokenType::RightBrace)?;
 
-        let class = ClassDecl::new(id, constructors);
+        let class = ClassDecl::new(id, constructors, fields);
         let span = Span::combine(&start, &self.current.span);
         Ok(AST::class_decl(class, span))
     }
@@ -563,9 +573,9 @@ impl Parser {
         let rhs = self.parse_expression()?;
 
         let span = Span::combine(&lhs.position(), &rhs.position());
-        
+
         let stmt = AssignmentStmt::new(op, lhs, rhs);
-        
+
         Ok(AST::assignment(stmt, span))
     }
 
@@ -902,7 +912,9 @@ impl Parser {
                 // lexer error
                 TokenType::Error(err) => {
                     let message = err.to_string();
-                    let err = self.error(SyntaxErrorKind::Custom { message });
+                    let err = self.error(SyntaxErrorKind::Unexpected {
+                        found: Item::new(&current.span, message),
+                    });
                     return Err(err);
                 }
                 _ => {
@@ -1020,10 +1032,7 @@ impl Parser {
         // [ ... ]
         self.expect(TokenType::RightBracket)?;
 
-        let span = Span::combine(
-            &start,
-            &self.current.span,
-        );
+        let span = Span::combine(&start, &self.current.span);
 
         Ok(AST::array(elements, span))
     }
@@ -1055,10 +1064,7 @@ impl Parser {
         // { ... }
         self.expect(TokenType::RightBrace)?;
 
-        let span = Span::combine(
-            &start,
-            &self.current.span,
-        );
+        let span = Span::combine(&start, &self.current.span);
 
         Ok(AST::map(elements, span))
     }

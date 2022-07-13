@@ -9,6 +9,8 @@ pub mod span;
 pub mod module;
 pub mod resolver;
 pub mod loader;
+pub mod class;
+pub mod immutable_string;
 
 pub use chunk::Chunk;
 pub use disassembler::Disassembler;

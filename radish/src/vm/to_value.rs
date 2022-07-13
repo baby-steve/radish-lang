@@ -1,6 +1,4 @@
-use std::{cell::RefCell, rc::Rc};
-
-use crate::Value;
+use crate::{Value, common::immutable_string::ImmutableString};
 
 pub trait ToValue {
     fn to_value(self) -> Value;
@@ -51,30 +49,30 @@ impl_number!(usize);
 
 impl ToValue for &str {
     fn to_value(self) -> Value {
-        Value::String(Rc::new(RefCell::new(self.to_string())))
+        Value::String(ImmutableString::from(self))
     }
 }
 
 impl ToValue for &mut str {
     fn to_value(self) -> Value {
-        Value::String(Rc::new(RefCell::new(self.to_string())))
+        Value::String(ImmutableString::from(self))
     }
 }
 
 impl ToValue for Box<str> {
     fn to_value(self) -> Value {
-        Value::String(Rc::new(RefCell::new(self.to_string())))
+        Value::String(ImmutableString::from(self))
     }
 }
 
 impl ToValue for &String {
     fn to_value(self) -> Value {
-        Value::String(Rc::new(RefCell::new(self.clone())))
+        Value::String(ImmutableString::from(self))
     }
 }
 
 impl ToValue for String {
     fn to_value(self) -> Value {
-        Value::String(Rc::new(RefCell::new(self)))
+        Value::String(ImmutableString::from(self))
     }
 }

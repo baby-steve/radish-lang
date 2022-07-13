@@ -331,22 +331,20 @@ impl Visitor<'_> for Analyzer {
 
     fn visit_var_decl(
         &mut self,
-        id: &mut Ident,
-        expr: &mut Option<Expr>,
-        _kind: VarKind,
+        stmt: &mut VarDeclaration,
     ) -> VisitorResult {
         // check the right hand expression if it exists.
-        if let Some(expr) = expr {
+        if let Some(expr) = &mut stmt.init {
             self.visit_expr(expr)?;
         }
 
         // check if this is the definition of a previously unresolved global variable.
-        if self.scopes.len() == 1 && self.unresolved.get(id).is_some() {
-            self.unresolved.remove(id);
+        if self.scopes.len() == 1 && self.unresolved.get(&stmt.name).is_some() {
+            self.unresolved.remove(&stmt.name);
         }
 
         // add this variable to the current scope, checking for duplicates.
-        self.declare_variable(&id.name, SymbolKind::Var, &id.pos)?;
+        self.declare_variable(&stmt.name.name, SymbolKind::Var, &stmt.name.pos)?;
 
         Ok(())
     }

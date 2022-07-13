@@ -458,13 +458,9 @@ impl Compiler {
             panic!("Too many upvalues");
         };
 
-        //println!("[compiler] closure {} has {} upvalues", &fun.id.name, scope.upvalues.len());
-
         self.emit_byte(scope.upvalues.len() as u8);
 
         for upval in scope.upvalues.iter() {
-            //println!("[compiler] emitting byte {}. Also: Pineapples", upval.index);
-
             // TODO: replace the 1 and 0 with globals or something for readablity.
             if upval.on_stack {
                 self.emit_byte(0);
@@ -480,34 +476,31 @@ impl Compiler {
 
     /// Compile a class declaration
     fn class(&mut self, class: &ClassDecl) -> Result<(), SyntaxError> {
-        // let class = Class {
-        //     name: class.id.name.clone().into_boxed_str(),
-        // };
-
-        // TODO: should classes be created at compile time or runtime?
-        // should we:
-        //  a) emit a `class` value now, or
-        //  b) emit the class's name as a string and create the class at runtime?
-        // I'm gonna go with option (b) for now, but could try (a)
-
-        // emit the class's name
-        self.emit_constant(Value::from(&class.id.name));
-
-        // self.emit_constant(Value::from(class));
-        // emit build instruction
-        self.emit_byte(Opcode::BuildClass as u8);
-
-        // load the class's name back onto the stack (needed by methods)
-        // self.identifier(&class.id)?;
-
-        // self.enter_scope();
-
-        // compile each class constructor
-        for constructor in class.constructors.iter() {
-            self.constructor_declaration(constructor)?;
+        for field in class.fields.iter() {
+            // access type.
+            // self.emit_byte(1 as u8);
+            // the name of the field.
+            self.emit_constant(Value::from(&field.name.name));
+            // the field's value
+            if let Some(expr) = &field.init {
+                self.expression(expr)?;
+            } else {
+                self.emit_byte(Opcode::Nil as u8);
+            }
         }
 
-        // self.leave_scope();
+        
+        // the name of the class
+        self.emit_constant(Value::from(&class.id.name));
+        
+        self.emit_byte(Opcode::BuildClass as u8);
+        
+        // number of fields
+        self.emit_byte(class.fields.len() as u8);
+        // number of constructors
+        self.emit_byte(0 as u8);
+        // number of methods
+        self.emit_byte(0 as u8);
 
         Ok(())
     }
@@ -521,7 +514,7 @@ impl Compiler {
             Stmt::FunDeclaration(fun, _) => self.function_declaration(fun),
             Stmt::ConDeclaration(con, _) => self.constructor_declaration(con),
             Stmt::ClassDeclaration(class, _) => self.class_declaration(class),
-            Stmt::VarDeclaration(id, init, kind, _) => self.var_declaration(id, init, kind),
+            Stmt::VarDeclaration(stmt, _) => self.var_declaration(stmt),
             Stmt::AssignmentStmt(stmt, _) => self.assignment(stmt),
             Stmt::IfStmt(expr, body, alt, _) => self.if_statement(expr, body, alt),
             Stmt::LoopStmt(body, _) => self.loop_statement(body),
@@ -670,7 +663,7 @@ impl Compiler {
 
         for stmt in body {
             match stmt {
-                Stmt::VarDeclaration(_, _, _, _) => {
+                Stmt::VarDeclaration(_, _) => {
                     self.emit_byte(Opcode::Del as u8);
                 }
                 _ => continue,
@@ -732,26 +725,21 @@ impl Compiler {
         Ok(())
     }
 
-    fn var_declaration(
-        &mut self,
-        id: &Ident,
-        init: &Option<Expr>,
-        _: &VarKind,
-    ) -> Result<(), SyntaxError> {
+    fn var_declaration(&mut self, stmt: &VarDeclaration) -> Result<(), SyntaxError> {
         if self.scope_depth > 0 {
-            if let Some(expr) = &init {
+            if let Some(expr) = &stmt.init {
                 self.expression(expr)?;
             } else {
                 self.emit_byte(Opcode::Nil as u8);
             }
 
-            self.define_variable(id);
+            self.define_variable(&stmt.name);
         } else {
             // All global variables have already been foward declared, so we can just
             // grab its location from the module.
-            let index = self.module.borrow_mut().get_index(&id.name).unwrap();
+            let index = self.module.borrow_mut().get_index(&stmt.name.name).unwrap();
 
-            if let Some(expr) = &init {
+            if let Some(expr) = &stmt.init {
                 self.expression(expr)?;
             } else {
                 self.emit_byte(Opcode::Nil as u8);
@@ -787,7 +775,13 @@ impl Compiler {
             }
             Expr::MemberExpr(obj, prop, _) => {
                 self.expression(obj)?;
-                self.expression(prop)?;
+                
+                match &**prop {
+                    Expr::MemberExpr(object, property, _) => self.member_expr(&object, &property)?,
+                    Expr::Identifier(id) => self.emit_constant(Value::from(&id.name)),
+                    _ => panic!("Invalid property in member expression"),
+                };
+
 
                 if let Some(op) = op {
                     self.expression(obj)?;
@@ -937,7 +931,12 @@ impl Compiler {
     }
 
     fn member_expr(&mut self, object: &Expr, property: &Expr) -> Result<(), SyntaxError> {
-        self.expression(property)?;
+        match property {
+            Expr::MemberExpr(object, property, _) => self.member_expr(object, property)?,
+            Expr::Identifier(id) => self.emit_constant(Value::from(&id.name)),
+            _ => panic!("Invalid property in member expression"),
+        };
+        
         self.expression(object)?;
 
         self.emit_byte(Opcode::LoadField as u8);

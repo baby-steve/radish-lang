@@ -7,7 +7,7 @@ use crate::compiler::scope::ScopeMap;
 
 use std::cmp::Ordering;
 
-use super::hoist::{VarScope, Scope};
+use super::hoist::{Scope, VarScope};
 use super::SyntaxError;
 
 /// Contains a tree of nested statements and expressions along with
@@ -63,7 +63,13 @@ impl AST {
     }
 
     pub fn var_decl(id: Ident, expr: Option<Expr>, kind: VarKind, span: Span) -> Stmt {
-        Stmt::VarDeclaration(id, expr, kind, span)
+        let stmt = VarDeclaration {
+            name: id,
+            init: expr,
+            kind,
+        };
+
+        Stmt::VarDeclaration(stmt, span)
     }
 
     pub fn assignment(stmt: AssignmentStmt, span: Span) -> Stmt {
@@ -182,12 +188,11 @@ pub enum Stmt {
     /// 'con' <ident> '(' param... ')' '{' stmt... '}'
     /// ```
     ConDeclaration(ConstructorDecl, Span),
-    /// A variable declaration. [`VarKind`] determines whether its a
-    /// constant delclaration or not.
+    /// A variable declaration.
     /// ```txt
     /// ('var'|'fin') <ident> ['=' <expr>]
     /// ```
-    VarDeclaration(Ident, Option<Expr>, VarKind, Span),
+    VarDeclaration(VarDeclaration, Span),
     /// An assignment statement.
     /// ```txt
     /// <ident> <op>'=' <expr>
@@ -246,7 +251,7 @@ pub enum VarKind {
 impl Stmt {
     pub fn position(&self) -> Span {
         match self {
-            Self::VarDeclaration(_, _, _, pos)
+            Self::VarDeclaration(_, pos)
             | Self::FunDeclaration(_, pos)
             | Self::ConDeclaration(_, pos)
             | Self::ClassDeclaration(_, pos)
@@ -271,14 +276,13 @@ impl Stmt {
         }
     }
 
-    pub fn as_ident(&mut self) -> (&mut Ident, &mut Option<Expr>, &mut VarKind, &mut Span) {
+    pub fn into_var_decl(self) -> (VarDeclaration, Span) {
         match self {
-            Stmt::VarDeclaration(id, expr, kind, span) => (id, expr, kind, span),
-            _ => panic!("not an identifier"),
+            Stmt::VarDeclaration(decl, span) => (decl, span),
+            _ => panic!("not a variable declaration"),
         }
     }
 }
-
 
 /// An assignment statement.
 #[derive(Debug, Clone, PartialEq)]
@@ -292,6 +296,13 @@ impl AssignmentStmt {
     pub fn new(op: OpAssignment, lhs: Expr, rhs: Expr) -> Self {
         Self { op, lhs, rhs }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct VarDeclaration {
+    pub name: Ident,
+    pub init: Option<Expr>,
+    pub kind: VarKind,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -415,11 +426,20 @@ pub struct ClassDecl {
     pub id: Ident,
     /// this class's constructors
     pub constructors: Vec<ConstructorDecl>,
+    pub fields: Vec<VarDeclaration>,
 }
 
 impl ClassDecl {
-    pub fn new(id: Ident, constructors: Vec<ConstructorDecl>) -> ClassDecl {
-        ClassDecl { id, constructors }
+    pub fn new(
+        id: Ident,
+        constructors: Vec<ConstructorDecl>,
+        fields: Vec<VarDeclaration>,
+    ) -> ClassDecl {
+        ClassDecl {
+            id,
+            constructors,
+            fields,
+        }
     }
 }
 

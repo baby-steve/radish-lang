@@ -1,3 +1,5 @@
+use crate::common::class::Class;
+use crate::common::immutable_string::ImmutableString;
 use crate::common::{Chunk, Module};
 use crate::vm::native::NativeFunction;
 use crate::VM;
@@ -10,29 +12,32 @@ use std::rc::{Rc, Weak};
 
 use super::stack::Stack;
 use super::CallFrame;
+use super::trace::Trace;
 
 #[derive(Debug, PartialEq/*, PartialOrd*/)]
 pub enum Value {
     Number(f64),
     Boolean(bool),
-    String(Rc<RefCell<String>>),
+    // String(Rc<RefCell<String>>),
+    String(ImmutableString),
     Function(Rc<Function>),
     Closure(Rc<Closure>),
-    Class(Rc<Class>),
-    Instance(Rc<Instance>),
+    // Class(Rc<Class>),
+    // Instance(Rc<Instance>),
     Module(Rc<RefCell<Module>>),
     NativeFunction(Rc<NativeFunction>),
     Array(Rc<RefCell<Vec<Value>>>),
     Map(Rc<RefCell<HashMap<String, Value>>>),
+    Class(Rc<Class>),
     Nil,
 }
 
 impl Value {
     #[inline]
-    pub fn into_string(self) -> Result<Rc<RefCell<String>>, String> {
+    pub fn into_string(self) -> Result<ImmutableString, Trace> {
         match self {
             Value::String(s) => Ok(s),
-            _ => Err("expected a string".to_string()),
+            _ => Err(Trace::new("expected a string")),
         }
     }
 
@@ -83,13 +88,13 @@ impl From<bool> for Value {
 
 impl From<&str> for Value {
     fn from(val: &str) -> Self {
-        Value::String(Rc::new(RefCell::new(val.to_string())))
+        Value::String(ImmutableString::from(val))
     }
 }
 
 impl From<&String> for Value {
     fn from(val: &String) -> Self {
-        Value::String(Rc::new(RefCell::new(val.to_string())))
+        Value::String(ImmutableString::from(val))
     }
 }
 
@@ -113,9 +118,8 @@ impl Clone for Value {
             Self::Nil => Self::Nil,
             Self::Boolean(val) => Self::Boolean(*val),
             Self::Number(val) => Self::Number(*val),
-            Self::String(val) => Self::String(Rc::clone(val)),
+            Self::String(val) => Self::String(val.clone()),
             Self::Class(val) => Self::Class(Rc::clone(val)),
-            Self::Instance(inst) => Self::Instance(Rc::clone(inst)),
             Self::Module(module) => Self::Module(Rc::clone(module)),
             Self::NativeFunction(val) => Self::NativeFunction(Rc::clone(val)),
             Self::Array(arr) => Self::Array(Rc::clone(arr)),
@@ -130,11 +134,10 @@ impl fmt::Display for Value {
             Value::Number(num) => f.write_str(&num.to_string()),
             Value::Boolean(false) => f.write_str("false"),
             Value::Boolean(true) => f.write_str("true"),
-            Value::String(val) => f.write_str(&format!("\"{}\"", val.borrow())),
+            Value::String(val) => f.write_str(val),
             Value::Function(val) => write!(f, "<fun {}>", val.format_name()),
             Value::Closure(val) => write!(f, "<fun {}>", val.function.format_name()),
-            Value::Class(val) => write!(f, "<class {}>", val.name.borrow()),
-            Value::Instance(val) => write!(f, "<{:?} instance>", val.class.name.borrow()),
+            Value::Class(val) => write!(f, "<class {}>", &val.name()),
             Value::Module(module) => write!(f, "<mod {}>", module.borrow().name),
             Value::NativeFunction(_) => write!(f, "<native fun>"),
             Value::Array(arr) => {
@@ -169,8 +172,7 @@ impl Add for Value {
             (Value::Number(a), Value::Number(b)) => Value::Number(a + b),
             (Value::String(a), Value::String(b)) => {
                 // FIXME: I believe this doesn't work. Need to look into it.
-                a.borrow_mut().push_str(&b.borrow());
-                Value::String(a)
+                todo!()
             }
             _ => panic!("Operands must be numbers"),
         }
@@ -429,78 +431,6 @@ impl UpValue {
         };
 
         self.closed = Some(val);
-    }
-}
-
-#[derive(Debug)]
-pub struct Class {
-    /// the class name
-    // TODO:
-    // this doesn't need to be wrapped in a reference counter and refcell
-    // its only so that it matches the type of Value::String.
-    pub name: Rc<RefCell<String>>,
-    pub constructors: RefCell<HashMap<String, Value>>,
-}
-
-impl Class {
-    pub fn new(name: &Rc<RefCell<String>>) -> Self {
-        Class {
-            name: Rc::clone(name),
-            constructors: RefCell::new(HashMap::new()),
-        }
-    }
-}
-
-impl PartialEq for Class {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
-impl PartialOrd for Class {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Class {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.name.cmp(&other.name)
-    }
-}
-
-impl Eq for Class {}
-/*
-#[derive(Debug, PartialEq, PartialOrd)]
-pub enum MethodType {
-    Method,
-    Constructor,
-}
-
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct Method {
-    pub ty: MethodType,
-    pub receiver: Instance,
-    pub method: Rc<Closure>,
-}*/
-
-#[derive(Debug, PartialEq, PartialOrd)]
-pub struct Instance {
-    // A reference to the class this is an instance of.
-    class: Rc<Class>,
-    // This instance's fields.
-    fields: Vec<Value>,
-}
-
-impl Instance {
-    pub fn new(class: &Rc<Class>) -> Self {
-        Instance {
-            class: Rc::clone(class),
-            // TODO:
-            // do we know how many fields an instance has?
-            // if so we could instead do `Vec::with_capacity(num_fields)`
-            fields: Vec::new(),
-        }
     }
 }
 

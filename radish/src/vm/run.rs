@@ -1,9 +1,13 @@
 use std::{cell::RefCell, collections::HashMap, convert::TryInto, rc::Rc};
 
 use crate::{
-    common::{Disassembler, Opcode},
+    common::{
+        class::{AccessType, Class},
+        immutable_string::ImmutableString,
+        Disassembler, Opcode,
+    },
     vm::trace::Trace,
-    vm::value::{Class, Closure, Value},
+    vm::value::{Closure, Value},
 };
 
 use crate::vm::{CallFrame, VM};
@@ -159,7 +163,7 @@ impl VM {
         Ok(())
     }
 
-    fn make_object(&mut self) -> Result<(), Trace> {
+    fn make_map(&mut self) -> Result<(), Trace> {
         let element_count = self.read_long() as usize;
         let mut elements = HashMap::with_capacity(element_count);
 
@@ -196,13 +200,9 @@ impl VM {
     fn make_closure(&mut self) -> Result<(), Trace> {
         let function = self.stack.pop().into_function().unwrap();
 
-        //println!("[vm] creating closure \"{}\"", &function.name);
-
         let closure = Closure::new(function);
 
         let num_upvals = self.read_byte();
-
-        //println!("[vm] current open upvalues in vm: {:?}", self.upvalues);
 
         for _ in 0..num_upvals {
             let typ = self.read_byte() as usize;
@@ -217,29 +217,12 @@ impl VM {
                 panic!("invalid flag: must be 0 or 1");
             };
 
-            //println!(
-            //    "[vm] adding upvalue referencing upvalue slot index {}",
-            //    index
-            //);
             closure.non_locals.borrow_mut().push(upvalue);
         }
-
-        //println!(
-        //    "[vm] created closure with the following upvalues: {:?}",
-        //    self.upvalues
-        //);
-
-        //println!("[vm] closing upvalues");
 
         for upval in closure.non_locals.borrow_mut().iter_mut() {
             upval.close(&self);
         }
-
-        //println!(
-        //    "[vm] closure \"{}\" has the following upvalues: {:?}",
-        //    closure.function.name,
-        //    closure.non_locals.borrow()
-        //);
 
         self.stack.push(Value::Closure(Rc::new(closure)));
 
@@ -251,7 +234,33 @@ impl VM {
     fn make_class(&mut self) -> Result<(), Trace> {
         let name = self.stack.pop().into_string().unwrap();
 
-        let class = Class::new(&name);
+        let class = Class::new(name);
+
+        let num_fields = self.read_byte();
+        let num_constructors = self.read_byte();
+        let num_methods = self.read_byte();
+
+        for _ in 0..num_fields {
+            let access_typ = AccessType::Public; // self.read_byte();
+            let field = self.stack.pop();
+            let name = self.stack.pop().into_string()?;
+
+            // let access_typ = match typ {
+            //     0 => AccessType::Private,
+            //     1 => AccessType::Public,
+            //     _ => unreachable!("Invalid access modifier flag"),
+            // };
+
+            class.add_field(name, field, access_typ);
+        }
+
+        for _ in 0..num_constructors {
+            todo!();
+        }
+
+        for _ in 0..num_methods {
+            todo!();
+        }
 
         self.stack.push(Value::Class(Rc::new(class)));
 
@@ -261,18 +270,7 @@ impl VM {
     /// Create a constructor from the value on top of the stack.
     #[inline]
     fn make_constructor(&mut self) -> Result<(), Trace> {
-        let constructor = self.stack.pop();
-
-        let name = match &constructor {
-            Value::Closure(closure) => closure.function.name.to_string(),
-            _ => unreachable!("can only create a constructor from a closure"),
-        };
-
-        let class = self.stack.peek().unwrap().into_class().unwrap();
-
-        class.constructors.borrow_mut().insert(name, constructor);
-
-        Ok(())
+        todo!()
     }
 
     #[inline]
@@ -281,7 +279,6 @@ impl VM {
 
         println!("{}", msg);
 
-        //self.config.stdout.write(&format!("{}", msg));
         Ok(())
     }
 
@@ -294,20 +291,14 @@ impl VM {
         // ^ script     ^ function being called  ^ local being loaded
         // ```
         // the local being loaded will have a relative index of (1).
-        let relative_index = self.read_long() as usize; // + 1;
-
-        //dbg!(relative_index);
+        let relative_index = self.read_long() as usize;
 
         // The stack position of the current function being called.
         let offset = self.current_frame().offset;
 
-        //dbg!(offset);
-
         // To get the locals position on the stack, we then have to add the locals
         // relative position to the function's position.
-        let slot_index = relative_index + offset; // - 1;
-
-        //dbg!(slot_index);
+        let slot_index = relative_index + offset;
 
         self.stack.push(self.stack.stack[slot_index].clone());
 
@@ -320,7 +311,7 @@ impl VM {
 
         let offset = self.current_frame().offset;
 
-        let slot_index = relative_index + offset; // - 1;
+        let slot_index = relative_index + offset;
 
         self.stack.stack[slot_index as usize] = self.stack.peek().unwrap();
 
@@ -372,7 +363,7 @@ impl VM {
             Value::Module(module) => {
                 let index = module
                     .borrow()
-                    .get_index(&prop.into_string().unwrap().borrow())
+                    .get_index(&prop.into_string().unwrap())
                     .expect("no value at index");
 
                 let val = module.borrow().get_value_at_index(index).clone();
@@ -422,6 +413,19 @@ impl VM {
 
                 self.stack.push(value);
             }
+            Value::Class(class) => {
+                let name = prop.into_string()?;
+
+                match class.items.borrow().get(&name) {
+                    Some(entity) => {
+                        let value = entity.inner();
+                        self.stack.push(value);
+                    }
+                    None => {
+                        self.stack.push(Value::Nil);
+                    }
+                };
+            }
             _ => unimplemented!("field access on {} is unsupported", obj),
         }
 
@@ -469,6 +473,9 @@ impl VM {
                 let key = idx.to_string();
 
                 map.borrow_mut().insert(key, val);
+            }
+            Value::Class(class) => {
+                todo!();
             }
             _ => unimplemented!("field access on {} is unsupported", obj),
         }
@@ -566,7 +573,7 @@ impl VM {
             .into_string()
             .expect("path is not a string");
 
-        let module = match self.loader.load(&path.borrow(), &mut self.compiler) {
+        let module = match self.loader.load(&path, &mut self.compiler) {
             Ok(m) => m,
             Err(e) => {
                 e.emit();
@@ -577,7 +584,7 @@ impl VM {
 
         self.stack.push(Value::Module(Rc::clone(&module)));
 
-        if self.loader.is_cached(&*path.borrow()) {
+        if self.loader.is_cached(&path) {
             return Ok(());
         };
 
@@ -711,7 +718,7 @@ impl VM {
                 Opcode::Jump => self.jump()?,
                 Opcode::Loop => self.loop_()?,
                 Opcode::BuildArray => self.make_array()?,
-                Opcode::BuildMap => self.make_object()?,
+                Opcode::BuildMap => self.make_map()?,
                 Opcode::Closure => self.make_closure()?,
                 Opcode::BuildClass => self.make_class()?,
                 Opcode::BuildCon => self.make_constructor()?,
