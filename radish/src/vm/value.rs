@@ -170,8 +170,7 @@ impl Add for Value {
     fn add(self, other: Value) -> <Self as std::ops::Add<Value>>::Output {
         match (self, other) {
             (Value::Number(a), Value::Number(b)) => Value::Number(a + b),
-            (Value::String(a), Value::String(b)) => {
-                // FIXME: I believe this doesn't work. Need to look into it.
+            (Value::String(_), Value::String(_)) => {
                 todo!()
             }
             _ => panic!("Operands must be numbers"),
