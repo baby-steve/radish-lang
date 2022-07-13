@@ -3,7 +3,6 @@ use std::{cell::RefCell, collections::HashMap, convert::TryInto, rc::Rc};
 use crate::{
     common::{
         class::{AccessType, Class},
-        immutable_string::ImmutableString,
         Disassembler, Opcode,
     },
     vm::trace::Trace,
@@ -474,7 +473,7 @@ impl VM {
 
                 map.borrow_mut().insert(key, val);
             }
-            Value::Class(class) => {
+            Value::Class(_class) => {
                 todo!();
             }
             _ => unimplemented!("field access on {} is unsupported", obj),
