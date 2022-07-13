@@ -25,7 +25,7 @@ impl VM {
     /// # }
     /// ```
     pub fn exec(&mut self, src: &str) -> Result<(), RadishError> {
-        self._eval(src)?;
+        self._eval::<Value>(src)?;
         Ok(())
     }
 
@@ -35,7 +35,7 @@ impl VM {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # fn main() -> Result<(), radish::RadishError> {
     /// use radish::VM;
     ///
@@ -84,7 +84,7 @@ impl VM {
     ///
     /// let mut vm = VM::new();
     ///
-    /// assert_eq!(vm.eval::<()>("nil"), Ok(()));
+    /// assert_eq!(vm.eval_file::<()>("path/to/file"), Ok(()));
     ///
     /// # Ok(())
     /// # }
@@ -116,7 +116,7 @@ impl VM {
         }
     }
 
-    // Interprete a compiled module.
+    // Interpret a compiled module.
     fn interpret(&mut self, module: CompiledModule) -> Result<Value, Trace> {
         use std::rc::Rc;
 

@@ -68,12 +68,14 @@ impl Frame {
 
 struct CompilerSettings {
     pub dump_bytecode: bool,
+    pub eval: bool,
 }
 
 impl CompilerSettings {
     pub fn new() -> Self {
         Self {
             dump_bytecode: false,
+            eval: false,
         }
     }
 }
@@ -88,6 +90,7 @@ impl From<&PipelineSettings> for CompilerSettings {
     fn from(pipeline: &PipelineSettings) -> Self {
         Self {
             dump_bytecode: pipeline.dump_bytecode,
+            eval: pipeline.repl,
         }
     }
 }
@@ -99,6 +102,7 @@ pub struct Compiler {
     frame: Vec<Frame>,
     loops: Vec<Loop>,
     module: CompiledModule,
+    has_result: bool,
 }
 
 impl Compiler {
@@ -112,6 +116,7 @@ impl Compiler {
             frame_count: 0,
             frame: vec![],
             module: Module::empty(),
+            has_result: false,
         }
     }
 
@@ -139,7 +144,12 @@ impl Compiler {
             }
         }
 
-        self.emit_return();
+        if self.config.eval && self.has_result {
+            self.has_result = false;
+            self.emit_byte(Opcode::Return as u8);
+        } else {
+            self.emit_return();
+        }
 
         let script = self.frame.pop().unwrap().function;
 
@@ -802,8 +812,13 @@ impl Compiler {
 
     fn expression_stmt(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         self.expression(expr)?;
-
-        self.emit_byte(Opcode::Del as u8);
+        
+        if self.config.eval && self.frame_count == 0 {
+            self.emit_byte(Opcode::NoOp as u8);
+            self.has_result = true;
+        } else {    
+            self.emit_byte(Opcode::Del as u8);
+        }
 
         Ok(())
     }

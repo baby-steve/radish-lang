@@ -1,10 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, convert::TryInto, rc::Rc};
 
 use crate::{
-    common::{
-        AccessType, Class, Closure, Value,
-        Disassembler, Opcode, UpValue, NativeFunction, 
-    },
+    common::{AccessType, Class, Closure, Disassembler, NativeFunction, Opcode, UpValue, Value},
     vm::trace::Trace,
 };
 
@@ -679,6 +676,9 @@ impl VM {
                 Opcode::Del => {
                     self.stack.pop();
                 }
+                Opcode::NoOp => {
+                    // does nothing
+                }
                 Opcode::Neg => unary_op!(-),
                 Opcode::Not => unary_op!(!),
                 Opcode::Add => binary_op!(+),
@@ -730,7 +730,10 @@ impl VM {
 
                     // if that was the last frame, exit the VM.
                     if self.frame_count - 1 == 0 {
-                        //self.stack.pop();
+                        self.stack.pop();
+                        self.frame_count -= 1;
+                        self.frames.pop();
+                        
                         return Ok(result);
                     }
 

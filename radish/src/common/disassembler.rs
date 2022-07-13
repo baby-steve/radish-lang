@@ -37,6 +37,7 @@ impl<'a> Disassembler<'a> {
         use crate::common::opcode::Opcode;
 
         let byte = self.function.chunk.code[offset];
+        
         match Opcode::from(byte) {
             Opcode::LoadConst => self.byte_instruction("LoadConst", offset),
             Opcode::LoadConstLong => self.long_const_instruction("LoadConstLong", offset, true),
@@ -61,6 +62,7 @@ impl<'a> Disassembler<'a> {
             Opcode::False => self.simple_instruction("False", offset),
             Opcode::Nil => self.simple_instruction("Nil", offset),
 
+            Opcode::NoOp => self.simple_instruction("NoOp", offset),
             Opcode::Add => self.simple_instruction("Add", offset),
             Opcode::Sub => self.simple_instruction("Sub", offset),
             Opcode::Mul => self.simple_instruction("Mul", offset),

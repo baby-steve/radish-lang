@@ -77,6 +77,7 @@ pub enum Opcode {
     ///
     /// -> [Value::Nil]
     Nil,
+    NoOp,
     /// Remove the top two `[Value]`s from the stack, add them and push the result
     /// onto the stack.
     ///

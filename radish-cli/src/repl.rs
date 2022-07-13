@@ -1,6 +1,6 @@
 //! REPL for the Radish programming language.
 
-use radish::{RadishError, VM};
+use radish::{RadishError, VM, Value};
 
 use rustyline::{error::ReadlineError, Editor};
 
@@ -112,11 +112,11 @@ impl<'a> Repl<'a> {
         }
     }
 
-    /// The evil, err, _eval_ part of REPL.
+    /// eval part of REPL.
     fn eval(&mut self) -> Result<(), RadishError> {
-        let result = self.vm.eval(&self.lines.join("\n"))?;
+        let result = self.vm.eval::<Value>(&self.lines.join("\n"))?;
 
-        println!("{:?}", result);
+        println!("{}", result);
 
         Ok(())
     }
@@ -135,7 +135,6 @@ impl<'a> Repl<'a> {
         println!("{}", help_message);
     }
 
-    // TODO: a bit much? maybe scale it down a little?
     /// Print out Radish's welcome message.
     fn print_welcome(&mut self) {
         let (term_width, _) = term_size::dimensions().unwrap();
@@ -169,7 +168,7 @@ impl<'a> Repl<'a> {
     }
 }
 
-/// VM's welcome banner.
+/// Radish's welcome banner.
 const WELCOME: &str = r#"
  ________  ________  ________  ___  ________  ___  ___       
 |\   __  \|\   __  \|\   ___ \|\  \|\   ____\|\  \|\  \      

@@ -12,6 +12,7 @@ type ASTPass = Box<dyn FnMut(&mut AST) -> Result<(), SyntaxError> + 'static>;
 pub struct PipelineSettings {
     pub dump_bytecode: bool,
     pub dump_ast: bool,
+    pub repl: bool,
 }
 
 impl PipelineSettings {
@@ -19,6 +20,7 @@ impl PipelineSettings {
         Self {
             dump_bytecode: false,
             dump_ast: false,
+            repl: false,
         }
     }
 }
@@ -34,6 +36,7 @@ impl From<&Config> for PipelineSettings {
         Self {
             dump_bytecode: config.dump_bytecode,
             dump_ast: config.dump_ast,
+            repl: config.repl,
         }
     }
 }

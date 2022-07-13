@@ -32,7 +32,7 @@ macro_rules! impl_number {
             fn from_value(val: Value) -> Result<Self, Trace> {
                 let num = match val {
                     Value::Number(val) => val,
-                    _ => return Err(Trace::new("cannot coerce type into number")),
+                    e => return Err(Trace::new(format!("Invalid typecast from {:?}", e))),
                 };
 
                 Ok(num as $typ)
