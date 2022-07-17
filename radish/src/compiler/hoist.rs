@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use super::ConstructorDecl;
 use super::VarDeclaration;
 use super::visitor::VisitorResult;
 use super::FunctionDecl;
@@ -483,10 +484,9 @@ impl Hoister {
             }
         }
     }
-}
 
-impl Visitor<'_> for Hoister {
-    fn visit_fun_decl(&mut self, fun: &mut FunctionDecl) -> VisitorResult {
+    // HACK
+    fn visit_method_decl(&mut self, fun: &mut FunctionDecl) -> VisitorResult {
         self.declare_local(&mut fun.id);
 
         self.enter_scope(&fun.id.name);
@@ -497,12 +497,13 @@ impl Visitor<'_> for Hoister {
             self.declare_local(param);
         }
 
+        self.scope_mut().add_local("this");
+
         for stmt in fun.body.iter_mut() {
             self.visit_stmt(stmt)?;
         }
 
         let locals = self.scope_mut().exit_block();
-
         
         for param in fun.params.iter_mut() {
             for local in locals.iter() {
@@ -523,6 +524,97 @@ impl Visitor<'_> for Hoister {
         let scope = self.exit_scope();
 
         fun.other_scope = Some(scope);
+
+        Ok(())
+    }
+}
+
+impl Visitor<'_> for Hoister {
+    fn visit_class_decl(&mut self, class: &mut super::ClassDecl) -> VisitorResult {
+        for method in class.methods.iter_mut() {
+            self.visit_method_decl(method)?;
+        }
+
+        for con in class.constructors.iter_mut() {
+            self.visit_con_decl(con)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_fun_decl(&mut self, fun: &mut FunctionDecl) -> VisitorResult {
+        self.declare_local(&mut fun.id);
+
+        self.enter_scope(&fun.id.name);
+
+        self.scope_mut().enter_block();
+
+        for param in fun.params.iter_mut() {
+            self.declare_local(param);
+        }
+
+        for stmt in fun.body.iter_mut() {
+            self.visit_stmt(stmt)?;
+        }
+
+        let locals = self.scope_mut().exit_block();
+        
+        for param in fun.params.iter_mut() {
+            for local in locals.iter() {
+                if local.is_captured() && param.name == local.0 {
+                    //println!(
+                    //    "[hoist] found declaration location of captured variable {}",
+                    //    &param.name
+                    //);
+                    param.scope = VarScope::Local(true);
+                    //captures.push(local);
+                    break;
+                }
+            }
+        }
+        
+        self.capture_locals(locals, &mut fun.body);
+        // don't call exit scope until `capture_locals` has been called.
+        let scope = self.exit_scope();
+
+        fun.other_scope = Some(scope);
+
+        Ok(())
+    }
+
+    fn visit_con_decl(&mut self, con: &mut ConstructorDecl) -> VisitorResult {
+        self.declare_local(&mut con.id);
+
+        self.enter_scope(&con.id.name);
+
+        self.scope_mut().enter_block();
+
+        for param in con.params.iter_mut() {
+            self.declare_local(param);
+        }
+
+        self.scope_mut().add_local("this");
+
+        for stmt in con.body.iter_mut() {
+            self.visit_stmt(stmt)?;
+        }
+
+        let locals = self.scope_mut().exit_block();
+
+        for param in con.params.iter_mut() {
+            for local in locals.iter() {
+                if local.is_captured() && param.name == local.0 {
+                    param.scope = VarScope::Local(true);
+                    break;
+                }
+            }
+        }
+        
+        self.capture_locals(locals, &mut con.body);
+        // don't call exit scope until `capture_locals` has been called.
+        let _scope = self.exit_scope();
+
+        // con.other_scope = Some(scope);
 
         Ok(())
     }

@@ -103,6 +103,8 @@ pub enum TokenType {
     Class,
     // con
     Con,
+    // this
+    This,
     // return
     Return,
     // for
@@ -178,6 +180,7 @@ impl TokenType {
             Fun => "fun",
             Class => "class",
             Con => "con",
+            This => "this",
             Return => "return",
             For => "for",
             Import => "import",

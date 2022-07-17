@@ -1,12 +1,25 @@
 use crate::{
-    common::{ModuleBuilder, Module, Value},
-    VM, Namespace, vm::trace::Trace,
+    common::{Module, ModuleBuilder, Value},
+    vm::trace::Trace,
+    Namespace, VM, ToValue,
 };
 
 pub fn test(_vm: &mut VM) -> Result<Value, Trace> {
     println!("this is just for testing");
 
     Ok(Value::Nil)
+}
+
+fn clock() -> Result<Value, Trace> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let start = SystemTime::now();
+    let time = start
+        .duration_since(UNIX_EPOCH)
+        .expect("Time went backwards")
+        .as_secs_f64();
+
+    Ok(time.to_value())
 }
 
 pub struct System;
@@ -16,6 +29,7 @@ impl ModuleBuilder for System {
         let mut module = Module::new("sys");
 
         module.add_native("test_fun", 0, test);
+        module.add_native("clock", 0, clock);
 
         Ok(module)
     }
@@ -41,6 +55,6 @@ impl Namespace for RadishCore {
     }
 
     fn build(&mut self, namespace: &mut crate::NamespaceBuilder) {
-        namespace.add(System).add(Math);    
+        namespace.add(System).add(Math);
     }
 }

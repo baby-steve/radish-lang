@@ -152,6 +152,7 @@ pub trait Visitor<'a>: Sized {
             Expr::LogicalExpr(expr, _) => self.visit_logical_expr(expr),
             Expr::CallExpr(callee, args, _) => self.visit_call_expr(callee, args),
             Expr::MemberExpr(obj, prop, _) => self.visit_member_expr(obj, prop),
+            Expr::This(_) => self.visit_this(),
             Expr::Identifier(ident) => self.visit_ident(ident),
             Expr::Number(_, _) | Expr::Bool(_, _) | Expr::String(_, _) | Expr::Nil(_) => Ok(()),
         }
@@ -207,6 +208,11 @@ pub trait Visitor<'a>: Sized {
     }
 
     fn visit_ident(&mut self, _ident: &mut Ident) -> VisitorResult {
+        // Nothing to do here.
+        Ok(())
+    }
+
+    fn visit_this(&mut self) -> VisitorResult {
         // Nothing to do here.
         Ok(())
     }

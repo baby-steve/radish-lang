@@ -1,6 +1,6 @@
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap};
 
-use super::{Value, ImmutableString};
+use super::{ImmutableString, Value};
 
 #[derive(Debug)]
 pub struct Class {
@@ -38,7 +38,7 @@ impl Class {
     where
         N: Into<ImmutableString>,
     {
-        let item = ClassItem::new(fun, AccessType::Public, ClassItemType::Method);
+        let item = ClassItem::new(fun, AccessType::Public, ClassItemType::Constructor);
 
         self.items.borrow_mut().insert(name.into(), item);
     }
@@ -76,9 +76,9 @@ pub struct ClassItem {
 }
 
 impl ClassItem {
-    pub fn new(field: Value, access_typ: AccessType, item_typ: ClassItemType) -> Self {
+    pub fn new(value: Value, access_typ: AccessType, item_typ: ClassItemType) -> Self {
         Self {
-            value: field,
+            value,
             access_typ,
             item_typ,
         }
@@ -115,21 +115,4 @@ pub enum ClassItemType {
     Field,
     Method,
     Constructor,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn get_field() {
-        let class = Class::new("Test");
-
-        class.add_field("a", Value::Nil, AccessType::Private);
-
-        let items = class.items.borrow();
-        let field = items.get("a");
-
-        assert!(field.is_some());
-    }
 }

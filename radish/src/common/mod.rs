@@ -30,6 +30,12 @@ pub use class::{AccessType, Class, ClassItem, ClassItemType};
 mod immutable_string;
 pub use immutable_string::ImmutableString;
 
+mod instance;
+pub use instance::Instance;
+
+mod bound_method;
+pub use bound_method::BoundMethod;
+
 mod from_value;
 pub use from_value::FromValue;
 

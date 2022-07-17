@@ -1,4 +1,4 @@
-use super::{Class, ImmutableString, Chunk, Module, NativeFunction};
+use super::{BoundMethod, Chunk, Class, ImmutableString, Instance, Module, NativeFunction};
 
 use crate::VM;
 use std::cell::RefCell;
@@ -8,9 +8,9 @@ use std::fmt::{self};
 use std::ops::{Add, Div, Mul, Neg, Not, Rem, Sub};
 use std::rc::{Rc, Weak};
 
-use crate::vm::Stack;
-use crate::vm::CallFrame;
 use crate::vm::trace::Trace;
+use crate::vm::CallFrame;
+use crate::vm::Stack;
 
 #[derive(Debug, PartialEq)]
 pub enum Value {
@@ -21,6 +21,8 @@ pub enum Value {
     Closure(Rc<Closure>),
     Module(Rc<RefCell<Module>>),
     NativeFunction(Rc<NativeFunction>),
+    Method(Rc<BoundMethod>),
+    Instance(Rc<Instance>),
     Array(Rc<RefCell<Vec<Value>>>),
     Map(Rc<RefCell<HashMap<String, Value>>>),
     Class(Rc<Class>),
@@ -37,26 +39,26 @@ impl Value {
     }
 
     #[inline]
-    pub fn into_function(self) -> Result<Rc<Function>, String> {
+    pub fn into_function(self) -> Result<Rc<Function>, Trace> {
         match self {
             Value::Function(f) => Ok(f),
-            _ => Err("expected a function".to_string()),
+            _ => Err(Trace::new("expected a function")),
         }
     }
 
     #[inline]
-    pub fn into_class(self) -> Result<Rc<Class>, String> {
+    pub fn into_class(self) -> Result<Rc<Class>, Trace> {
         match self {
             Value::Class(class) => Ok(class),
-            _ => Err("expected a class".to_string()),
+            _ => Err(Trace::new("expected a class")),
         }
     }
 
     #[inline]
-    pub fn into_closure(self) -> Result<Rc<Closure>, String> {
+    pub fn into_closure(self) -> Result<Rc<Closure>, Trace> {
         match self {
             Value::Closure(closure) => Ok(closure),
-            _ => Err("expected a closure".to_string()),
+            _ => Err(Trace::new("expected a closure")),
         }
     }
 
@@ -65,6 +67,25 @@ impl Value {
         match self {
             Value::Module(module) => Ok(module),
             _ => Err("expected a module".to_string()),
+        }
+    }
+
+    #[inline]
+    pub fn typ(&self) -> &'static str {
+        match self {
+            Value::Number(_) => "number",
+            Value::Boolean(_) => "bool",
+            Value::String(_) => "string",
+            Value::Function(_) => "function",
+            Value::Closure(_) => "function",
+            Value::Module(_) => "module",
+            Value::NativeFunction(_) => "function",
+            Value::Method(_) => "method",
+            Value::Instance(_) => "instance",
+            Value::Array(_) => "array",
+            Value::Map(_) => "map",
+            Value::Class(_) => "class",
+            Value::Nil => "nil",
         }
     }
 }
@@ -117,6 +138,8 @@ impl Clone for Value {
             Self::Class(val) => Self::Class(Rc::clone(val)),
             Self::Module(module) => Self::Module(Rc::clone(module)),
             Self::NativeFunction(val) => Self::NativeFunction(Rc::clone(val)),
+            Self::Method(val) => Self::Method(Rc::clone(val)),
+            Self::Instance(inst) => Self::Instance(Rc::clone(inst)),
             Self::Array(arr) => Self::Array(Rc::clone(arr)),
             Self::Map(obj) => Self::Map(Rc::clone(obj)),
         }
@@ -135,11 +158,17 @@ impl fmt::Display for Value {
             Value::Class(val) => write!(f, "<class {}>", &val.name()),
             Value::Module(module) => write!(f, "<mod {}>", module.borrow().name),
             Value::NativeFunction(_) => write!(f, "<native fun>"),
+            Value::Method(val) => write!(f, "{val}"),
+            Value::Instance(inst) => write!(f, "{inst}"), 
             Value::Array(arr) => {
                 write!(f, "[")?;
 
                 for (index, element) in arr.borrow().iter().enumerate() {
-                    let end = if index == arr.borrow().len() - 1 { "" } else { ", " };
+                    let end = if index == arr.borrow().len() - 1 {
+                        ""
+                    } else {
+                        ", "
+                    };
                     write!(f, "{}{}", element, end)?;
                 }
 
@@ -149,7 +178,11 @@ impl fmt::Display for Value {
                 write!(f, "{{")?;
 
                 for (index, (key, value)) in obj.borrow().iter().enumerate() {
-                    let end = if index == obj.borrow().len() - 1 { "" } else { ", " };
+                    let end = if index == obj.borrow().len() - 1 {
+                        ""
+                    } else {
+                        ", "
+                    };
                     write!(f, "{}: {}{}", key, value, end)?;
                 }
 
@@ -162,6 +195,8 @@ impl fmt::Display for Value {
 
 impl Add for Value {
     type Output = Self;
+
+    #[inline]
     fn add(self, other: Value) -> <Self as std::ops::Add<Value>>::Output {
         match (self, other) {
             (Value::Number(a), Value::Number(b)) => Value::Number(a + b),

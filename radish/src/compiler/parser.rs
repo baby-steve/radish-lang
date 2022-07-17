@@ -261,6 +261,7 @@ impl Parser {
         let start = self.current.span.clone();
         let mut constructors = vec![];
         let mut fields = vec![];
+        let mut methods = vec![];
 
         // class ...
         self.consume(TokenType::Class);
@@ -288,6 +289,7 @@ impl Parser {
                 }
                 // a constructor
                 TokenType::Con => constructors.push(self.parse_constructor()?),
+                TokenType::Fun => methods.push(self.parse_fun_declaration()?.into_fun_decl().0),
                 err => {
                     // panic!("parsing a class");
                     // break;
@@ -301,7 +303,7 @@ impl Parser {
         // class <id> { ... }
         self.expect(TokenType::RightBrace)?;
 
-        let class = ClassDecl::new(id, constructors, fields);
+        let class = ClassDecl::new(id, constructors, fields, methods);
         let span = Span::combine(&start, &self.current.span);
         Ok(AST::class_decl(class, span))
     }
@@ -518,7 +520,8 @@ impl Parser {
     }
 
     fn parse_expression_statement(&mut self) -> Result<Stmt, SyntaxError> {
-        Ok(AST::expr_stmt(Box::new(self.parse_expression()?)))
+        // Ok(AST::expr_stmt(Box::new(self.parse_expression()?)))
+        self.parse_assignment_statement()
     }
 
     fn parse_assignment_statement(&mut self) -> Result<Stmt, SyntaxError> {
@@ -880,6 +883,13 @@ impl Parser {
                     let node = AST::identifier(id);
 
                     self.consume(TokenType::Ident(name));
+                    return Ok(node);
+                }
+                // this
+                TokenType::This => {
+                    let span = Span::from(&current.span);
+                    let node = AST::this(span);
+                    self.consume(TokenType::This);
                     return Ok(node);
                 }
                 // <eof>

@@ -49,6 +49,7 @@ impl<'a> Disassembler<'a> {
             Opcode::SaveGlobal => self.write_global("SetGlobal", offset),
 
             Opcode::LoadLocal => self.long_const_instruction("GetLocal", offset, false),
+            Opcode::LoadLocal0 => self.simple_instruction("GetLocal0", offset),
             Opcode::SaveLocal => self.long_const_instruction("SetLocal", offset, false),
 
             Opcode::DefCapture => self.simple_instruction("DefCapture", offset),
@@ -101,7 +102,7 @@ impl<'a> Disassembler<'a> {
             Opcode::BuildMap => self.long_const_instruction("BuildMap", offset, false),
             Opcode::Closure => self.closure(offset),
             Opcode::BuildClass => self.class(offset),
-            Opcode::BuildCon => self.simple_instruction("BuildCon", offset),
+            Opcode::Construct => self.simple_instruction("Construct", offset),
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Return => self.simple_instruction("Return", offset),
             Opcode::Import => self.simple_instruction("Import", offset),

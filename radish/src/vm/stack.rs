@@ -10,14 +10,17 @@ impl Stack {
         Stack { stack: vec![] }
     }
 
+    #[inline]
     pub fn push(&mut self, val: Value) {
         self.stack.push(val);
     }
 
+    #[inline]
     pub fn pop(&mut self) -> Value {
         self.stack.pop().expect("stack should not be empty")
     }
 
+    #[inline]
     pub fn peek(&mut self) -> Option<Value> {
         if self.stack.is_empty() {
             None
@@ -26,14 +29,12 @@ impl Stack {
         }
     }
 
-    pub fn peek_n(&mut self, index: usize) -> Option<Value> {
-        if self.stack.len() < index {
-            None
-        } else {
-            Some(self.stack[self.stack.len() - index].clone())
-        }
+    #[inline]
+    pub fn peek_n(&mut self, index: usize) -> Value {
+        self.stack[self.stack.len() - index].clone()
     }
 
+    #[inline]
     pub fn get(&self, index: usize) -> &Value {
         &self.stack[index]
     }

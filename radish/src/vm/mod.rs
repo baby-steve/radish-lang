@@ -55,11 +55,7 @@ pub struct VM {
 
 impl VM {
     pub fn new() -> Self {
-        let mut vm = VM::with_config(Config::new());
-
-        vm.load_namespace(RadishCore);
-
-        vm
+        VM::with_config(Config::new())
     }
 
     pub fn with_config(config: Config) -> Self {
@@ -67,7 +63,7 @@ impl VM {
 
         let pipeline = CompilerPipeLine::new(&config).with_default_passes();
 
-        Self {
+        let mut vm = Self {
             config,
             stack: Stack::new(),
             frames: Vec::new(),
@@ -77,7 +73,11 @@ impl VM {
             modules: Vec::new(),
             loader: Loader::new(),
             compiler: pipeline,
-        }
+        };
+        
+        vm.load_namespace(RadishCore);
+        
+        vm
     }
 }
 

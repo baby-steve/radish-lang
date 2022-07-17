@@ -39,7 +39,7 @@ impl AST {
         Stmt::BlockStmt(stmts, span)
     }
 
-    pub fn expr_stmt(expr: Box<Expr>) -> Stmt {
+    pub fn _expr_stmt(expr: Box<Expr>) -> Stmt {
         Stmt::ExpressionStmt(expr)
     }
 
@@ -131,6 +131,10 @@ impl AST {
 
     pub fn member_expr(obj: Box<Expr>, prop: Box<Expr>, span: Span) -> Expr {
         Expr::MemberExpr(obj, prop, span)
+    }
+
+    pub fn this(span: Span) -> Expr {
+        Expr::This(span)
     }
 
     pub fn identifier(id: Ident) -> Expr {
@@ -249,6 +253,13 @@ impl Stmt {
             _ => panic!("not a variable declaration"),
         }
     }
+
+    pub fn into_fun_decl(self) -> (FunctionDecl, Span) {
+        match self {
+            Stmt::FunDeclaration(decl, span) => (decl, span),
+            _ => panic!("not a function declaration"),
+        }
+    }
 }
 
 /// An assignment statement.
@@ -310,6 +321,8 @@ pub enum Expr {
     MemberExpr(Box<Expr>, Box<Expr>, Span),
     /// An identifier
     Identifier(Ident),
+    /// this
+    This(Span),
     /// A number literal
     Number(f64, Span),
     /// A boolean literal
@@ -334,6 +347,7 @@ impl Expr {
             | Self::LogicalExpr(_, pos)
             | Self::CallExpr(_, _, pos)
             | Self::MemberExpr(_, _, pos)
+            | Self::This(pos)
             | Self::Number(_, pos)
             | Self::Bool(_, pos)
             | Self::String(_, pos)
@@ -394,6 +408,7 @@ pub struct ClassDecl {
     /// this class's constructors
     pub constructors: Vec<ConstructorDecl>,
     pub fields: Vec<VarDeclaration>,
+    pub methods: Vec<FunctionDecl>,
 }
 
 impl ClassDecl {
@@ -401,11 +416,13 @@ impl ClassDecl {
         id: Ident,
         constructors: Vec<ConstructorDecl>,
         fields: Vec<VarDeclaration>,
+        methods: Vec<FunctionDecl>,
     ) -> ClassDecl {
         ClassDecl {
             id,
             constructors,
             fields,
+            methods,
         }
     }
 }

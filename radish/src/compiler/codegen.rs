@@ -154,7 +154,7 @@ impl Compiler {
         let script = self.frame.pop().unwrap().function;
 
         if self.config.dump_bytecode {
-            Disassembler::disassemble_chunk(&script.name, &script);
+            Disassembler::disassemble_chunk(&file_name, &script);
         }
 
         self.module.borrow_mut().add_entry(script);
@@ -382,7 +382,10 @@ impl Compiler {
     fn leave_function(&mut self) -> Frame {
         self.leave_scope();
 
-        self.emit_return();
+        if self.frame.last().unwrap().function_type != CompilerTarget::Constructor {
+            self.emit_return();
+        }
+
         self.frame_count -= 1;
         self.frame.pop().unwrap()
     }
@@ -484,6 +487,14 @@ impl Compiler {
 
     /// Compile a class declaration
     fn class(&mut self, class: &ClassDecl) -> Result<(), SyntaxError> {
+        for method in class.methods.iter() {
+            self.function(method)?;
+        }
+
+        for constructor in class.constructors.iter() {
+            self.constructor_declaration(constructor, &class.id)?;
+        }
+
         for field in class.fields.iter() {
             // access type.
             // self.emit_byte(1 as u8);
@@ -497,18 +508,17 @@ impl Compiler {
             }
         }
 
-        
         // the name of the class
         self.emit_constant(Value::from(&class.id.name));
-        
+
         self.emit_byte(Opcode::BuildClass as u8);
-        
+
         // number of fields
         self.emit_byte(class.fields.len() as u8);
         // number of constructors
-        self.emit_byte(0 as u8);
+        self.emit_byte(class.constructors.len() as u8);
         // number of methods
-        self.emit_byte(0 as u8);
+        self.emit_byte(class.methods.len() as u8);
 
         Ok(())
     }
@@ -520,7 +530,6 @@ impl Compiler {
             Stmt::BlockStmt(body, _) => self.block(body),
             Stmt::ExpressionStmt(expr) => self.expression_stmt(expr),
             Stmt::FunDeclaration(fun, _) => self.function_declaration(fun),
-            Stmt::ConDeclaration(con, _) => self.constructor_declaration(con),
             Stmt::ClassDeclaration(class, _) => self.class_declaration(class),
             Stmt::VarDeclaration(stmt, _) => self.var_declaration(stmt),
             Stmt::AssignmentStmt(stmt, _) => self.assignment(stmt),
@@ -532,6 +541,8 @@ impl Compiler {
             Stmt::BreakStmt(pos) => self.break_statement(pos),
             Stmt::ContinueStmt(pos) => self.continue_statement(pos),
             Stmt::PrintStmt(expr, _) => self.print(expr),
+            _ => unreachable!(),
+            // Stmt::ConDeclaration(con, _) => self.constructor_declaration(con),
         }
     }
 
@@ -558,7 +569,11 @@ impl Compiler {
         Ok(())
     }
 
-    fn constructor_declaration(&mut self, con: &ConstructorDecl) -> Result<(), SyntaxError> {
+    fn constructor_declaration(
+        &mut self,
+        con: &ConstructorDecl,
+        class: &Ident,
+    ) -> Result<(), SyntaxError> {
         // the constructor body
         // FIXME: a lot of duplicate code between constructors and functions.
         if con.params.len() > u8::MAX.into() {
@@ -574,6 +589,9 @@ impl Compiler {
 
         self.enter_function(Frame::constructor(frame));
         {
+            self.load_variable(class);
+            self.emit_byte(Opcode::Construct as u8);
+
             for param in &con.params {
                 self.define_variable(&param);
             }
@@ -581,6 +599,9 @@ impl Compiler {
             for stmt in con.body.iter() {
                 self.statement(stmt)?;
             }
+
+            self.emit_byte(Opcode::LoadLocal0 as u8);
+            self.emit_byte(Opcode::Return as u8);
         }
 
         let frame = self.leave_function();
@@ -595,11 +616,11 @@ impl Compiler {
         // create a closure from the constructor's body
         self.emit_byte(Opcode::Closure as u8);
 
-        // emit the name of the constructor
-        // self.define_variable(&con.id.name); // nvm
+        // the number of variable's the closure captures.
+        self.emit_byte(0);
 
         // build the constructor
-        self.emit_byte(Opcode::BuildCon as u8);
+        // self.emit_byte(Opcode::BuildCon as u8);
 
         Ok(())
     }
@@ -783,13 +804,14 @@ impl Compiler {
             }
             Expr::MemberExpr(obj, prop, _) => {
                 self.expression(obj)?;
-                
-                match &**prop {
-                    Expr::MemberExpr(object, property, _) => self.member_expr(&object, &property)?,
-                    Expr::Identifier(id) => self.emit_constant(Value::from(&id.name)),
-                    _ => panic!("Invalid property in member expression"),
-                };
 
+                match &**prop {
+                    Expr::MemberExpr(object, property, _) => {
+                        self.member_expr(&object, &property)?
+                    }
+                    Expr::Identifier(id) => self.emit_constant(Value::from(&id.name)),
+                    prop => self.expression(prop)?,
+                };
 
                 if let Some(op) = op {
                     self.expression(obj)?;
@@ -812,11 +834,11 @@ impl Compiler {
 
     fn expression_stmt(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         self.expression(expr)?;
-        
+
         if self.config.eval && self.frame_count == 0 {
             self.emit_byte(Opcode::NoOp as u8);
             self.has_result = true;
-        } else {    
+        } else {
             self.emit_byte(Opcode::Del as u8);
         }
 
@@ -834,6 +856,7 @@ impl Compiler {
             Expr::CallExpr(callee, args, _) => self.call_expr(callee, args),
             Expr::MemberExpr(obj, prop, _) => self.member_expr(obj, prop),
             Expr::Identifier(id) => self.identifier(id),
+            Expr::This(_) => self.this(),
             Expr::Number(val, _) => self.number(val),
             Expr::String(val, _) => self.string(val),
             Expr::Bool(val, _) => self.boolean(val),
@@ -949,10 +972,16 @@ impl Compiler {
             Expr::Identifier(id) => self.emit_constant(Value::from(&id.name)),
             _ => panic!("Invalid property in member expression"),
         };
-        
+
         self.expression(object)?;
 
         self.emit_byte(Opcode::LoadField as u8);
+
+        Ok(())
+    }
+
+    fn this(&mut self) -> Result<(), SyntaxError> {
+        self.emit_byte(Opcode::LoadLocal0 as u8);
 
         Ok(())
     }

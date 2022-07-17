@@ -1,4 +1,3 @@
-use std::borrow::Borrow;
 use std::hash::Hash;
 use std::rc::Rc;
 use std::ops::Deref;
@@ -21,15 +20,9 @@ impl AsRef<str> for ImmutableString {
     }
 }
 
-impl Borrow<str> for ImmutableString {
-    fn borrow(&self) -> &str {
-        self.0.as_str()
-    }
-}
-
 impl PartialEq for ImmutableString {
     fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.0, &other.0)
+        &self.0.len() == &other.0.len() && &self.0 == &other.0
     }
 }
 
