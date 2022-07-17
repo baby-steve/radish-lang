@@ -44,14 +44,15 @@ impl Loader {
     ) -> Result<CompiledModule, RadishError> {
         let name = self.resolver.resolve(path)?;
 
-        // TODO: handle chached files here? 
         if self.is_cached(&name) {
             let module = self.cache.get(&name);
             return Ok(Rc::clone(module.unwrap()))
         } else if let Ok(src) = fs::read_to_string(&name) {
             return self.load_file(&src, &name, compiler)
         } else {
-            panic!("failed to import module {}", name);
+            let message = format!("no module named '{name}'\n");
+
+            return Err(message.into());
         }
     }
 
