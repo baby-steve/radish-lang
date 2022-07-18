@@ -25,7 +25,7 @@ mod loader;
 pub use loader::Loader;
 
 mod class;
-pub use class::{AccessType, Class, ClassItem, ClassItemType};
+pub use class::{AccessType, Class, ClassBuilder, ClassItem, ClassItemType};
 
 mod immutable_string;
 pub use immutable_string::ImmutableString;
@@ -40,7 +40,7 @@ mod from_value;
 pub use from_value::FromValue;
 
 mod native;
-pub use native::NativeFunction;
+pub use native::{NativeFunction, NativeMethod};
 
 mod to_value;
 pub use to_value::ToValue;
@@ -50,6 +50,9 @@ pub use value::*;
 
 mod register;
 pub use register::RegisterFn;
+
+mod register_method;
+pub use register_method::RegisterMethod;
 
 mod args;
 pub use args::ToArgs;

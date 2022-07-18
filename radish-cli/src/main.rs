@@ -10,6 +10,7 @@ fn main() -> Result<(), RadishError> {
     let mut config = Config::from(&args);
 
     if let Some(path) = args.path {
+        config.repl = false;
 
         let mut vm = VM::with_config(config);
 

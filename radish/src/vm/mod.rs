@@ -4,10 +4,10 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    common::{Loader, CompiledModule, Module, Closure},
+    common::{Closure, CompiledModule, Loader, Module},
     compiler::pipeline::CompilerPipeLine,
     config::Config,
-    RadishCore,
+    RadishCore, core::BuiltinClasses,
 };
 
 mod eval;
@@ -36,8 +36,10 @@ pub struct VM {
     pub(crate) stack: Stack,
     /// VM's call stack.
     pub(crate) frames: Vec<CallFrame>,
-    /// Number of frame's current on the call stack.
+    /// Number of frame's currently on the call stack.
     pub(crate) frame_count: usize,
+    /// Vm's builtin classes.
+    builtins: BuiltinClasses,
 
     /// Store upvalues for later access by closures.
     /// Contains the locations of non-local values on the stack.
@@ -68,15 +70,16 @@ impl VM {
             stack: Stack::new(),
             frames: Vec::new(),
             frame_count: 0,
+            builtins: BuiltinClasses::default(),
             upvalues: HashMap::new(),
             last_module: Module::empty(),
             modules: Vec::new(),
             loader: Loader::new(),
             compiler: pipeline,
         };
-        
+
         vm.load_namespace(RadishCore);
-        
+
         vm
     }
 }

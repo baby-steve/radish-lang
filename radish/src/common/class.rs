@@ -1,6 +1,8 @@
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, rc::Rc};
 
-use super::{ImmutableString, Value};
+use crate::ToValue;
+
+use super::{native::InnerMethod, ImmutableString, RegisterMethod, Value, NativeMethod};
 
 #[derive(Debug)]
 pub struct Class {
@@ -115,4 +117,101 @@ pub enum ClassItemType {
     Field,
     Method,
     Constructor,
+}
+
+pub struct ClassBuilder {
+    name: ImmutableString,
+    fields: Vec<(ImmutableString, Value)>,
+    methods: Vec<(ImmutableString, Rc<InnerMethod>)>,
+}
+
+impl ClassBuilder {
+    pub fn new(name: impl Into<ImmutableString>) -> Self {
+        Self {
+            name: name.into(),
+            fields: vec![],
+            methods: vec![],
+        }
+    }
+
+    pub fn add_method<N, M, A, R>(mut self, name: N, method: M) -> Self
+    where
+        N: Into<ImmutableString>,
+        M: RegisterMethod<A, R>,
+    {
+        let name = name.into();
+        let method = method.register();
+
+        self.methods.push((name, method));
+
+        self
+    }
+
+    pub fn add_field<N, V>(mut self, name: N, value: V) -> Self
+    where
+        N: Into<ImmutableString>,
+        V: ToValue,
+    {
+        let name = name.into();
+        let value = value.to_value();
+
+        self.fields.push((name, value));
+
+        self
+    }
+
+    pub fn build(self) -> Class {
+        let class = Class::new(self.name);
+
+        for (key, value) in self.fields {
+            class.add_field(key, value, AccessType::Public);
+        }
+
+        for (key, value) in self.methods {
+            let method = Rc::new(NativeMethod::new(value, Value::Nil));
+
+            class.add_method(key, Value::NativeMethod(method), AccessType::Public);
+        }
+
+        class
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Trace;
+
+    use super::*;
+
+    #[test]
+    fn build_class() {
+        fn test_method() -> Result<Value, Trace> {
+            Ok(Value::Nil)
+        }
+
+        let class = ClassBuilder::new("Test")
+            .add_field("a", 23.0f64)
+            .add_method("b", test_method)
+            .build();
+
+        assert_eq!(
+            class
+                .items
+                .borrow()
+                .get(&ImmutableString::from("a"))
+                .unwrap()
+                .item_typ,
+            ClassItemType::Field
+        );
+
+        assert_eq!(
+            class
+                .items
+                .borrow()
+                .get(&ImmutableString::from("b"))
+                .unwrap()
+                .item_typ,
+            ClassItemType::Method
+        );
+    }
 }

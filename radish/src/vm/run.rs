@@ -3,7 +3,7 @@ use std::{cell::RefCell, collections::HashMap, rc::Rc};
 use crate::{
     common::{
         AccessType, BoundMethod, Class, ClassItemType, Closure, Disassembler, ImmutableString,
-        Instance, NativeFunction, Opcode, UpValue, Value,
+        Instance, NativeFunction, Opcode, UpValue, Value, NativeMethod,
     },
     vm::trace::Trace,
 };
@@ -112,6 +112,7 @@ impl VM {
             Value::Closure(fun) => self.call_function(fun, arg_count),
             Value::NativeFunction(fun) => self.call_native(fun),
             Value::Method(method) => self.call_method(method, arg_count),
+            Value::NativeMethod(method) => self.call_native_method(method),
             _ => {
                 let message = format!("'{}' is not callable", callee);
                 let trace = self.error(message);
@@ -201,6 +202,23 @@ impl VM {
         }
 
         let result = (fun.fun)(self, args)?;
+        self.stack.pop();
+        self.stack.push(result);
+
+        Ok(())
+    }
+
+    #[inline]
+    fn call_native_method(&mut self, method: Rc<NativeMethod>) -> Result<(), Trace> {
+        let mut args = vec![];
+        
+        while self.stack.stack.len() - 1 > self.frames.last().unwrap().offset {
+            let value = self.stack.pop();
+
+            args.push(value);
+        }
+
+        let result = method.call(self, args)?;
         self.stack.pop();
         self.stack.push(result);
 
@@ -435,7 +453,7 @@ impl VM {
         let obj = self.stack.pop();
         let prop = self.stack.pop();
 
-        match obj {
+        match obj.clone() {
             Value::Module(module) => {
                 let index = module
                     .borrow()
@@ -450,6 +468,30 @@ impl VM {
                 // check if the index is a number.
                 let index = match prop {
                     Value::Number(val) => val,
+                    Value::String(val) => {
+                        match self.builtins.array_class.items.borrow().get(&val) {
+                            Some(entity) => match entity.typ() {
+                                ClassItemType::Method => {
+                                    if let Ok(method) = entity.inner().into_native_method() {
+                                        let native_method = NativeMethod {
+                                            reciever: obj,
+                                            inner: Rc::clone(&method.inner),
+                                        };
+        
+                                        self.stack.push(Value::NativeMethod(Rc::new(native_method)));
+
+                                        return Ok(())
+                                    } else {
+                                        todo!()
+                                    }
+                                }
+                                _ => unreachable!(),
+                            },
+                            None => self.stack.push(Value::Nil),
+                        }
+
+                        return Ok(())
+                    }
                     _ => {
                         return Err(self.error("Array indices must be integers"));
                     }
@@ -538,6 +580,28 @@ impl VM {
                             }
                         };
                     }
+                }
+            }
+            obj @ Value::String(_) => {
+                let name = prop.into_string()?;
+
+                match self.builtins.string_class.items.borrow().get(&name) {
+                    Some(entity) => match entity.typ() {
+                        ClassItemType::Method => {
+                            if let Ok(method) = entity.inner().into_native_method() {
+                                let native_method = NativeMethod {
+                                    reciever: obj,
+                                    inner: Rc::clone(&method.inner),
+                                };
+
+                                self.stack.push(Value::NativeMethod(Rc::new(native_method)));
+                            } else {
+                                todo!()
+                            }
+                        }
+                        _ => unreachable!(),
+                    },
+                    None => self.stack.push(Value::Nil),
                 }
             }
             _ => unimplemented!("field access on {} is unsupported", obj),

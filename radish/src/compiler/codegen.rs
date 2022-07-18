@@ -146,6 +146,9 @@ impl Compiler {
 
         if self.config.eval && self.has_result {
             self.has_result = false;
+
+            dbg!(self.has_result);
+
             self.emit_byte(Opcode::Return as u8);
         } else {
             self.emit_return();
@@ -970,7 +973,7 @@ impl Compiler {
         match property {
             Expr::MemberExpr(object, property, _) => self.member_expr(object, property)?,
             Expr::Identifier(id) => self.emit_constant(Value::from(&id.name)),
-            _ => panic!("Invalid property in member expression"),
+            expr => self.expression(expr)?,
         };
 
         self.expression(object)?;

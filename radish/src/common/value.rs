@@ -1,4 +1,4 @@
-use super::{BoundMethod, Chunk, Class, ImmutableString, Instance, Module, NativeFunction};
+use super::{BoundMethod, Chunk, Class, ImmutableString, Instance, Module, NativeFunction, NativeMethod};
 
 use crate::VM;
 use std::cell::RefCell;
@@ -21,6 +21,7 @@ pub enum Value {
     Closure(Rc<Closure>),
     Module(Rc<RefCell<Module>>),
     NativeFunction(Rc<NativeFunction>),
+    NativeMethod(Rc<NativeMethod>),
     Method(Rc<BoundMethod>),
     Instance(Rc<Instance>),
     Array(Rc<RefCell<Vec<Value>>>),
@@ -30,6 +31,14 @@ pub enum Value {
 }
 
 impl Value {
+    #[inline]
+    pub fn into_number(self) -> Result<f64, Trace> {
+        match self {
+            Value::Number(num) => Ok(num),
+            _ => Err(Trace::new("expected a number")),
+        }
+    }
+
     #[inline]
     pub fn into_string(self) -> Result<ImmutableString, Trace> {
         match self {
@@ -71,6 +80,30 @@ impl Value {
     }
 
     #[inline]
+    pub fn into_native_method(self) -> Result<Rc<NativeMethod>, Trace> {
+        match self {
+            Value::NativeMethod(method) => Ok(method),
+            _ => Err(Trace::new("expected a native method")),
+        }
+    }
+
+    #[inline]
+    pub fn into_array(self) -> Result<Rc<RefCell<Vec<Value>>>, Trace> {
+        match self {
+            Value::Array(arr) => Ok(arr),
+            _ => Err(Trace::new("expected an array")),
+        }
+    }
+
+    #[inline]
+    pub fn into_map(self) -> Result<Rc<RefCell<HashMap<String, Value>>>, Trace> {
+        match self {
+            Value::Map(map) => Ok(map),
+            _ => Err(Trace::new("expected an array")),
+        }
+    }
+
+    #[inline]
     pub fn typ(&self) -> &'static str {
         match self {
             Value::Number(_) => "number",
@@ -79,7 +112,8 @@ impl Value {
             Value::Function(_) => "function",
             Value::Closure(_) => "function",
             Value::Module(_) => "module",
-            Value::NativeFunction(_) => "function",
+            Value::NativeFunction(_) => "native function",
+            Value::NativeMethod(_) => "native method",
             Value::Method(_) => "method",
             Value::Instance(_) => "instance",
             Value::Array(_) => "array",
@@ -138,6 +172,7 @@ impl Clone for Value {
             Self::Class(val) => Self::Class(Rc::clone(val)),
             Self::Module(module) => Self::Module(Rc::clone(module)),
             Self::NativeFunction(val) => Self::NativeFunction(Rc::clone(val)),
+            Self::NativeMethod(val) => Self::NativeMethod(Rc::clone(val)),
             Self::Method(val) => Self::Method(Rc::clone(val)),
             Self::Instance(inst) => Self::Instance(Rc::clone(inst)),
             Self::Array(arr) => Self::Array(Rc::clone(arr)),
@@ -158,6 +193,7 @@ impl fmt::Display for Value {
             Value::Class(val) => write!(f, "<class {}>", &val.name()),
             Value::Module(module) => write!(f, "<mod {}>", module.borrow().name),
             Value::NativeFunction(_) => write!(f, "<native fun>"),
+            Value::NativeMethod(_) => write!(f, "<native method>"),
             Value::Method(val) => write!(f, "{val}"),
             Value::Instance(inst) => write!(f, "{inst}"), 
             Value::Array(arr) => {
