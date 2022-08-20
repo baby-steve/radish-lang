@@ -1,9 +1,4 @@
-use crate::vm::from_value::FromValue;
-use crate::vm::native::NativeFunction;
-use crate::vm::to_value::ToValue;
-use crate::vm::trace::Trace;
-use crate::vm::value::Function;
-use crate::{Value, VM};
+use super::{FromValue, NativeFunction, RegisterFn, ToValue, Function, Value};
 
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, rc::Rc};
 
@@ -17,12 +12,12 @@ pub struct Module {
 }
 
 impl Module {
-    pub fn new(name: &str) -> Rc<RefCell<Module>> {
-        let module = Self::new_(name);
+    pub fn new_ref(name: &str) -> Rc<RefCell<Module>> {
+        let module = Self::new(name);
         Rc::new(RefCell::new(module))
     }
 
-    pub fn new_(name: &str) -> Self {
+    pub fn new(name: &str) -> Self {
         Self {
             name: name.to_string().into_boxed_str(),
             variables: Vec::new(),
@@ -31,14 +26,14 @@ impl Module {
     }
 
     pub(crate) fn empty() -> Rc<RefCell<Module>> {
-        Module::new("")
+        Module::new_ref("")
     }
 
-    pub fn add_native<F: 'static>(&mut self, name: &str, airty: u8, fun: F) -> &mut Self
+    pub fn add_native<F: 'static, A, R>(&mut self, name: &str, airty: u8, fun: F) -> &mut Self
     where
-        F: Fn(&mut VM, Vec<Value>) -> Result<Value, Trace>,
+        F: RegisterFn<A, R>
     {
-        let native_fun = NativeFunction::new::<F>(Rc::new(fun), airty);
+        let native_fun = NativeFunction::new::<F>(fun.register(), airty);
 
         let index = self.add_symbol(name.to_string());
 
@@ -201,7 +196,7 @@ mod tests {
 
     #[test]
     fn variables() {
-        let module = Module::new("test");
+        let module = Module::new_ref("test");
         let mut module = module.borrow_mut();
 
         module.add_symbol("a".to_string());
@@ -217,7 +212,7 @@ mod tests {
 
     #[test]
     fn entry() {
-        let module = Module::new("test");
+        let module = Module::new_ref("test");
 
         let fun = Function {
             arity: 0,

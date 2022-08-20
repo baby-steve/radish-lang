@@ -1,6 +1,6 @@
 // TODO: rewrite this entire thing as it's gotten quite gnarly and is due for a refactor.
 
-use crate::vm::value::Function;
+use super::Function;
 
 pub struct Disassembler<'a> {
     name: &'a str,
@@ -37,6 +37,7 @@ impl<'a> Disassembler<'a> {
         use crate::common::opcode::Opcode;
 
         let byte = self.function.chunk.code[offset];
+        
         match Opcode::from(byte) {
             Opcode::LoadConst => self.byte_instruction("LoadConst", offset),
             Opcode::LoadConstLong => self.long_const_instruction("LoadConstLong", offset, true),
@@ -48,6 +49,7 @@ impl<'a> Disassembler<'a> {
             Opcode::SaveGlobal => self.write_global("SetGlobal", offset),
 
             Opcode::LoadLocal => self.long_const_instruction("GetLocal", offset, false),
+            Opcode::LoadLocal0 => self.simple_instruction("GetLocal0", offset),
             Opcode::SaveLocal => self.long_const_instruction("SetLocal", offset, false),
 
             Opcode::DefCapture => self.simple_instruction("DefCapture", offset),
@@ -61,6 +63,7 @@ impl<'a> Disassembler<'a> {
             Opcode::False => self.simple_instruction("False", offset),
             Opcode::Nil => self.simple_instruction("Nil", offset),
 
+            Opcode::NoOp => self.simple_instruction("NoOp", offset),
             Opcode::Add => self.simple_instruction("Add", offset),
             Opcode::Sub => self.simple_instruction("Sub", offset),
             Opcode::Mul => self.simple_instruction("Mul", offset),
@@ -98,8 +101,8 @@ impl<'a> Disassembler<'a> {
             Opcode::BuildArray => self.long_const_instruction("BuildArray", offset, false),
             Opcode::BuildMap => self.long_const_instruction("BuildMap", offset, false),
             Opcode::Closure => self.closure(offset),
-            Opcode::BuildClass => self.simple_instruction("Class", offset),
-            Opcode::BuildCon => self.simple_instruction("BuildCon", offset),
+            Opcode::BuildClass => self.class(offset),
+            Opcode::Construct => self.simple_instruction("Construct", offset),
             Opcode::Print => self.simple_instruction("Print", offset),
             Opcode::Return => self.simple_instruction("Return", offset),
             Opcode::Import => self.simple_instruction("Import", offset),
@@ -220,13 +223,11 @@ impl<'a> Disassembler<'a> {
         self.write_instruction("Closure", offset);
         offset += 1;
         println!();
-        let num_upvals = self.function.chunk.code[offset];// + 1];
+        let num_upvals = self.function.chunk.code[offset];
 
         offset += 1;
 
         for _ in 0..num_upvals {
-            //println!("{}; {}", self.function.chunk.code[offset], self.function.chunk.code[offset + 1]);
-
             let is_local = self.function.chunk.code[offset];
 
             self.write_instruction(&self.function.chunk.code[offset + 1].to_string(), offset + 1);
@@ -241,6 +242,24 @@ impl<'a> Disassembler<'a> {
 
             offset += 2;
         }
+
+        offset
+    }
+
+    fn class(&self, mut offset: usize) -> usize {
+        self.write_instruction("BuildClass", offset);
+        println!();
+        offset += 1;
+
+        let num_fields = self.function.chunk.code[offset];
+        let num_constructors = self.function.chunk.code[offset + 1];
+        let num_methods = self.function.chunk.code[offset + 2];
+
+        println!("      fields: {num_fields}");
+        println!("      constructors: {num_constructors}");
+        println!("      methods: {num_methods}");
+
+        offset += 3;
 
         offset
     }

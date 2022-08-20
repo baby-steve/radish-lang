@@ -7,7 +7,7 @@ fn main() -> Result<(), RadishError> {
         print "Hello, World!"
     "#;
 
-    vm.eval(script)?;
+    vm.exec(script)?;
 
     Ok(())
 }

@@ -1,9 +1,9 @@
 //! Module containing the VM's evaluation methods.
 
 use crate::{
-    common::CompiledModule,
-    vm::{from_value::FromValue, trace::Trace, value::Closure, VM},
-    RadishError, Value,
+    common::{Closure, CompiledModule, FromValue, Value},
+    vm::trace::Trace,
+    RadishError, VM,
 };
 
 impl VM {
@@ -25,7 +25,7 @@ impl VM {
     /// # }
     /// ```
     pub fn exec(&mut self, src: &str) -> Result<(), RadishError> {
-        self._eval(src)?;
+        self._eval::<Value>(src)?;
         Ok(())
     }
 
@@ -35,7 +35,7 @@ impl VM {
     ///
     /// # Examples
     ///
-    /// ```no_run
+    /// ```
     /// # fn main() -> Result<(), radish::RadishError> {
     /// use radish::VM;
     ///
@@ -84,14 +84,14 @@ impl VM {
     ///
     /// let mut vm = VM::new();
     ///
-    /// assert_eq!(vm.eval::<()>("nil"), Ok(()));
+    /// assert_eq!(vm.eval_file::<()>("path/to/file"), Ok(()));
     ///
     /// # Ok(())
     /// # }
     /// ```
     pub fn eval_file<I: FromValue>(&mut self, file_name: &str) -> Result<I, RadishError> {
         match self._eval_file(file_name) {
-            Ok(val) => I::from_value(val),
+            Ok(val) => I::from_value(val).map_err(|err| err.into()),
             Err(e) => Err(e),
         }
     }
@@ -111,12 +111,12 @@ impl VM {
         let module = self.compiler.compile(&self.config.default_filename, src)?;
 
         match self.interpret(module) {
-            Ok(val) => I::from_value(val),
+            Ok(val) => I::from_value(val).map_err(|err| err.into()),
             Err(e) => Err(e.into()),
         }
     }
 
-    /// Interprete a compiled module.
+    // Interpret a compiled module.
     fn interpret(&mut self, module: CompiledModule) -> Result<Value, Trace> {
         use std::rc::Rc;
 

@@ -1,15 +1,23 @@
 //! Module containig an AST validator. this pass is meant to catch things that fit
 //! into the AST's data structures but are sematically invalid. However it only
 //! handles simple checks, not more compilcated things like name resolution.
+//! 
 
 use crate::common::Span;
-use crate::compiler::ast::{Expr, Stmt, VarKind, AST};
 
-use crate::compiler::{visitor::VisitorResult, Visitor};
-
-use crate::compiler::error::{SyntaxError, SyntaxErrorKind};
+use crate::compiler::{
+    ast::AST,
+    error::{SyntaxError, SyntaxErrorKind},
+    visitor::VisitorResult,
+    Visitor,
+};
 
 use crate::error::Item;
+
+use super::ast_ast::{
+    BreakStmt, ContinueStmt, FunctionDecl, LoopStmt, Position, ReturnStmt, VariableDecl,
+    VariableKind, WhileStmt,
+};
 
 pub fn validate_ast(ast: &mut AST) -> Result<(), SyntaxError> {
     AstValidator::validate_ast(ast)
@@ -41,13 +49,8 @@ impl AstValidator {
 
 impl Visitor<'_> for AstValidator {
     /// Mark that we're in a function body.
-    fn visit_fun_decl(&mut self, fun: &mut super::FunctionDecl) -> VisitorResult {
+    fn visit_fun_decl(&mut self, fun: &mut FunctionDecl) -> VisitorResult {
         self.state.push(State::Function);
-
-        // TODO: do we need to validate function parameter lists?
-        // for param in fun.params.iter_mut() {
-        //     self.visit_ident(param)?;
-        // }
 
         self.visit_block_stmt(&mut fun.body)?;
 
@@ -59,19 +62,14 @@ impl Visitor<'_> for AstValidator {
     }
 
     /// Validate the variable's inital value. If it doesn't have an
-    /// inital value and its a constant (final) var declaration, then
+    /// inital value and its a constant (final) variable declaration, then
     /// report an error.
-    fn visit_var_decl(
-        &mut self,
-        id: &mut super::Ident,
-        expr: &mut Option<Expr>,
-        kind: super::VarKind,
-    ) -> VisitorResult {
-        match expr {
+    fn visit_var_decl(&mut self, stmt: &mut VariableDecl) -> VisitorResult {
+        match &mut stmt.init {
             Some(expr) => self.visit_expr(expr),
-            None if kind == VarKind::Fin => {
+            None if stmt.kind == VariableKind::Final => {
                 let err_kind = SyntaxErrorKind::MissingConstInit {
-                    item: Item::new(&id.pos, &id.name),
+                    item: Item::new(&stmt.id.position(), &stmt.id.name),
                 };
 
                 Err(SyntaxError::new(err_kind))
@@ -81,10 +79,10 @@ impl Visitor<'_> for AstValidator {
     }
 
     /// Mark that we've entered a loop.
-    fn visit_loop_stmt(&mut self, body: &mut Vec<Stmt>) -> VisitorResult {
+    fn visit_loop_stmt(&mut self, stmt: &mut LoopStmt) -> VisitorResult {
         self.state.push(State::Loop);
 
-        self.visit_block_stmt(body)?;
+        self.visit_block_stmt(&mut stmt.body)?;
 
         self.state
             .pop()
@@ -94,12 +92,12 @@ impl Visitor<'_> for AstValidator {
     }
 
     /// Mark that we've entered a loop.
-    fn visit_while_stmt(&mut self, condition: &mut Expr, body: &mut Vec<Stmt>) -> VisitorResult {
-        self.visit_expr(condition)?;
+    fn visit_while_stmt(&mut self, stmt: &mut WhileStmt) -> VisitorResult {
+        self.visit_expr(&mut stmt.condition)?;
 
         self.state.push(State::Loop);
 
-        self.visit_block_stmt(body)?;
+        self.visit_block_stmt(&mut stmt.body)?;
 
         self.state
             .pop()
@@ -109,11 +107,11 @@ impl Visitor<'_> for AstValidator {
     }
 
     /// Verify that the `continue` statement is inside of a loop.
-    fn visit_continue_stmt(&mut self) -> VisitorResult {
+    fn visit_continue_stmt(&mut self, stmt: &mut ContinueStmt) -> VisitorResult {
         if self.state.last() != Some(&State::Loop) {
             let err_kind = SyntaxErrorKind::ContinueOutsideLoop {
                 item: crate::error::Item {
-                    span: Span::empty(), // FIXME: fix this.
+                    span: stmt.position().clone(),
                     content: "".to_string(),
                 },
             };
@@ -125,11 +123,11 @@ impl Visitor<'_> for AstValidator {
     }
 
     /// Verify that the `break` statement is inside of a loop.
-    fn visit_break_stmt(&mut self) -> VisitorResult {
+    fn visit_break_stmt(&mut self, stmt: &mut BreakStmt) -> VisitorResult {
         if self.state.last() != Some(&State::Loop) {
             let err_kind = SyntaxErrorKind::BreakOutsideLoop {
                 item: crate::error::Item {
-                    span: Span::empty(), // FIXME: fix this.
+                    span: stmt.position().clone(),
                     content: "".to_string(),
                 },
             };
@@ -141,7 +139,7 @@ impl Visitor<'_> for AstValidator {
     }
 
     /// Verify that the `return` statement is inside of a function body.
-    fn visit_return_stmt(&mut self, _return_expr: &mut Option<Expr>) -> VisitorResult {
+    fn visit_return_stmt(&mut self, _return_stmt: &mut ReturnStmt) -> VisitorResult {
         let mut in_function = false;
         for state in self.state.iter().rev() {
             if state == &State::Function {
@@ -163,26 +161,5 @@ impl Visitor<'_> for AstValidator {
         }
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::{common::source::Source, compiler::parser::Parser};
-
-    use super::*;
-
-    #[test]
-    fn walk_ast() {
-        let src = "1 + 2 - 3 * 4 / 5";
-        let source = Source::new(src, "");
-
-        let mut parser = Parser::new(source);
-
-        let mut ast = parser.parse().expect("expected an parser to succeed");
-
-        let res = ast.walk(validate_ast);
-
-        assert!(res.is_ok());
     }
 }

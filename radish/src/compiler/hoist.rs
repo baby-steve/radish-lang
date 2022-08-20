@@ -1,14 +1,17 @@
+//! Module for the AST pass that handles variable scoping.
+// Note: this entire file is essentially one giant bug filled hack and is
+// in a desperate need of a rewrite. For your own sake, please don't examine
+// its contents too closely as it may cause harm or even death.
+
 use std::collections::HashMap;
 
-use super::visitor::VisitorResult;
-use super::Expr;
-use super::FunctionDecl;
-use super::Ident;
-use super::Stmt;
-use super::SyntaxError;
-use super::VarKind;
-use super::Visitor;
-use super::AST;
+use serde::Serialize;
+
+use super::{
+    ast_ast::{BlockStmt, ClassDecl, FunctionDecl, Identifier, MethodDecl, VariableDecl},
+    visitor::VisitorResult,
+    Stmt, SyntaxError, Visitor, AST,
+};
 
 pub fn hoist(ast: &mut AST) -> Result<(), SyntaxError> {
     let mut hoister = Hoister::new();
@@ -18,8 +21,9 @@ pub fn hoist(ast: &mut AST) -> Result<(), SyntaxError> {
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum VarScope {
+    Unknown,
     Global,
     Local(bool),
     NonLocal,
@@ -27,7 +31,7 @@ pub enum VarScope {
 
 impl Default for VarScope {
     fn default() -> Self {
-        VarScope::Global
+        VarScope::Unknown
     }
 }
 
@@ -81,18 +85,7 @@ pub struct Scope {
 }
 
 impl Scope {
-    pub fn new() -> Self {
-        Self {
-            name: String::from(""),
-            locals: vec![],
-            upvalues: vec![],
-            alt_upvalues: vec![],
-            upvalue_indexes: HashMap::new(),
-            depth: 0,
-        }
-    }
-
-    pub fn named(name: impl ToString) -> Self {
+    pub fn new(name: impl ToString) -> Self {
         Self {
             name: name.to_string(),
             locals: vec![],
@@ -102,17 +95,6 @@ impl Scope {
             depth: 0,
         }
     }
-
-    /*
-    pub fn get_variable(&self, name: &str) -> Option<(ScopeTyp, usize)> {
-        if let Some(res) = self.get_local(name) {
-            Some(res)
-        } else if let Some(res) = self.get_upvalue(name) {
-            Some(res)
-        } else {
-            None
-        }
-    }*/
 
     fn get_local(&self, name: &str) -> Option<(ScopeTyp, usize)> {
         let mut index = self.locals.len();
@@ -245,7 +227,7 @@ impl Hoister {
 
     fn enter_scope(&mut self, name: impl ToString) {
         //println!("[hoist] entering scope \"{}\"", &name.to_string());
-        let new_scope = Scope::named(name);
+        let new_scope = Scope::new(name);
         self.scopes.push(new_scope);
     }
 
@@ -267,7 +249,7 @@ impl Hoister {
         }
     }
 
-    fn declare_local(&mut self, id: &mut Ident) {
+    fn declare_local(&mut self, id: &mut Identifier) {
         if self.in_global_scope() {
             return;
         }
@@ -285,12 +267,10 @@ impl Hoister {
         let local = self.scope().get_local(&id.name).unwrap();
 
         id.index = local.1 as u32;
-        id.scope = VarScope::Local(false);
+        id.typ = VarScope::Local(false);
     }
 
-    fn resolve_ident(&mut self, id: &mut Ident) {
-        //let name = &id.name;
-
+    fn resolve_ident(&mut self, id: &mut Identifier) {
         if self.in_global_scope() {
             return;
         }
@@ -301,7 +281,7 @@ impl Hoister {
             let (_, index) = self.scope().get_local(&id.name).unwrap();
 
             id.index = index as u32;
-            id.scope = VarScope::Local(false);
+            id.typ = VarScope::Local(false);
 
             return;
         }
@@ -310,61 +290,20 @@ impl Hoister {
             let index = self.scope().get_upvalue(&id.name).unwrap();
 
             id.index = index as u32;
-            id.scope = VarScope::NonLocal;
+            id.typ = VarScope::NonLocal;
             return;
         }
 
-        self.resolve_upvalue_2(id);
+        self.resolve_upvalue(id);
 
         //if let Some((depth, index)) = self.resolve_upvalue(id) {
         //    self.handle_resolved_upvalue(id, index, depth);
         //}
     }
 
-    fn _resolve_upvalue(&mut self, id: &mut Ident) -> Option<(usize, usize)> {
-        let total_scopes = self.scopes.len() - 1;
-
-        let mut found: Option<(usize, usize)> = None;
-
-        for (depth, scope) in self.scopes[0..total_scopes].iter_mut().rev().enumerate() {
-            println!("[hoist] checking \"{}\" for \"{}\"", &scope.name, &id.name);
-
-            if scope.has_local(&id.name) {
-                println!(
-                    "[hoist] found local variable \"{}\" in \"{}\"",
-                    id.name, scope.name
-                );
-
-                scope.capture_local(&id.name);
-
-                let index = scope.get_local(&id.name).unwrap().1;
-
-                //self.capture_local(&id.name);
-
-                found = Some((depth, index));
-            }
-        }
-
-        if let Some((depth, index)) = found {
-            let total_scopes = self.scopes.len() - 1;
-
-            for scope in self.scopes[depth + 1..total_scopes].iter_mut() {
-                println!("[hoist] adding nonlocal to {}", scope.name);
-
-                scope.add_upvalue(&id.name, index, false);
-            }
-
-            return Some((depth, index));
-        }
-
-        println!("[hoist] variable \"{}\" is a global", &id.name);
-
-        None
-    }
-
-    fn resolve_upvalue_2(&mut self, id: &mut Ident) {
+    fn resolve_upvalue(&mut self, id: &mut Identifier) {
         // exit the current scope
-        let mut prev_scopes = vec!(self.exit_scope());
+        let mut prev_scopes = vec![self.exit_scope()];
 
         let mut found = None;
 
@@ -384,12 +323,14 @@ impl Hoister {
                 self.scopes.push(scope);
 
                 break;
-            } /*else if let Some(upval) = scope.get_upvalue_2(&id.name) {
+            }
+            /*else if let Some(upval) = scope.get_upvalue_2(&id.name) {
                 // This scope has already captured an identifier with the same name.
                 found = Some(upval.index);
 
                 break;
-            }*/else if let Some(upval) = scope.upvalue_indexes.get(&id.name) {
+            }*/
+            else if let Some(upval) = scope.upvalue_indexes.get(&id.name) {
                 found = Some(*upval);
                 break;
             } else {
@@ -398,53 +339,37 @@ impl Hoister {
             }
         }
 
-        let index = if let Some(i) = found { i } else {
+        let index = if let Some(i) = found {
+            i
+        } else {
             while let Some(scope) = prev_scopes.pop() {
-               self.scopes.push(scope);
+                self.scopes.push(scope);
             }
-            
+
             return;
         };
 
         let mut scope = prev_scopes.pop().unwrap();
-        //println!("[hoist] adding {} to {} as an upvalue (index is {index}). And Pineapples", &id.name, &scope.name);
+
         scope.add_upvalue(&id.name, index, true);
+
         self.scopes.push(scope);
 
         while let Some(mut scope) = prev_scopes.pop() {
             let index = self.scope().upvalue_indexes.get(&id.name).unwrap();
-            
-            //println!("[hoist] adding {} to {} as an upvalue with an index of {index}", &id.name, &scope.name);
-            
+
             scope.add_upvalue(&id.name, *index, false);
             self.scopes.push(scope);
         }
 
-        //id.index = index as u32;
         id.index = self.scope_mut().upvalues.len() as u32;
-        id.scope = VarScope::NonLocal;
+        id.typ = VarScope::NonLocal;
     }
 
-    fn _handle_resolved_upvalue(&mut self, id: &mut Ident, pos: usize, depth: usize) {
-        let _on_stack = if depth == 0 {
-            false
-        } else {
-            true
-        };
+    fn _handle_resolved_upvalue(&mut self, id: &mut Identifier, pos: usize, depth: usize) {
+        let _on_stack = if depth == 0 { false } else { true };
 
-        //println!("[hoist] the current scope: {:#?}", self.scope());
-        //println!(
-        //    "[hoist] the previous scope: {:#?}",
-        //    self.scopes[self.scopes.len() - 2]
-        //);
-
-        //let position = self.get_capture_index(&id.name).unwrap();
         let index = self.scope_mut().upvalues.len();
-
-        //println!(
-        //        "[hoist] adding variable \"{}\" to \"{}\" as nonlocal with an index of {} that references local at slot {}", 
-        //        &id.name, self.scope().name, index, pos
-        //    );
 
         self.scope_mut().add_upvalue(&id.name, pos, true);
 
@@ -453,37 +378,27 @@ impl Hoister {
             .push((id.name.clone(), usize::MAX));
 
         id.index = index as u32;
-        id.scope = VarScope::NonLocal;
+        id.typ = VarScope::NonLocal;
     }
 
     fn capture_locals(&mut self, locals: Vec<Local>, block: &mut Vec<Stmt>) {
-        //println!("[hoist] dealing with the following locals: {:?}", locals);
+        // this whole function is really gnarly.
 
         let mut captures = vec![];
 
         for stmt in block.iter_mut() {
             match stmt {
-                Stmt::VarDeclaration(id, _, _, _) => {
+                Stmt::VariableDecl(stmt) => {
                     for local in locals.iter() {
-                        if local.is_captured() && id.name == local.0 {
-                            //println!(
-                            //    "[hoist] found declaration location of captured variable {}",
-                            //    &id.name
-                            //);
-                            id.scope = VarScope::Local(true);
+                        if local.is_captured() && stmt.id.name == local.0 {
                             captures.push(local);
                             break;
                         }
                     }
                 }
-                Stmt::FunDeclaration(fun, _) => {
+                Stmt::FunctionDecl(fun) => {
                     for local in locals.iter() {
                         if local.is_captured() && fun.id.name == local.0 {
-                            //println!(
-                            //    "[hoist] found declaration location of captured variable {}",
-                            //    &fun.id.name
-                            //);
-                            fun.id.scope = VarScope::Local(true);
                             captures.push(local);
                             break;
                         }
@@ -493,12 +408,9 @@ impl Hoister {
             }
         }
 
-        //println!("[hoist] found the following captures: {:#?}", captures);
-
         for upval in self.scope_mut().alt_upvalues.iter_mut() {
             for (i, cap) in captures.iter().enumerate() {
                 if cap.0 == upval.0 {
-                    //println!("[hoist] changing index of {} to {}", upval.0, i);
                     upval.1 = i;
 
                     break;
@@ -509,6 +421,46 @@ impl Hoister {
 }
 
 impl Visitor<'_> for Hoister {
+    fn visit_class_decl(&mut self, class: &mut ClassDecl) -> VisitorResult {
+        for stmt in class.body.iter_mut() {
+            self.visit_stmt(stmt)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_method_decl(&mut self, method: &mut MethodDecl) -> VisitorResult {
+        self.enter_scope(&method.body.id.name);
+
+        self.scope_mut().enter_block();
+
+        for param in method.body.params.iter_mut() {
+            self.declare_local(param);
+        }
+
+        self.scope_mut().add_local("this");
+
+        self.visit_block_stmt(&mut method.body.body)?;
+
+        let locals = self.scope_mut().exit_block();
+
+        for param in method.body.params.iter_mut() {
+            for local in locals.iter() {
+                if local.is_captured() && param.name == local.0 {
+                    break;
+                }
+            }
+        }
+
+        self.capture_locals(locals, &mut method.body.body.body);
+        // don't call exit scope until `capture_locals` has been called.
+        let scope = self.exit_scope();
+
+        method.body.scope = Some(scope);
+
+        Ok(())
+    }
+
     fn visit_fun_decl(&mut self, fun: &mut FunctionDecl) -> VisitorResult {
         self.declare_local(&mut fun.id);
 
@@ -520,104 +472,58 @@ impl Visitor<'_> for Hoister {
             self.declare_local(param);
         }
 
-        for stmt in fun.body.iter_mut() {
+        // self.visit_block_stmt(&mut fun.body)?;
+
+        for stmt in fun.body.body.iter_mut() {
             self.visit_stmt(stmt)?;
         }
 
         let locals = self.scope_mut().exit_block();
 
-        
         for param in fun.params.iter_mut() {
             for local in locals.iter() {
                 if local.is_captured() && param.name == local.0 {
-                    //println!(
-                    //    "[hoist] found declaration location of captured variable {}",
-                    //    &param.name
-                    //);
-                    param.scope = VarScope::Local(true);
-                    //captures.push(local);
                     break;
                 }
             }
         }
-        
-        self.capture_locals(locals, &mut fun.body);
+
+        self.capture_locals(locals, &mut fun.body.body);
         // don't call exit scope until `capture_locals` has been called.
         let scope = self.exit_scope();
 
-        fun.other_scope = Some(scope);
+        fun.scope = Some(scope);
 
         Ok(())
     }
 
-    fn visit_block_stmt(&mut self, block: &mut Vec<super::Stmt>) -> VisitorResult {
+    fn visit_block_stmt(&mut self, block_stmt: &mut BlockStmt) -> VisitorResult {
         self.scope_mut().enter_block();
 
-        for stmt in block.iter_mut() {
+        for stmt in block_stmt.body.iter_mut() {
             self.visit_stmt(stmt)?;
         }
 
         let locals = self.scope_mut().exit_block();
 
-        self.capture_locals(locals, block);
+        self.capture_locals(locals, &mut block_stmt.body);
 
         Ok(())
     }
 
-    fn visit_var_decl(
-        &mut self,
-        id: &mut Ident,
-        expr: &mut Option<Expr>,
-        _: VarKind,
-    ) -> VisitorResult {
-        if let Some(expr) = expr {
+    fn visit_var_decl(&mut self, stmt: &mut VariableDecl) -> VisitorResult {
+        if let Some(expr) = &mut stmt.init {
             self.visit_expr(expr)?;
         }
 
-        self.declare_local(id);
+        self.declare_local(&mut stmt.id);
 
         Ok(())
     }
 
-    fn visit_ident(&mut self, ident: &mut Ident) -> VisitorResult {
+    fn visit_ident(&mut self, ident: &mut Identifier) -> VisitorResult {
         self.resolve_ident(ident);
 
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    // TODO: add more tests for verfiying that variables have the correct indexes.
-
-    use crate::{common::source::Source, compiler::Parser};
-
-    use super::*;
-
-    #[test]
-    fn capture() {
-        let content = "
-            fun outer() {
-                var a = 23
-                fun inner() {
-                    print a
-                }
-                return inner
-            }
-        ";
-
-        let src = Source::new(content, "");
-        let mut parser = Parser::new(src);
-
-        let mut ast = parser.parse().expect("couldn't parse ast");
-
-        hoist(&mut ast).expect("failed to hoist ast");
-
-        let outer_fun = ast.items[0].as_function();
-        let (id, _, _, _) = outer_fun.body[0].as_ident();
-
-        assert_eq!(id.scope, VarScope::Local(true));
-
-        let _inner_fun = outer_fun.body[1].as_function();
     }
 }

@@ -1,4 +1,4 @@
-use crate::common::span::Span;
+use crate::common::Span;
 use crate::error::{renderer::Renderer, Diagnostic, Label, LabelStyle};
 use std::io;
 

@@ -18,7 +18,7 @@ impl Default for Config {
 impl Config {
     pub fn new() -> Self {
         Self {
-            repl: false,
+            repl: true,
             dump_ast: false,
             dump_bytecode: false,
             trace: false,

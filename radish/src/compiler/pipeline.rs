@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::{
-    common::{source::Source, CompiledModule},
+    common::{Source, CompiledModule},
     compiler::Compiler, compiler::Parser, compiler::SyntaxError, compiler::AST, config::Config,
 };
 
@@ -12,6 +12,7 @@ type ASTPass = Box<dyn FnMut(&mut AST) -> Result<(), SyntaxError> + 'static>;
 pub struct PipelineSettings {
     pub dump_bytecode: bool,
     pub dump_ast: bool,
+    pub repl: bool,
 }
 
 impl PipelineSettings {
@@ -19,6 +20,7 @@ impl PipelineSettings {
         Self {
             dump_bytecode: false,
             dump_ast: false,
+            repl: false,
         }
     }
 }
@@ -34,6 +36,7 @@ impl From<&Config> for PipelineSettings {
         Self {
             dump_bytecode: config.dump_bytecode,
             dump_ast: config.dump_ast,
+            repl: config.repl,
         }
     }
 }
@@ -79,13 +82,16 @@ impl CompilerPipeLine {
     fn _compile(&mut self, file_name: &str, src: &str) -> Result<CompiledModule, SyntaxError> {
         let source = Source::new(src, &file_name);
 
-        let mut parser = Parser::with_config(source, &self.settings);
+        let mut parser = Parser::new(source, &self.settings);
 
         let mut ast = parser.parse()?;
 
         for callback in self.passes.iter_mut() {
             ast.visit(callback)?;
         }
+
+        let json = serde_json::to_string::<AST>(&ast).expect("failed to convert AST to JSON");
+        std::fs::write("ast.json", json).expect("failed to write JSON to file");
 
         let module = self.compiler.compile(file_name, &ast)?;
 

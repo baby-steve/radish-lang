@@ -4,25 +4,20 @@
 use std::{collections::HashMap, rc::Rc};
 
 use crate::{
-    common::{loader::Loader, CompiledModule, Module},
+    common::{Closure, CompiledModule, Loader, Module},
     compiler::pipeline::CompilerPipeLine,
     config::Config,
-    RadishCore,
+    RadishCore, core::BuiltinClasses,
 };
 
-use self::stack::Stack;
-
 mod eval;
-pub mod from_value;
 mod load;
-pub(crate) mod native;
 mod run;
 mod stack;
-pub mod to_value;
-pub mod trace;
-pub mod value;
+// mod error;
+pub(crate) use stack::Stack;
 
-use value::Closure;
+pub mod trace;
 
 #[derive(Debug)]
 pub struct CallFrame {
@@ -39,11 +34,13 @@ pub struct VM {
     /// VM configuration.
     config: Box<Config>,
     /// VM's operator stack.
-    stack: Stack,
+    pub(crate) stack: Stack,
     /// VM's call stack.
-    frames: Vec<CallFrame>,
-    /// Number of frame's current on the call stack.
-    frame_count: usize,
+    pub(crate) frames: Vec<CallFrame>,
+    /// Number of frame's currently on the call stack.
+    pub(crate) frame_count: usize,
+    /// Vm's builtin classes.
+    builtins: BuiltinClasses,
 
     /// Store upvalues for later access by closures.
     /// Contains the locations of non-local values on the stack.
@@ -61,12 +58,7 @@ pub struct VM {
 
 impl VM {
     pub fn new() -> Self {
-        let mut vm = VM::with_config(Config::new());
-
-        vm.load_namespace(RadishCore)
-            .expect("Failed to load standard library");
-
-        vm
+        VM::with_config(Config::new())
     }
 
     pub fn with_config(config: Config) -> Self {
@@ -74,17 +66,22 @@ impl VM {
 
         let pipeline = CompilerPipeLine::new(&config).with_default_passes();
 
-        Self {
+        let mut vm = Self {
             config,
             stack: Stack::new(),
             frames: Vec::new(),
             frame_count: 0,
+            builtins: BuiltinClasses::default(),
             upvalues: HashMap::new(),
             last_module: Module::empty(),
             modules: Vec::new(),
             loader: Loader::new(),
             compiler: pipeline,
-        }
+        };
+
+        vm.load_namespace(RadishCore);
+
+        vm
     }
 }
 

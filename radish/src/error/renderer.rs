@@ -1,7 +1,7 @@
 //use std::io::{self};
 use termcolor::{Color, ColorSpec, WriteColor};
 
-use crate::common::span::Span;
+use crate::common::Span;
 use crate::error::diagnostic::{Label, LabelStyle, Severity};
 use std::io::{self, Write};
 

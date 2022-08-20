@@ -1,8 +1,0 @@
-// Test grouping expressions 
-
-print (3 + 4) // expect: 7
-print 2 * (3 + 4) // expect: 14
-print (5 * 2) / (5 - 3) // expect: 5 
-print 2 * (3 + (4 - 1)) // expect: 12
-print 2 * ((((3 + 4)))) // expect: 14
-print 2 * (((3))) // expect: 6

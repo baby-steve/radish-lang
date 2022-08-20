@@ -1,14 +1,14 @@
-use std::{cell::RefCell, collections::HashMap, convert::TryInto, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    common::{Disassembler, Opcode},
+    common::{
+        AccessType, BoundMethod, Class, ClassItemType, Closure, Disassembler, ImmutableString,
+        Instance, NativeFunction, Opcode, UpValue, Value, NativeMethod,
+    },
     vm::trace::Trace,
-    vm::value::{Class, Closure, Value},
 };
 
 use crate::vm::{CallFrame, VM};
-
-use super::{native::NativeFunction, value::UpValue};
 
 impl VM {
     /// Create a new [`Trace`] with the given message, adding context to it.
@@ -25,7 +25,7 @@ impl VM {
     /// Return a reference to the top most frame on the call stack.
     #[inline]
     fn current_frame(&self) -> &CallFrame {
-        &self.frames[self.frame_count - 1]
+        self.frames.last().unwrap()
     }
 
     /// Return a mutatable reference to the top most frame on the call stack.
@@ -70,22 +70,25 @@ impl VM {
     }
 
     /// Build a `u32` number from the bytecode stream.
-    #[inline]
-    fn read_long(&mut self) -> u32 {
-        let frame = &mut self.frames[self.frame_count - 1];
+    #[inline(always)]
+    fn read_long(&mut self) -> usize {
+        let frame = self.frames.last_mut().unwrap();
 
         frame.ip += 4;
 
-        let bytes = frame.closure.function.chunk.code[frame.ip - 4..frame.ip]
-            .try_into()
-            .unwrap();
+        let bytes = &frame.closure.function.chunk.code;
 
-        u32::from_le_bytes(bytes)
+        let num = ((bytes[frame.ip - 4] as usize) << 0)
+            | ((bytes[frame.ip - 3] as usize) << 8)
+            | ((bytes[frame.ip - 2] as usize) << 16)
+            | ((bytes[frame.ip - 1] as usize) << 24);
+
+        num
     }
 
     #[inline]
     fn read_constant_long(&mut self) -> Value {
-        let index = self.read_long() as usize;
+        let index = self.read_long();
         self.frames[self.frame_count - 1]
             .closure
             .function
@@ -108,6 +111,8 @@ impl VM {
         match callee {
             Value::Closure(fun) => self.call_function(fun, arg_count),
             Value::NativeFunction(fun) => self.call_native(fun),
+            Value::Method(method) => self.call_method(method, arg_count),
+            Value::NativeMethod(method) => self.call_native_method(method),
             _ => {
                 let message = format!("'{}' is not callable", callee);
                 let trace = self.error(message);
@@ -116,22 +121,16 @@ impl VM {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn call_function(
         &mut self,
         closure: Rc<Closure>,
         arg_count: usize,
     ) -> Result<(), Trace> {
-        //println!(
-        //    "[vm] calling {}. It has {} upvalues",
-        //    closure.function.name,
-        //    &closure.non_locals.borrow().len()
-        //);
-
         let offset = self.stack.stack.len() - arg_count;
 
         let frame = CallFrame {
-            closure: Rc::clone(&closure),
+            closure,
             ip: 0,
             offset,
         };
@@ -142,8 +141,26 @@ impl VM {
         Ok(())
     }
 
+    #[inline]
+    fn call_method(&mut self, method: Rc<BoundMethod>, arg_count: usize) -> Result<(), Trace> {
+        let offset = self.stack.stack.len() - arg_count;
+
+        let frame = CallFrame {
+            closure: Rc::clone(&method.method),
+            ip: 0,
+            offset,
+        };
+
+        self.stack.push(Value::Instance(Rc::clone(&method.reciever)));
+
+        self.frames.push(frame);
+        self.frame_count += 1;
+
+        Ok(())
+    }
+
     fn make_array(&mut self) -> Result<(), Trace> {
-        let element_count = self.read_long() as usize;
+        let element_count = self.read_long();
         let mut elements = Vec::with_capacity(element_count);
 
         for _ in 0..element_count {
@@ -159,20 +176,20 @@ impl VM {
         Ok(())
     }
 
-    fn make_object(&mut self) -> Result<(), Trace> {
-        let element_count = self.read_long() as usize;
+    fn make_map(&mut self) -> Result<(), Trace> {
+        let element_count = self.read_long();
         let mut elements = HashMap::with_capacity(element_count);
 
-        for _ in 0..element_count {
+        for _ in 0..=element_count {
             let value = self.stack.pop();
             let key = self.stack.pop();
 
             elements.insert(key.to_string(), value);
         }
 
-        let array = Value::Map(Rc::new(RefCell::new(elements)));
+        let map = Value::Map(Rc::new(RefCell::new(elements)));
 
-        self.stack.push(array);
+        self.stack.push(map);
 
         Ok(())
     }
@@ -191,18 +208,31 @@ impl VM {
         Ok(())
     }
 
+    #[inline]
+    fn call_native_method(&mut self, method: Rc<NativeMethod>) -> Result<(), Trace> {
+        let mut args = vec![];
+        
+        while self.stack.stack.len() - 1 > self.frames.last().unwrap().offset {
+            let value = self.stack.pop();
+
+            args.push(value);
+        }
+
+        let result = method.call(self, args)?;
+        self.stack.pop();
+        self.stack.push(result);
+
+        Ok(())
+    }
+
     /// Create a closure from the value on top of the stack.
     #[inline]
     fn make_closure(&mut self) -> Result<(), Trace> {
         let function = self.stack.pop().into_function().unwrap();
 
-        //println!("[vm] creating closure \"{}\"", &function.name);
-
         let closure = Closure::new(function);
 
         let num_upvals = self.read_byte();
-
-        //println!("[vm] current open upvalues in vm: {:?}", self.upvalues);
 
         for _ in 0..num_upvals {
             let typ = self.read_byte() as usize;
@@ -217,29 +247,12 @@ impl VM {
                 panic!("invalid flag: must be 0 or 1");
             };
 
-            //println!(
-            //    "[vm] adding upvalue referencing upvalue slot index {}",
-            //    index
-            //);
             closure.non_locals.borrow_mut().push(upvalue);
         }
-
-        //println!(
-        //    "[vm] created closure with the following upvalues: {:?}",
-        //    self.upvalues
-        //);
-
-        //println!("[vm] closing upvalues");
 
         for upval in closure.non_locals.borrow_mut().iter_mut() {
             upval.close(&self);
         }
-
-        //println!(
-        //    "[vm] closure \"{}\" has the following upvalues: {:?}",
-        //    closure.function.name,
-        //    closure.non_locals.borrow()
-        //);
 
         self.stack.push(Value::Closure(Rc::new(closure)));
 
@@ -251,7 +264,47 @@ impl VM {
     fn make_class(&mut self) -> Result<(), Trace> {
         let name = self.stack.pop().into_string().unwrap();
 
-        let class = Class::new(&name);
+        let class = Class::new(name);
+
+        let num_fields = self.read_byte();
+        let num_constructors = self.read_byte();
+        let num_methods = self.read_byte();
+
+        for _ in 0..num_fields {
+            let access_typ = AccessType::Public; // self.read_byte();
+            let field = self.stack.pop();
+            let name = self.stack.pop().into_string()?;
+
+            // let access_typ = match typ {
+            //     0 => AccessType::Private,
+            //     1 => AccessType::Public,
+            //     _ => unreachable!("Invalid access modifier flag"),
+            // };
+
+            class.add_field(name, field, access_typ);
+        }
+
+        for _ in 0..num_constructors {
+            let constructor = self.stack.pop();
+
+            let name = match &constructor {
+                Value::Closure(closure) => ImmutableString::from(&*closure.function.name),
+                _ => panic!("Internal radish error: constructor value is not a function"),
+            };
+
+            class.add_constructor(name, constructor);
+        }
+
+        for _ in 0..num_methods {
+            let method = self.stack.pop();
+
+            let name = match &method {
+                Value::Closure(closure) => ImmutableString::from(&*closure.function.name),
+                _ => panic!("Internal radish error: value is not a function"),
+            };
+
+            class.add_method(name, method, AccessType::Public);
+        }
 
         self.stack.push(Value::Class(Rc::new(class)));
 
@@ -261,16 +314,40 @@ impl VM {
     /// Create a constructor from the value on top of the stack.
     #[inline]
     fn make_constructor(&mut self) -> Result<(), Trace> {
-        let constructor = self.stack.pop();
+        let class = self.stack.pop().into_class()?;
 
-        let name = match &constructor {
-            Value::Closure(closure) => closure.function.name.to_string(),
-            _ => unreachable!("can only create a constructor from a closure"),
-        };
+        let instance = Instance::new(&class);
 
-        let class = self.stack.peek().unwrap().into_class().unwrap();
+        self.stack.push(Value::Instance(Rc::new(instance)));
 
-        class.constructors.borrow_mut().insert(name, constructor);
+        Ok(())
+    }
+
+    #[inline]
+    fn _bind_method(
+        &mut self,
+        instance: Rc<Instance>,
+        name: &ImmutableString,
+    ) -> Result<(), Trace> {
+        let class = instance.class();
+
+        if let Some(item) = class.items.borrow().get(name) {
+            match item.typ() {
+                ClassItemType::Method => {
+                    let method = item.inner().into_closure()?;
+
+                    let bound = BoundMethod::new(&instance, &method);
+
+                    self.stack.push(Value::Method(Rc::new(bound)));
+                }
+                ClassItemType::Constructor => {
+                    return Err(self.error("cannot access constructor from instance"));
+                }
+                _ => self.stack.push(item.inner()),
+            }
+        } else {
+            self.stack.push(Value::Nil);
+        }
 
         Ok(())
     }
@@ -281,7 +358,6 @@ impl VM {
 
         println!("{}", msg);
 
-        //self.config.stdout.write(&format!("{}", msg));
         Ok(())
     }
 
@@ -294,20 +370,29 @@ impl VM {
         // ^ script     ^ function being called  ^ local being loaded
         // ```
         // the local being loaded will have a relative index of (1).
-        let relative_index = self.read_long() as usize; // + 1;
-
-        //dbg!(relative_index);
+        let relative_index = self.read_long();
 
         // The stack position of the current function being called.
         let offset = self.current_frame().offset;
 
-        //dbg!(offset);
-
         // To get the locals position on the stack, we then have to add the locals
         // relative position to the function's position.
-        let slot_index = relative_index + offset; // - 1;
+        let slot_index = relative_index + offset;
 
-        //dbg!(slot_index);
+        self.stack.push(self.stack.stack[slot_index].clone());
+
+        Ok(())
+    }
+
+    #[inline]
+    fn load_this(&mut self) -> Result<(), Trace> {
+        let relative_index = 0;
+
+        let frame = self.current_frame();
+
+        let offset = frame.offset + frame.closure.function.arity as usize;
+
+        let slot_index = relative_index + offset;
 
         self.stack.push(self.stack.stack[slot_index].clone());
 
@@ -316,11 +401,11 @@ impl VM {
 
     #[inline]
     fn save_local(&mut self) -> Result<(), Trace> {
-        let relative_index = self.read_long() as usize;
+        let relative_index = self.read_long();
 
         let offset = self.current_frame().offset;
 
-        let slot_index = relative_index + offset; // - 1;
+        let slot_index = relative_index + offset;
 
         self.stack.stack[slot_index as usize] = self.stack.peek().unwrap();
 
@@ -329,7 +414,7 @@ impl VM {
 
     #[inline]
     fn load_global(&mut self) -> Result<(), Trace> {
-        let index = self.read_long() as usize;
+        let index = self.read_long();
 
         let value = self
             .current_frame()
@@ -349,7 +434,7 @@ impl VM {
 
     #[inline]
     fn save_global(&mut self) -> Result<(), Trace> {
-        let index = self.read_long() as usize;
+        let index = self.read_long();
 
         self.current_frame()
             .closure
@@ -368,11 +453,11 @@ impl VM {
         let obj = self.stack.pop();
         let prop = self.stack.pop();
 
-        match obj {
+        match obj.clone() {
             Value::Module(module) => {
                 let index = module
                     .borrow()
-                    .get_index(&prop.into_string().unwrap().borrow())
+                    .get_index(&prop.into_string().unwrap())
                     .expect("no value at index");
 
                 let val = module.borrow().get_value_at_index(index).clone();
@@ -383,6 +468,30 @@ impl VM {
                 // check if the index is a number.
                 let index = match prop {
                     Value::Number(val) => val,
+                    Value::String(val) => {
+                        match self.builtins.array_class.items.borrow().get(&val) {
+                            Some(entity) => match entity.typ() {
+                                ClassItemType::Method => {
+                                    if let Ok(method) = entity.inner().into_native_method() {
+                                        let native_method = NativeMethod {
+                                            reciever: obj,
+                                            inner: Rc::clone(&method.inner),
+                                        };
+        
+                                        self.stack.push(Value::NativeMethod(Rc::new(native_method)));
+
+                                        return Ok(())
+                                    } else {
+                                        todo!()
+                                    }
+                                }
+                                _ => unreachable!(),
+                            },
+                            None => self.stack.push(Value::Nil),
+                        }
+
+                        return Ok(())
+                    }
                     _ => {
                         return Err(self.error("Array indices must be integers"));
                     }
@@ -422,6 +531,79 @@ impl VM {
 
                 self.stack.push(value);
             }
+            Value::Class(class) => {
+                let name = prop.into_string()?;
+
+                match class.items.borrow().get(&name) {
+                    Some(entity) => {
+                        let value = entity.inner();
+                        self.stack.push(value);
+                    }
+                    None => {
+                        self.stack.push(Value::Nil);
+                    }
+                };
+            }
+            Value::Instance(inst) => {
+                let name = prop.into_string()?;
+
+                let mut fields = inst.fields.borrow_mut();
+
+                match fields.get(&name) {
+                    Some(field) => {
+                        self.stack.push(field.clone());
+                    }
+                    None => {
+                        let class = inst.class();
+
+                        match class.items.borrow().get(&name) {
+                            Some(entity) => match entity.typ() {
+                                ClassItemType::Method => {
+                                    let method = entity.inner().into_closure()?;
+
+                                    let bound = BoundMethod::new(&inst, &method);
+
+                                    self.stack.push(Value::Method(Rc::new(bound)));
+                                }
+                                ClassItemType::Constructor => {
+                                    return Err(
+                                        self.error("cannot access constructor from instance")
+                                    );
+                                }
+                                _ => {
+                                    fields.insert(name, entity.inner());
+                                    self.stack.push(entity.inner());
+                                }
+                            },
+                            None => {
+                                self.stack.push(Value::Nil);
+                            }
+                        };
+                    }
+                }
+            }
+            obj @ Value::String(_) => {
+                let name = prop.into_string()?;
+
+                match self.builtins.string_class.items.borrow().get(&name) {
+                    Some(entity) => match entity.typ() {
+                        ClassItemType::Method => {
+                            if let Ok(method) = entity.inner().into_native_method() {
+                                let native_method = NativeMethod {
+                                    reciever: obj,
+                                    inner: Rc::clone(&method.inner),
+                                };
+
+                                self.stack.push(Value::NativeMethod(Rc::new(native_method)));
+                            } else {
+                                todo!()
+                            }
+                        }
+                        _ => unreachable!(),
+                    },
+                    None => self.stack.push(Value::Nil),
+                }
+            }
             _ => unimplemented!("field access on {} is unsupported", obj),
         }
 
@@ -432,7 +614,7 @@ impl VM {
     fn save_field(&mut self) -> Result<(), Trace> {
         let val = self.stack.pop();
         let idx = self.stack.pop();
-        let obj = self.stack.pop();
+        let obj = self.stack.peek().unwrap(); // self.stack.pop();
 
         match obj {
             Value::Array(elements) => {
@@ -470,6 +652,14 @@ impl VM {
 
                 map.borrow_mut().insert(key, val);
             }
+            Value::Class(_class) => {
+                todo!();
+            }
+            Value::Instance(inst) => {
+                let name = idx.into_string()?;
+
+                inst.fields.borrow_mut().insert(name, val);
+            }
             _ => unimplemented!("field access on {} is unsupported", obj),
         }
 
@@ -492,7 +682,7 @@ impl VM {
     #[inline]
     fn load_upvalue(&mut self) -> Result<(), Trace> {
         // Read the upvalue's position from the bytecode stream.
-        let index = self.read_long() as usize;
+        let index = self.read_long();
 
         let closure = &self.current_frame().closure;
 
@@ -512,7 +702,7 @@ impl VM {
 
     #[inline]
     fn save_upvalue(&mut self) -> Result<(), Trace> {
-        let index = self.read_long() as usize;
+        let index = self.read_long();
 
         let frame = &self.frames[self.frame_count - 1].closure.non_locals;
         let upval = &mut frame.borrow_mut()[index];
@@ -534,6 +724,7 @@ impl VM {
         Ok(())
     }
 
+    // ...
     #[inline]
     fn jump_if_false(&mut self) -> Result<(), Trace> {
         let offset = self.read_short();
@@ -566,7 +757,7 @@ impl VM {
             .into_string()
             .expect("path is not a string");
 
-        let module = match self.loader.load(&path.borrow(), &mut self.compiler) {
+        let module = match self.loader.load(&path, &mut self.compiler) {
             Ok(m) => m,
             Err(e) => {
                 e.emit();
@@ -577,7 +768,7 @@ impl VM {
 
         self.stack.push(Value::Module(Rc::clone(&module)));
 
-        if self.loader.is_cached(&*path.borrow()) {
+        if self.loader.is_cached(&path) {
             return Ok(());
         };
 
@@ -617,11 +808,13 @@ impl VM {
         );
     }
 
+    #[inline]
     pub(crate) fn run(&mut self) -> Result<Value, Trace> {
         macro_rules! binary_op {
             ($op:tt) => {{
                 let b = self.stack.pop();
                 let a = self.stack.pop();
+
                 self.stack.push(Value::from(a $op b));
             }};
         }
@@ -676,6 +869,9 @@ impl VM {
                 Opcode::Del => {
                     self.stack.pop();
                 }
+                Opcode::NoOp => {
+                    // does nothing
+                }
                 Opcode::Neg => unary_op!(-),
                 Opcode::Not => unary_op!(!),
                 Opcode::Add => binary_op!(+),
@@ -690,7 +886,7 @@ impl VM {
                 Opcode::CmpGTEq => binary_op!(>=),
                 Opcode::CmpNotEq => binary_op!(!=),
                 Opcode::DefGlobal => {
-                    let index = self.read_long() as usize;
+                    let index = self.read_long();
                     self.last_module
                         .borrow_mut()
                         .set_value_at_index(index, self.stack.peek().unwrap());
@@ -700,6 +896,7 @@ impl VM {
                 Opcode::LoadGlobal => self.load_global()?,
                 Opcode::SaveGlobal => self.save_global()?,
                 Opcode::LoadLocal => self.load_local()?,
+                Opcode::LoadLocal0 => self.load_this()?,
                 Opcode::SaveLocal => self.save_local()?,
                 Opcode::DefCapture => self.def_upvalue()?,
                 Opcode::LoadCapture => self.load_upvalue()?,
@@ -711,15 +908,15 @@ impl VM {
                 Opcode::Jump => self.jump()?,
                 Opcode::Loop => self.loop_()?,
                 Opcode::BuildArray => self.make_array()?,
-                Opcode::BuildMap => self.make_object()?,
+                Opcode::BuildMap => self.make_map()?,
                 Opcode::Closure => self.make_closure()?,
                 Opcode::BuildClass => self.make_class()?,
-                Opcode::BuildCon => self.make_constructor()?,
+                Opcode::Construct => self.make_constructor()?,
                 Opcode::Print => self.print()?,
                 Opcode::Import => self.import()?,
                 Opcode::Call => {
                     let arg_count = self.read_byte() as usize;
-                    let callee = self.stack.peek_n(arg_count + 1).unwrap();
+                    let callee = self.stack.peek_n(arg_count + 1);
                     self.call_value(callee, arg_count)?;
                 }
                 Opcode::Return => {
@@ -727,7 +924,10 @@ impl VM {
 
                     // if that was the last frame, exit the VM.
                     if self.frame_count - 1 == 0 {
-                        //self.stack.pop();
+                        self.stack.pop();
+                        self.frame_count -= 1;
+                        self.frames.pop();
+
                         return Ok(result);
                     }
 

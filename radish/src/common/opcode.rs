@@ -44,6 +44,7 @@ pub enum Opcode {
     ///
     /// -> [Value]
     LoadLocal,
+    LoadLocal0,
     /// Read `index` from bytecode stream. Set the `[Value]` at stack[index] to the top
     /// `[Value]` on the stack.
     ///
@@ -77,6 +78,7 @@ pub enum Opcode {
     ///
     /// -> [Value::Nil]
     Nil,
+    NoOp,
     /// Remove the top two `[Value]`s from the stack, add them and push the result
     /// onto the stack.
     ///
@@ -179,7 +181,7 @@ pub enum Opcode {
     /// TODO:
     BuildClass,
     /// TODO:
-    BuildCon,
+    Construct,
     /// TODO:
     // BuildMethod,
     /// Remove the top `[Value]` from the stack and construct a closure from it.

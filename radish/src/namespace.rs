@@ -22,7 +22,7 @@ impl NamespaceBuilder {
     }
 
     pub fn finish(self, vm: &mut VM, name: String) {
-        let mut namespace = Module::new_(&name);
+        let mut namespace = Module::new(&name);
 
         for module in self.modules {
             namespace.add_module(module);

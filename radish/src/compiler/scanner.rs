@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use crate::common::{source::Source, span::Span};
+use crate::common::{Source, Span};
 use crate::compiler::token::{Token, TokenType};
 
 pub struct Scanner {
@@ -310,6 +310,7 @@ impl Scanner {
             "fun" => TokenType::Fun,
             "class" => TokenType::Class,
             "con" => TokenType::Con,
+            "this" => TokenType::This,
             "return" => TokenType::Return,
             "for" => TokenType::For,
             "import" => TokenType::Import,
@@ -453,6 +454,7 @@ mod tests {
             ("fun", TokenType::Fun),
             ("class", TokenType::Class),
             ("con", TokenType::Con),
+            ("this", TokenType::This),
             ("return", TokenType::Return),
             ("for", TokenType::For),
             ("import", TokenType::Import),

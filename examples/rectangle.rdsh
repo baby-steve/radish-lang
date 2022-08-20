@@ -1,0 +1,25 @@
+class Rectangle {
+    con new(x, y, w, h) {
+        this.x = x
+        this.y = y
+        this.w = w
+        this.h = h
+    }
+
+    con square(x, y, s) {
+        this.x = x
+        this.y = y
+        this.w = s
+        this.h = s
+    }
+
+    fun area() {
+        return this.w * this.h
+    }
+}
+
+var rect = Rectangle.new(2, 2, 5, 10)
+print rect
+
+var square = Rectangle.square(3, 3, 8)
+print square
