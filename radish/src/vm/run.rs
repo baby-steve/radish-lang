@@ -180,16 +180,16 @@ impl VM {
         let element_count = self.read_long();
         let mut elements = HashMap::with_capacity(element_count);
 
-        for _ in 0..element_count {
+        for _ in 0..=element_count {
             let value = self.stack.pop();
             let key = self.stack.pop();
 
             elements.insert(key.to_string(), value);
         }
 
-        let array = Value::Map(Rc::new(RefCell::new(elements)));
+        let map = Value::Map(Rc::new(RefCell::new(elements)));
 
-        self.stack.push(array);
+        self.stack.push(map);
 
         Ok(())
     }
@@ -614,7 +614,7 @@ impl VM {
     fn save_field(&mut self) -> Result<(), Trace> {
         let val = self.stack.pop();
         let idx = self.stack.pop();
-        let obj = self.stack.pop();
+        let obj = self.stack.peek().unwrap(); // self.stack.pop();
 
         match obj {
             Value::Array(elements) => {

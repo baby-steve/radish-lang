@@ -14,6 +14,7 @@ mod eval;
 mod load;
 mod run;
 mod stack;
+// mod error;
 pub(crate) use stack::Stack;
 
 pub mod trace;
