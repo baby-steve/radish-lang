@@ -91,7 +91,7 @@ impl Test {
     }
 
     pub fn run(&mut self) {
-        let process = Command::new("target/debug/cli").arg(&self.path)
+        let process = Command::new("target/debug/radish-cli").arg(&self.path)
                 .output()
                 .expect("failed to start command");
 
