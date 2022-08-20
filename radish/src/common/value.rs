@@ -187,7 +187,7 @@ impl fmt::Display for Value {
             Value::Number(num) => f.write_str(&num.to_string()),
             Value::Boolean(false) => f.write_str("false"),
             Value::Boolean(true) => f.write_str("true"),
-            Value::String(val) => f.write_str(val),
+            Value::String(val) => write!(f, "{val}"),
             Value::Function(val) => write!(f, "<fun {}>", val.format_name()),
             Value::Closure(val) => write!(f, "<fun {}>", val.function.format_name()),
             Value::Class(val) => write!(f, "<class {}>", &val.name()),
