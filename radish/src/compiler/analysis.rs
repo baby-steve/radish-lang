@@ -1,9 +1,7 @@
-// TODO: split this into (at least) two seperate passes, one to validate the ast,
-// the other to handle name resolution and hoisting.
-
-use crate::common::Span;
 use std::collections::HashSet;
 use std::fmt;
+
+use crate::common::Span;
 
 use crate::compiler::{
     ast::*,
@@ -13,6 +11,8 @@ use crate::compiler::{
 };
 
 use crate::error::Item;
+
+use super::ast_ast::{BlockStmt, FunctionDecl, Position, Identifier, ImportStmt, MemberExpr, VariableDecl, ClassDecl};
 
 pub fn resolve_symbols(ast: &mut AST) -> Result<(), SyntaxError> {
     let mut analyzer = Analyzer::new();
@@ -25,7 +25,7 @@ pub struct Analyzer {
     /// Chain of enclosing scopes.
     pub scopes: Vec<ScopeMap>,
     /// Keep track of variables that where referenced before assignment
-    pub unresolved: HashSet<Ident>,
+    pub unresolved: HashSet<Identifier>,
 }
 
 impl Analyzer {
@@ -53,7 +53,7 @@ impl Analyzer {
 
         if !self.unresolved.is_empty() {
             for err in self.unresolved.iter() {
-                self.unresolved_err(&err.name, &err.pos);
+                self.unresolved_err(&err.name, &err.position());
                 println!("{:?}", err);
             }
 
@@ -166,8 +166,8 @@ impl Analyzer {
             Expr::Identifier(id) => {
                 self.visit_ident(id)?;
             }
-            Expr::MemberExpr(object, _, _) => {
-                self.resolve_member_expression(object)?;
+            Expr::MemberExpr(expr) => {
+                self.resolve_member_expression(&mut expr.object)?;
             }
             _ => return Ok(()),
         };
@@ -180,11 +180,11 @@ impl Analyzer {
     fn foward_declare(&mut self, ast: &AST) {
         for node in &ast.items {
             match node {
-                Stmt::FunDeclaration(fun, _) => {
+                Stmt::FunctionDecl(fun) => {
                     self.local_scope()
                         .add_local(&fun.id.name, Symbol::from(fun));
                 }
-                Stmt::ClassDeclaration(class, _) => {
+                Stmt::ClassDecl(class) => {
                     self.local_scope()
                         .add_local(&class.id.name, Symbol::from(class));
                 }
@@ -230,17 +230,17 @@ impl Analyzer {
         SyntaxError::new(err_kind)
     }
 
-    fn param_list(&mut self, params: &[Ident]) -> Result<(), SyntaxError> {
+    fn param_list(&mut self, params: &[Identifier]) -> Result<(), SyntaxError> {
         let depth = self.scopes.len() - 1;
 
         for param in params {
             if self
                 .local_scope()
-                .add_local(&param.name, Symbol::var(&param.pos, depth))
+                .add_local(&param.name, Symbol::var(&param.position(), depth))
                 .is_some()
             {
                 let err_kind = SyntaxErrorKind::DuplicateParam {
-                    param: Item::new(&param.pos, &param.name),
+                    param: Item::new(&param.position(), &param.name),
                 };
 
                 let err = SyntaxError::new(err_kind);
@@ -263,7 +263,7 @@ impl Visitor<'_> for Analyzer {
                 SymbolKind::Fun {
                     arg_count: fun.params.len(),
                 },
-                &fun.id.pos,
+                &fun.id.position(),
             )?;
         }
 
@@ -271,14 +271,12 @@ impl Visitor<'_> for Analyzer {
 
         self.param_list(&fun.params)?;
 
-        for node in fun.body.iter_mut() {
-            self.visit_stmt(node)?;
-        }
+        self.visit_block_stmt(&mut fun.body)?;
 
-        let scope = self.exit_scope().unwrap();
+        let _ = self.exit_scope().unwrap();
         // We extend (create really) the function's scope here so that the compiler
         // can use it to handle upvalues (the nonlocals in this scope) and maybe locals.
-        fun.scope.extend(scope);
+        // fun.scope.extend(scope);
 
         Ok(())
     }
@@ -287,22 +285,23 @@ impl Visitor<'_> for Analyzer {
         // Since all global classes are foward delcared, we
         // don't have to declare them here if we're in the global scope.
         if self.scopes.len() > 1 {
-            self.declare_variable(&class.id.name, SymbolKind::Class, &class.id.pos)?;
+            self.declare_variable(&class.id.name, SymbolKind::Class, &class.id.position())?;
         }
 
         self.enter_scope();
 
-        for constructor in class.constructors.iter_mut() {
-            self.visit_con_decl(constructor)?;
-        }
+        // for constructor in class.constructors.iter_mut() {
+        //     self.visit_con_decl(constructor)?;
+        // }
 
         self.exit_scope();
 
         Ok(())
     }
 
+    /*
     fn visit_con_decl(&mut self, con: &mut ConstructorDecl) -> VisitorResult {
-        self.declare_variable(&con.id.name, SymbolKind::Con, &con.id.pos)?;
+        self.declare_variable(&con.id.name, SymbolKind::Con, &con.id.position())?;
 
         self.enter_scope();
 
@@ -315,12 +314,12 @@ impl Visitor<'_> for Analyzer {
         self.exit_scope();
 
         Ok(())
-    }
+    }*/
 
-    fn visit_block_stmt(&mut self, block: &mut Vec<Stmt>) -> VisitorResult {
+    fn visit_block_stmt(&mut self, block_stmt: &mut BlockStmt) -> VisitorResult {
         self.enter_scope();
 
-        for stmt in block.iter_mut() {
+        for stmt in block_stmt.body.iter_mut() {
             self.visit_stmt(stmt)?;
         }
 
@@ -331,7 +330,7 @@ impl Visitor<'_> for Analyzer {
 
     fn visit_var_decl(
         &mut self,
-        stmt: &mut VarDeclaration,
+        stmt: &mut VariableDecl,
     ) -> VisitorResult {
         // check the right hand expression if it exists.
         if let Some(expr) = &mut stmt.init {
@@ -339,21 +338,21 @@ impl Visitor<'_> for Analyzer {
         }
 
         // check if this is the definition of a previously unresolved global variable.
-        if self.scopes.len() == 1 && self.unresolved.get(&stmt.name).is_some() {
-            self.unresolved.remove(&stmt.name);
+        if self.scopes.len() == 1 && self.unresolved.get(&stmt.id).is_some() {
+            self.unresolved.remove(&stmt.id);
         }
 
         // add this variable to the current scope, checking for duplicates.
-        self.declare_variable(&stmt.name.name, SymbolKind::Var, &stmt.name.pos)?;
+        self.declare_variable(&stmt.id.name, SymbolKind::Var, &stmt.id.position())?;
 
         Ok(())
     }
 
-    fn visit_ident(&mut self, ident: &mut Ident) -> VisitorResult {
+    fn visit_ident(&mut self, ident: &mut Identifier) -> VisitorResult {
         if self.resolve_symbol(&ident.name) == None {
             // if its inside the global scope, then its an error.
             if self.scopes.len() == 1 {
-                return Err(self.unresolved_err(&ident.name, &ident.pos));
+                return Err(self.unresolved_err(&ident.name, &ident.position()));
             }
 
             // if we're in a local scope, it could be declared later in
@@ -364,17 +363,17 @@ impl Visitor<'_> for Analyzer {
         Ok(())
     }
 
-    fn visit_member_expr(&mut self, obj: &mut Expr, _prop: &mut Expr) -> VisitorResult {
-        self.resolve_member_expression(obj)
+    fn visit_member_expr(&mut self, expr: &mut MemberExpr) -> VisitorResult {
+        self.resolve_member_expression(&mut expr.object)
     }
 
-    fn visit_import_stmt(&mut self, import_stmt: &mut ImportStatement) -> VisitorResult {
+    fn visit_import_stmt(&mut self, import_stmt: &mut ImportStmt) -> VisitorResult {
         let module_name = match import_stmt.name() {
             Some(n) => n,
             None => panic!("invalid import path"),
         };
 
-        self.declare_variable(&module_name.name, SymbolKind::Var, &module_name.pos)?;
+        self.declare_variable(&module_name.name, SymbolKind::Var, &module_name.position())?;
 
         Ok(())
     }

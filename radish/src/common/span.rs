@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use std::{
     fmt,
     rc::Rc,
@@ -5,8 +7,9 @@ use std::{
 
 use crate::common::source::Source;
 
-#[derive(PartialEq, PartialOrd, Eq)]
+#[derive(PartialEq, PartialOrd, Eq, Serialize)]
 pub struct Span {
+    #[serde(skip_serializing)]
     pub source: Rc<Source>,
     pub start: usize,
     pub end: usize,

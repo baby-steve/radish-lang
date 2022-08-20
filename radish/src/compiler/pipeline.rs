@@ -90,6 +90,9 @@ impl CompilerPipeLine {
             ast.visit(callback)?;
         }
 
+        let json = serde_json::to_string::<AST>(&ast).expect("failed to convert AST to JSON");
+        std::fs::write("ast.json", json).expect("failed to write JSON to file");
+
         let module = self.compiler.compile(file_name, &ast)?;
 
         Ok(module)

@@ -1,17 +1,21 @@
 //! Module containing the Radish language's frontend.
 
 mod analysis;
+// pub mod analysis_analysis;
 pub mod ast;
+pub mod ast_ast;
 pub mod codegen;
 pub mod error;
+mod hoist;
+// mod hoist_hoist;
 pub mod parser;
+// pub mod parser_parser;
 pub mod pipeline;
 pub mod scanner;
 pub mod scope;
 pub mod token;
 mod validator;
 pub mod visitor;
-mod hoist;
 
 pub use ast::*;
 pub use codegen::Compiler;

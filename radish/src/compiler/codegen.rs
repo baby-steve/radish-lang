@@ -1,9 +1,15 @@
-use crate::common::{Chunk, CompiledModule, Disassembler, Module, Opcode, Span};
+use crate::common::{Chunk, CompiledModule, Disassembler, Module, Opcode};
 
 use crate::common::{Function as FunctionValue, Value};
 
 use crate::compiler::{ast::*, Rc, SyntaxError};
 
+use super::ast_ast::{
+    ArrayExpr, AssignmentExpr, BinaryExpr, BinaryOp, BlockStmt, BreakStmt, CallExpr, ClassDecl,
+    ContinueStmt, ExpressionStmt, FunctionDecl, Identifier, IfStmt, ImportStmt, Literal,
+    LiteralKind, LogicalExpr, LogicalOp, LoopStmt, MapExpr, MemberExpr, MethodDecl, MethodKind,
+    OpAssignment, ReturnStmt, UnaryExpr, UnaryOp, VariableDecl, WhileStmt,
+};
 use super::hoist::VarScope;
 use super::pipeline::PipelineSettings;
 
@@ -51,11 +57,6 @@ impl Frame {
     /// Helper method for creating a frame with a script type.
     pub fn script(script: FunctionValue) -> Frame {
         Self::new(script, CompilerTarget::Script)
-    }
-
-    /// Helper method for creating a frame with a constructor type
-    pub fn constructor(con: FunctionValue) -> Frame {
-        Self::new(con, CompilerTarget::Constructor)
     }
 
     pub fn new(val: FunctionValue, typ: CompilerTarget) -> Frame {
@@ -146,8 +147,6 @@ impl Compiler {
 
         if self.config.eval && self.has_result {
             self.has_result = false;
-
-            dbg!(self.has_result);
 
             self.emit_byte(Opcode::Return as u8);
         } else {
@@ -259,13 +258,11 @@ impl Compiler {
     }
 
     /// Define a variable.
-    fn define_variable(&mut self, id: &Ident) {
-        //println!("[compiler] defining variable {}", &id.name);
-        //println!("[compiler] scope: {:?}", &id.scope);
+    fn define_variable(&mut self, id: &Identifier) {
         if self.scope_depth == 0 {
             let index = self.module.borrow_mut().get_index(&id.name).unwrap();
             self.define_global(index as u32);
-        } else if id.scope == VarScope::Local(true) {
+        } else if id.typ == VarScope::Local(true) {
             self.capture_local(id);
         }
     }
@@ -279,16 +276,16 @@ impl Compiler {
         }
     }
 
-    fn capture_local(&mut self, _id: &Ident) {
+    fn capture_local(&mut self, _id: &Identifier) {
         //println!("[compiler] compiling captured local {}", _id.name);
         self.emit_byte(Opcode::DefCapture as u8);
     }
 
     /// Emit an `[Opcode]` to load the variable with the given name.
-    fn load_variable(&mut self, id: &Ident) {
+    fn load_variable(&mut self, id: &Identifier) {
         use super::hoist::VarScope::*;
 
-        match &id.scope {
+        match &id.typ {
             Local(_) => {
                 self.emit_byte(Opcode::LoadLocal as u8);
                 for byte in id.index.to_le_bytes() {
@@ -296,7 +293,6 @@ impl Compiler {
                 }
             }
             NonLocal => {
-                //println!("[compiler] compiling nonlocal with an index of {}", &id.index);
                 self.emit_byte(Opcode::LoadCapture as u8);
                 for byte in id.index.to_le_bytes() {
                     self.emit_byte(byte);
@@ -314,15 +310,16 @@ impl Compiler {
                     self.emit_byte(byte);
                 }
             }
+            Unknown => unreachable!("Identifier scope must be known by compile time"),
         }
     }
 
     /// Emit an `[Opcode]` to save a value to the variable with the
     /// given name.
-    fn save_variable(&mut self, id: &Ident) {
+    fn save_variable(&mut self, id: &Identifier) {
         use super::hoist::VarScope::*;
 
-        match &id.scope {
+        match &id.typ {
             Local(_) => {
                 self.emit_byte(Opcode::SaveLocal as u8);
                 for byte in id.index.to_le_bytes() {
@@ -330,7 +327,6 @@ impl Compiler {
                 }
             }
             NonLocal => {
-                //todo!("Haven't finished implementing upvalues");
                 self.emit_byte(Opcode::SaveCapture as u8);
                 for byte in id.index.to_le_bytes() {
                     self.emit_byte(byte);
@@ -343,10 +339,10 @@ impl Compiler {
                     self.emit_byte(byte);
                 }
             }
+            Unknown => unreachable!("Identifier scope must be known by compile time"),
         }
 
-        // TODO: figure out why we need to emit an op delete. I seem to have forgotten...
-        self.emit_byte(Opcode::Del as u8);
+        // self.emit_byte(Opcode::Del as u8);
     }
 
     /// Enter a new block level scope.
@@ -403,7 +399,7 @@ impl Compiler {
         // next, go through and compile all global functions and classes.
         for node in &ast.items {
             match node {
-                Stmt::FunDeclaration(fun, _) => {
+                Stmt::FunctionDecl(fun) => {
                     // get the function's location in the module's variables array.
                     let index = self.module.borrow_mut().get_index(&fun.id.name).unwrap();
                     // compile the functions body.
@@ -411,7 +407,7 @@ impl Compiler {
                     // set the location in the module's variable array to the function's body.
                     self.define_global(index as u32);
                 }
-                Stmt::ClassDeclaration(class, _) => {
+                Stmt::ClassDecl(class) => {
                     // get the class's location in the module's variables array.
                     let index = self.module.borrow_mut().get_index(&class.id.name).unwrap();
                     // compile the class body.
@@ -433,83 +429,35 @@ impl Compiler {
 
     /// Compile a function declaration,
     fn function(&mut self, fun: &FunctionDecl) -> Result<(), SyntaxError> {
-        //println!("{:#?}", fun);
+        let mut compiler = FunctionCompiler::new(self);
 
-        if fun.params.len() > u8::MAX.into() {
-            panic!("Cannot have more than 255 parameters");
-        }
-
-        let frame = FunctionValue {
-            arity: fun.params.len() as u8,
-            name: fun.id.name.clone().into_boxed_str(),
-            chunk: Chunk::default(),
-            module: Rc::downgrade(&self.module),
-        };
-
-        self.enter_function(Frame::function(frame));
-        {
-            for param in &fun.params {
-                self.define_variable(&param);
-            }
-
-            for stmt in fun.body.iter() {
-                self.statement(stmt)?;
-            }
-        }
-
-        let frame = self.leave_function();
-
-        if self.config.dump_bytecode {
-            Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
-        }
-
-        self.emit_constant(Value::from(frame.function));
-        self.emit_byte(Opcode::Closure as u8);
-
-        let scope = fun.other_scope.clone().unwrap();
-
-        if scope.upvalues.len() > u8::MAX.into() {
-            panic!("Too many upvalues");
-        };
-
-        self.emit_byte(scope.upvalues.len() as u8);
-
-        for upval in scope.upvalues.iter() {
-            // TODO: replace the 1 and 0 with globals or something for readablity.
-            if upval.on_stack {
-                self.emit_byte(0);
-            } else {
-                self.emit_byte(1);
-            }
-
-            self.emit_byte(upval.index as u8);
-        }
+        compiler.compile(fun);
 
         Ok(())
     }
 
     /// Compile a class declaration
     fn class(&mut self, class: &ClassDecl) -> Result<(), SyntaxError> {
-        for method in class.methods.iter() {
-            self.function(method)?;
-        }
+        // for method in class.methods.iter() {
+        //     self.function(method)?;
+        // }
 
-        for constructor in class.constructors.iter() {
-            self.constructor_declaration(constructor, &class.id)?;
-        }
+        // for constructor in class.constructors.iter() {
+        //     self.constructor_declaration(constructor, &class.id)?;
+        // }
 
-        for field in class.fields.iter() {
-            // access type.
-            // self.emit_byte(1 as u8);
-            // the name of the field.
-            self.emit_constant(Value::from(&field.name.name));
-            // the field's value
-            if let Some(expr) = &field.init {
-                self.expression(expr)?;
-            } else {
-                self.emit_byte(Opcode::Nil as u8);
-            }
-        }
+        // for field in class.fields.iter() {
+        //     // access type.
+        //     // self.emit_byte(1 as u8);
+        //     // the name of the field.
+        //     self.emit_constant(Value::from(&field.id.name));
+        //     // the field's value
+        //     if let Some(expr) = &field.init {
+        //         self.expression(expr)?;
+        //     } else {
+        //         self.emit_byte(Opcode::Nil as u8);
+        //     }
+        // }
 
         // the name of the class
         self.emit_constant(Value::from(&class.id.name));
@@ -517,11 +465,11 @@ impl Compiler {
         self.emit_byte(Opcode::BuildClass as u8);
 
         // number of fields
-        self.emit_byte(class.fields.len() as u8);
+        // self.emit_byte(class.fields.len() as u8);
         // number of constructors
-        self.emit_byte(class.constructors.len() as u8);
+        // self.emit_byte(class.constructors.len() as u8);
         // number of methods
-        self.emit_byte(class.methods.len() as u8);
+        // self.emit_byte(class.methods.len() as u8);
 
         Ok(())
     }
@@ -530,29 +478,26 @@ impl Compiler {
 impl Compiler {
     fn statement(&mut self, stmt: &Stmt) -> Result<(), SyntaxError> {
         match stmt {
-            Stmt::BlockStmt(body, _) => self.block(body),
+            Stmt::BlockStmt(block_stmt) => self.block(block_stmt),
             Stmt::ExpressionStmt(expr) => self.expression_stmt(expr),
-            Stmt::FunDeclaration(fun, _) => self.function_declaration(fun),
-            Stmt::ClassDeclaration(class, _) => self.class_declaration(class),
-            Stmt::VarDeclaration(stmt, _) => self.var_declaration(stmt),
-            Stmt::AssignmentStmt(stmt, _) => self.assignment(stmt),
-            Stmt::IfStmt(expr, body, alt, _) => self.if_statement(expr, body, alt),
-            Stmt::LoopStmt(body, _) => self.loop_statement(body),
-            Stmt::WhileStmt(expr, body, _) => self.while_statement(expr, body),
+            Stmt::FunctionDecl(fun) => self.function_declaration(fun),
+            Stmt::MethodDecl(method) => self.method_declaration(method),
+            Stmt::ClassDecl(class) => self.class_declaration(class),
+            Stmt::VariableDecl(stmt) => self.var_declaration(stmt),
+            Stmt::IfStmt(stmt) => self.if_statement(stmt),
+            Stmt::LoopStmt(stmt) => self.loop_statement(stmt),
+            Stmt::WhileStmt(stmt) => self.while_statement(stmt),
             Stmt::ImportStmt(stmt) => self.import_statement(stmt),
-            Stmt::ReturnStmt(value, _) => self.return_statement(value),
-            Stmt::BreakStmt(pos) => self.break_statement(pos),
-            Stmt::ContinueStmt(pos) => self.continue_statement(pos),
+            Stmt::ReturnStmt(stmt) => self.return_statement(stmt),
+            Stmt::BreakStmt(stmt) => self.break_statement(stmt),
+            Stmt::ContinueStmt(stmt) => self.continue_statement(stmt),
             Stmt::PrintStmt(expr, _) => self.print(expr),
-            _ => unreachable!(),
-            // Stmt::ConDeclaration(con, _) => self.constructor_declaration(con),
         }
     }
 
     fn function_declaration(&mut self, fun: &FunctionDecl) -> Result<(), SyntaxError> {
         // at this point all global functions have already been compiled,
         // so only locally scoped functions have to be handled.
-
         if self.scope_depth > 0 {
             self.function(fun)?;
             self.define_variable(&fun.id);
@@ -572,10 +517,20 @@ impl Compiler {
         Ok(())
     }
 
-    fn constructor_declaration(
+    fn method_declaration(&mut self, method: &MethodDecl) -> Result<(), SyntaxError> {
+        let mut _compiler = FunctionCompiler::new(self);
+
+        if let MethodKind::Constructor = method.kind {
+            // ...
+        }
+
+        todo!()
+    }
+
+    /*fn constructor_declaration(
         &mut self,
         con: &ConstructorDecl,
-        class: &Ident,
+        class: &Identifier,
     ) -> Result<(), SyntaxError> {
         // the constructor body
         // FIXME: a lot of duplicate code between constructors and functions.
@@ -626,26 +581,22 @@ impl Compiler {
         // self.emit_byte(Opcode::BuildCon as u8);
 
         Ok(())
-    }
+    }*/
 
-    fn if_statement(
-        &mut self,
-        expr: &Expr,
-        body: &[Stmt],
-        else_branch: &Option<Box<Stmt>>,
-    ) -> Result<(), SyntaxError> {
-        self.expression(expr)?;
+    fn if_statement(&mut self, stmt: &IfStmt) -> Result<(), SyntaxError> {
+        self.expression(&stmt.condition)?;
         let then_jump = self.emit_jump(Opcode::JumpIfFalse);
         self.emit_byte(Opcode::Del as u8);
-        self.block(body)?;
+
+        self.block(&stmt.consequent)?;
 
         let else_jump = self.emit_jump(Opcode::Jump);
 
         self.patch_jump(then_jump);
         self.emit_byte(Opcode::Del as u8);
 
-        if let Some(else_branch) = &else_branch {
-            self.statement(else_branch)?;
+        if let Some(alt) = &stmt.alternate {
+            self.statement(alt)?;
         }
 
         self.patch_jump(else_jump);
@@ -653,11 +604,12 @@ impl Compiler {
         Ok(())
     }
 
-    fn loop_statement(&mut self, body: &[Stmt]) -> Result<(), SyntaxError> {
+    fn loop_statement(&mut self, stmt: &LoopStmt) -> Result<(), SyntaxError> {
         let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
-        self.block(body)?;
+        self.block(&stmt.body)?;
+
         self.emit_loop(loop_start);
 
         self.leave_loop();
@@ -665,15 +617,15 @@ impl Compiler {
         Ok(())
     }
 
-    fn while_statement(&mut self, expr: &Expr, body: &[Stmt]) -> Result<(), SyntaxError> {
+    fn while_statement(&mut self, stmt: &WhileStmt) -> Result<(), SyntaxError> {
         let loop_start = self.last_byte();
         self.enter_loop(loop_start);
 
-        self.expression(expr)?;
+        self.expression(&stmt.condition)?;
         let exit_jump = self.emit_jump(Opcode::JumpIfFalse);
         self.emit_byte(Opcode::Del as u8);
 
-        self.block(body)?;
+        self.block(&stmt.body)?;
 
         self.emit_loop(loop_start);
 
@@ -684,18 +636,18 @@ impl Compiler {
         Ok(())
     }
 
-    fn block(&mut self, body: &[Stmt]) -> Result<(), SyntaxError> {
+    fn block(&mut self, block_stmt: &BlockStmt) -> Result<(), SyntaxError> {
         self.enter_scope();
 
-        for node in body {
+        for node in block_stmt.body.iter() {
             self.statement(node)?;
         }
 
         self.leave_scope();
 
-        for stmt in body {
+        for stmt in block_stmt.body.iter() {
             match stmt {
-                Stmt::VarDeclaration(_, _) => {
+                Stmt::VariableDecl(_) => {
                     self.emit_byte(Opcode::Del as u8);
                 }
                 _ => continue,
@@ -705,8 +657,8 @@ impl Compiler {
         Ok(())
     }
 
-    fn import_statement(&mut self, import_stmt: &ImportStatement) -> Result<(), SyntaxError> {
-        self.string(import_stmt.path())?;
+    fn import_statement(&mut self, import_stmt: &ImportStmt) -> Result<(), SyntaxError> {
+        self.string(&import_stmt.source)?;
 
         self.emit_byte(Opcode::Import as u8);
 
@@ -715,12 +667,12 @@ impl Compiler {
         Ok(())
     }
 
-    fn return_statement(&mut self, return_val: &Option<Expr>) -> Result<(), SyntaxError> {
+    fn return_statement(&mut self, return_stmt: &ReturnStmt) -> Result<(), SyntaxError> {
         if self.scope_depth == 0 {
             panic!("Return statement outside of a function");
         }
 
-        if let Some(expr) = return_val {
+        if let Some(expr) = &return_stmt.argument {
             self.expression(expr)?;
         } else {
             self.emit_byte(Opcode::Nil as u8);
@@ -731,7 +683,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn break_statement(&mut self, _: &Span) -> Result<(), SyntaxError> {
+    fn break_statement(&mut self, _: &BreakStmt) -> Result<(), SyntaxError> {
         let exit_jump = self.emit_jump(Opcode::Jump);
         self.emit_byte(Opcode::Del as u8);
 
@@ -741,7 +693,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn continue_statement(&mut self, _: &Span) -> Result<(), SyntaxError> {
+    fn continue_statement(&mut self, _: &ContinueStmt) -> Result<(), SyntaxError> {
         let loop_start = self.loops.last().unwrap().loop_start;
 
         self.emit_loop(loop_start);
@@ -757,7 +709,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn var_declaration(&mut self, stmt: &VarDeclaration) -> Result<(), SyntaxError> {
+    fn var_declaration(&mut self, stmt: &VariableDecl) -> Result<(), SyntaxError> {
         if self.scope_depth > 0 {
             if let Some(expr) = &stmt.init {
                 self.expression(expr)?;
@@ -765,11 +717,11 @@ impl Compiler {
                 self.emit_byte(Opcode::Nil as u8);
             }
 
-            self.define_variable(&stmt.name);
+            self.define_variable(&stmt.id);
         } else {
             // All global variables have already been foward declared, so we can just
             // grab its location from the module.
-            let index = self.module.borrow_mut().get_index(&stmt.name.name).unwrap();
+            let index = self.module.borrow_mut().get_index(&stmt.id.name).unwrap();
 
             if let Some(expr) = &stmt.init {
                 self.expression(expr)?;
@@ -783,8 +735,8 @@ impl Compiler {
         Ok(())
     }
 
-    fn assignment(&mut self, stmt: &AssignmentStmt) -> Result<(), SyntaxError> {
-        let op = match stmt.op {
+    fn assignment(&mut self, assignment_expr: &AssignmentExpr) -> Result<(), SyntaxError> {
+        let op = match assignment_expr.op {
             OpAssignment::AddAssign => Some(Opcode::Add),
             OpAssignment::SubAssign => Some(Opcode::Sub),
             OpAssignment::MulAssign => Some(Opcode::Mul),
@@ -793,38 +745,36 @@ impl Compiler {
             OpAssignment::Equals => None,
         };
 
-        match &stmt.lhs {
+        match &*assignment_expr.lhs {
             Expr::Identifier(id) => {
                 if let Some(op) = op {
                     self.load_variable(&id);
-                    self.expression(&stmt.rhs)?;
+                    self.expression(&assignment_expr.rhs)?;
                     self.emit_byte(op as u8);
                 } else {
-                    self.expression(&stmt.rhs)?;
+                    self.expression(&assignment_expr.rhs)?;
                 }
 
                 self.save_variable(id);
             }
-            Expr::MemberExpr(obj, prop, _) => {
-                self.expression(obj)?;
+            Expr::MemberExpr(expr) => {
+                self.expression(&expr.object)?;
 
-                match &**prop {
-                    Expr::MemberExpr(object, property, _) => {
-                        self.member_expr(&object, &property)?
-                    }
+                match &**&expr.property {
+                    Expr::MemberExpr(expr) => self.member_expr(expr)?,
                     Expr::Identifier(id) => self.emit_constant(Value::from(&id.name)),
                     prop => self.expression(prop)?,
                 };
 
                 if let Some(op) = op {
-                    self.expression(obj)?;
-                    self.expression(prop)?;
+                    self.expression(&expr.object)?;
+                    self.expression(&expr.property)?;
                     self.emit_byte(Opcode::LoadField as u8);
 
-                    self.expression(&stmt.rhs)?;
+                    self.expression(&assignment_expr.rhs)?;
                     self.emit_byte(op as u8);
                 } else {
-                    self.expression(&stmt.rhs)?;
+                    self.expression(&assignment_expr.rhs)?;
                 }
 
                 self.emit_byte(Opcode::SaveField as u8);
@@ -835,8 +785,8 @@ impl Compiler {
         Ok(())
     }
 
-    fn expression_stmt(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
-        self.expression(expr)?;
+    fn expression_stmt(&mut self, stmt: &ExpressionStmt) -> Result<(), SyntaxError> {
+        self.expression(&stmt.expr)?;
 
         if self.config.eval && self.frame_count == 0 {
             self.emit_byte(Opcode::NoOp as u8);
@@ -850,31 +800,28 @@ impl Compiler {
 
     fn expression(&mut self, expr: &Expr) -> Result<(), SyntaxError> {
         match expr {
-            Expr::ArrayExpr(array, _) => self.array(array),
-            Expr::MapExpr(values, _) => self.map(values),
-            Expr::BinaryExpr(expr, _) => self.binary_expression(expr),
-            Expr::ParenExpr(expr, _) => self.expression(expr),
-            Expr::UnaryExpr(op, arg, _) => self.unary(arg, op),
-            Expr::LogicalExpr(expr, _) => self.logical_expr(expr),
-            Expr::CallExpr(callee, args, _) => self.call_expr(callee, args),
-            Expr::MemberExpr(obj, prop, _) => self.member_expr(obj, prop),
+            Expr::ArrayExpr(array) => self.array(array),
+            Expr::MapExpr(expr) => self.map(expr),
+            Expr::AssignmentExpr(expr) => self.assignment(expr),
+            Expr::BinaryExpr(expr) => self.binary_expression(expr),
+            Expr::UnaryExpr(expr) => self.unary(expr),
+            Expr::LogicalExpr(expr) => self.logical_expr(expr),
+            Expr::CallExpr(expr) => self.call_expr(expr),
+            Expr::MemberExpr(expr) => self.member_expr(expr),
             Expr::Identifier(id) => self.identifier(id),
             Expr::This(_) => self.this(),
-            Expr::Number(val, _) => self.number(val),
-            Expr::String(val, _) => self.string(val),
-            Expr::Bool(val, _) => self.boolean(val),
-            Expr::Nil(_) => self.nil(),
+            Expr::Literal(val) => self.literal(val),
         }
     }
 
-    fn array(&mut self, array: &[Expr]) -> Result<(), SyntaxError> {
-        for element in array.iter().rev() {
+    fn array(&mut self, array: &ArrayExpr) -> Result<(), SyntaxError> {
+        for element in array.elements.iter().rev() {
             self.expression(element)?;
         }
 
         self.emit_byte(Opcode::BuildArray as u8);
 
-        let element_count = array.len() as u32;
+        let element_count = array.elements.len() as u32;
 
         for byte in element_count.to_le_bytes() {
             self.emit_byte(byte);
@@ -883,15 +830,15 @@ impl Compiler {
         Ok(())
     }
 
-    fn map(&mut self, values: &[Expr]) -> Result<(), SyntaxError> {
-        for pair in values.chunks(2).rev() {
-            self.expression(&pair[0])?;
-            self.expression(&pair[1])?;
+    fn map(&mut self, map_expr: &MapExpr) -> Result<(), SyntaxError> {
+        for prop in map_expr.properties.iter() {
+            self.expression(&prop.key)?;
+            self.expression(&prop.value)?;
         }
 
         self.emit_byte(Opcode::BuildMap as u8);
 
-        let element_count = values.len() as u32 / 2;
+        let element_count = map_expr.properties.len() as u32 / 2;
 
         for byte in element_count.to_le_bytes() {
             self.emit_byte(byte);
@@ -905,30 +852,28 @@ impl Compiler {
         self.expression(&expr.rhs)?;
 
         match &expr.op {
-            Op::Add => self.emit_byte(Opcode::Add as u8),
-            Op::Subtract => self.emit_byte(Opcode::Sub as u8),
-            Op::Multiply => self.emit_byte(Opcode::Mul as u8),
-            Op::Divide => self.emit_byte(Opcode::Div as u8),
-            Op::Remainder => self.emit_byte(Opcode::Rem as u8),
-            Op::LessThan => self.emit_byte(Opcode::CmpLT as u8),
-            Op::LessThanEquals => self.emit_byte(Opcode::CmpLTEq as u8),
-            Op::GreaterThan => self.emit_byte(Opcode::CmpGT as u8),
-            Op::GreaterThanEquals => self.emit_byte(Opcode::CmpGTEq as u8),
-            Op::EqualsTo => self.emit_byte(Opcode::CmpEq as u8),
-            Op::NotEqual => self.emit_byte(Opcode::CmpNotEq as u8),
-            _ => unreachable!("{:?} is not a binary operator.", &expr.op),
+            BinaryOp::Add => self.emit_byte(Opcode::Add as u8),
+            BinaryOp::Subtract => self.emit_byte(Opcode::Sub as u8),
+            BinaryOp::Multiply => self.emit_byte(Opcode::Mul as u8),
+            BinaryOp::Divide => self.emit_byte(Opcode::Div as u8),
+            BinaryOp::Remainder => self.emit_byte(Opcode::Rem as u8),
+            BinaryOp::LessThan => self.emit_byte(Opcode::CmpLT as u8),
+            BinaryOp::LessThanEquals => self.emit_byte(Opcode::CmpLTEq as u8),
+            BinaryOp::GreaterThan => self.emit_byte(Opcode::CmpGT as u8),
+            BinaryOp::GreaterThanEquals => self.emit_byte(Opcode::CmpGTEq as u8),
+            BinaryOp::EqualsTo => self.emit_byte(Opcode::CmpEq as u8),
+            BinaryOp::NotEqual => self.emit_byte(Opcode::CmpNotEq as u8),
         }
 
         Ok(())
     }
 
-    fn logical_expr(&mut self, expr: &BinaryExpr) -> Result<(), SyntaxError> {
+    fn logical_expr(&mut self, expr: &LogicalExpr) -> Result<(), SyntaxError> {
         self.expression(&expr.lhs)?;
 
         let op = match &expr.op {
-            Op::And => Opcode::JumpIfFalse,
-            Op::Or => Opcode::JumpIfTrue,
-            _ => unreachable!("Invalid logical operator."),
+            LogicalOp::And => Opcode::JumpIfFalse,
+            LogicalOp::Or => Opcode::JumpIfTrue,
         };
 
         let end_jump = self.emit_jump(op);
@@ -941,42 +886,41 @@ impl Compiler {
         Ok(())
     }
 
-    fn unary(&mut self, arg: &Expr, op: &Op) -> Result<(), SyntaxError> {
-        self.expression(arg)?;
+    fn unary(&mut self, expr: &UnaryExpr) -> Result<(), SyntaxError> {
+        self.expression(&expr.argument)?;
 
-        match op {
-            Op::Subtract => self.emit_byte(Opcode::Neg as u8),
-            Op::Bang => self.emit_byte(Opcode::Not as u8),
-            _ => unreachable!("{:?} is not an unary operator.", &op),
+        match expr.op {
+            UnaryOp::Minus => self.emit_byte(Opcode::Neg as u8),
+            UnaryOp::Not => self.emit_byte(Opcode::Not as u8),
         }
 
         Ok(())
     }
 
-    fn call_expr(&mut self, callee: &Expr, args: &[Expr]) -> Result<(), SyntaxError> {
-        if args.len() > u8::MAX.into() {
+    fn call_expr(&mut self, expr: &CallExpr) -> Result<(), SyntaxError> {
+        if expr.args.len() > u8::MAX.into() {
             panic!("Cannot have more than 255 arguments.");
         }
 
-        self.expression(callee)?;
+        self.expression(&expr.callee)?;
 
-        for arg in args.iter() {
+        for arg in expr.args.iter() {
             self.expression(arg)?;
         }
 
-        self.emit_bytes(Opcode::Call as u8, args.len() as u8);
+        self.emit_bytes(Opcode::Call as u8, expr.args.len() as u8);
 
         Ok(())
     }
 
-    fn member_expr(&mut self, object: &Expr, property: &Expr) -> Result<(), SyntaxError> {
-        match property {
-            Expr::MemberExpr(object, property, _) => self.member_expr(object, property)?,
+    fn member_expr(&mut self, expr: &MemberExpr) -> Result<(), SyntaxError> {
+        match &*expr.property {
+            Expr::MemberExpr(expr) => self.member_expr(&expr)?,
             Expr::Identifier(id) => self.emit_constant(Value::from(&id.name)),
-            expr => self.expression(expr)?,
+            expr => self.expression(&expr)?,
         };
 
-        self.expression(object)?;
+        self.expression(&expr.object)?;
 
         self.emit_byte(Opcode::LoadField as u8);
 
@@ -989,9 +933,18 @@ impl Compiler {
         Ok(())
     }
 
-    fn identifier(&mut self, id: &Ident) -> Result<(), SyntaxError> {
+    fn identifier(&mut self, id: &Identifier) -> Result<(), SyntaxError> {
         self.load_variable(&id);
         Ok(())
+    }
+
+    fn literal(&mut self, lit: &Literal) -> Result<(), SyntaxError> {
+        match &lit.kind {
+            LiteralKind::String(val) => self.string(val),
+            LiteralKind::Number(val) => self.number(val),
+            LiteralKind::Boolean(val) => self.boolean(val),
+            LiteralKind::Nil => self.nil(),
+        }
     }
 
     fn number(&mut self, val: &f64) -> Result<(), SyntaxError> {
@@ -1015,5 +968,89 @@ impl Compiler {
     fn nil(&mut self) -> Result<(), SyntaxError> {
         self.emit_byte(Opcode::Nil as u8);
         Ok(())
+    }
+}
+
+struct FunctionCompiler<'a> {
+    start: Option<fn(&mut Compiler)>,
+    end: Option<fn(&mut Compiler)>,
+    compiler: &'a mut Compiler,
+}
+
+impl<'a> FunctionCompiler<'a> {
+    pub fn new(compiler: &'a mut Compiler) -> Self {
+        Self {
+            start: None,
+            end: None,
+            compiler,
+        }
+    }
+
+    // pub fn on_start(&mut self, f: fn(&mut Compiler)) {
+    //     self.start = Some(f);
+    // }
+
+    // pub fn on_end(&mut self, f: fn(&mut Compiler)) {
+    //     self.end = Some(f);
+    // }
+
+    pub fn compile(&mut self, fun: &FunctionDecl) {
+        if fun.params.len() > u8::MAX.into() {
+            panic!("Cannot have more than 255 parameters");
+        }
+
+        let frame = FunctionValue {
+            arity: fun.params.len() as u8,
+            name: fun.id.name.clone().into_boxed_str(),
+            chunk: Chunk::default(),
+            module: Rc::downgrade(&self.compiler.module),
+        };
+
+        self.compiler.enter_function(Frame::function(frame));
+        {
+            if let Some(f) = self.start {
+                (f)(self.compiler);
+            }
+
+            for param in &fun.params {
+                self.compiler.define_variable(&param);
+            }
+
+            self.compiler
+                .block(&fun.body)
+                .expect("couldn't compile function block");
+
+            if let Some(f) = self.end {
+                (f)(self.compiler);
+            }
+        }
+
+        let frame = self.compiler.leave_function();
+
+        // if self.config.dump_bytecode {
+        // Disassembler::disassemble_chunk(&frame.function.name, &frame.function);
+        // }
+
+        self.compiler.emit_constant(Value::from(frame.function));
+        self.compiler.emit_byte(Opcode::Closure as u8);
+
+        let scope = fun.scope.clone().unwrap();
+
+        if scope.upvalues.len() > u8::MAX.into() {
+            panic!("Too many upvalues");
+        };
+
+        self.compiler.emit_byte(scope.upvalues.len() as u8);
+
+        for upval in scope.upvalues.iter() {
+            // TODO: replace the 1 and 0 with globals or something for readablity.
+            if upval.on_stack {
+                self.compiler.emit_byte(0);
+            } else {
+                self.compiler.emit_byte(1);
+            }
+
+            self.compiler.emit_byte(upval.index as u8);
+        }
     }
 }

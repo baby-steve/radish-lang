@@ -1,21 +1,29 @@
-//! Module containing Radish's Abstract Syntax Tree (otherwise known as an AST),
-//! along with all its related data structures.
+//! Module containing Radish's Abstract Syntax Tree (otherwise known as an AST).
+//! 
+
+use serde::Serialize;
 
 use crate::common::Span;
 
 use crate::compiler::scope::ScopeMap;
 
-use std::cmp::Ordering;
-
-use super::hoist::{Scope, VarScope};
+use super::ast_ast::{
+    ArrayExpr, BinaryExpr, BlockStmt, BreakStmt, CallExpr, ContinueStmt, ExpressionStmt,
+    FunctionDecl, Identifier, IfStmt, ImportStmt, Literal, LogicalExpr, LoopStmt, MapExpr,
+    MemberExpr, Position, Property, ReturnStmt, ThisExpr, UnaryExpr, UnaryOp, VariableDecl,
+    WhileStmt, AssignmentExpr, MethodDecl, ClassDecl,
+};
+use super::hoist::Scope;
 use super::SyntaxError;
 
 /// Contains a tree of nested statements and expressions along with
 /// any additional information that the frontend/compiler might need.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub struct AST {
     pub items: Vec<Stmt>,
+    #[serde(skip_serializing)]
     pub scope: ScopeMap,
+    #[serde(skip_serializing)]
     pub other_scope: Option<Scope>,
 }
 
@@ -35,66 +43,57 @@ impl AST {
         callback(self)
     }
 
-    pub fn block_stmt(stmts: Vec<Stmt>, span: Span) -> Stmt {
-        Stmt::BlockStmt(stmts, span)
-    }
-
-    pub fn _expr_stmt(expr: Box<Expr>) -> Stmt {
-        Stmt::ExpressionStmt(expr)
-    }
-
-    pub fn fun_decl(fun: FunctionDecl, span: Span) -> Stmt {
-        Stmt::FunDeclaration(fun, span)
-    }
-
-    pub fn _con_decl(con: ConstructorDecl, span: Span) -> Stmt {
-        Stmt::ConDeclaration(con, span)
-    }
-
-    pub fn class_decl(class: ClassDecl, span: Span) -> Stmt {
-        Stmt::ClassDeclaration(class, span)
-    }
-
-    pub fn var_decl(id: Ident, expr: Option<Expr>, kind: VarKind, span: Span) -> Stmt {
-        let stmt = VarDeclaration {
-            name: id,
-            init: expr,
-            kind,
+    pub fn if_stmt(
+        condition: Expr,
+        consequent: BlockStmt,
+        alternate: Option<Box<Stmt>>,
+        span: Span,
+    ) -> Stmt {
+        let if_stmt = IfStmt {
+            condition,
+            consequent,
+            alternate,
+            span,
         };
 
-        Stmt::VarDeclaration(stmt, span)
+        Stmt::IfStmt(if_stmt)
     }
 
-    pub fn assignment(stmt: AssignmentStmt, span: Span) -> Stmt {
-        Stmt::AssignmentStmt(stmt, span)
+    pub fn loop_stmt(body: BlockStmt, span: Span) -> Stmt {
+        let loop_stmt = LoopStmt { body, span };
+
+        Stmt::LoopStmt(loop_stmt)
     }
 
-    pub fn if_stmt(condition: Expr, block: Vec<Stmt>, alt: Option<Box<Stmt>>, span: Span) -> Stmt {
-        Stmt::IfStmt(condition, block, alt, span)
+    pub fn while_stmt(condition: Expr, body: BlockStmt, span: Span) -> Stmt {
+        let while_stmt = WhileStmt {
+            condition,
+            body,
+            span,
+        };
+
+        Stmt::WhileStmt(while_stmt)
     }
 
-    pub fn loop_stmt(block: Vec<Stmt>, span: Span) -> Stmt {
-        Stmt::LoopStmt(block, span)
-    }
-
-    pub fn while_stmt(condition: Expr, block: Vec<Stmt>, span: Span) -> Stmt {
-        Stmt::WhileStmt(condition, block, span)
-    }
-
-    pub fn import_stmt(path: String, items: Vec<Ident>, span: Span) -> Stmt {
-        Stmt::ImportStmt(ImportStatement::new(path, items, span))
+    pub fn import_stmt(path: String, _items: Vec<Identifier>, span: Span) -> Stmt {
+        Stmt::ImportStmt(ImportStmt { source: path, span })
     }
 
     pub fn break_stmt(span: Span) -> Stmt {
-        Stmt::BreakStmt(span)
+        Stmt::BreakStmt(BreakStmt { span })
     }
 
     pub fn continue_stmt(span: Span) -> Stmt {
-        Stmt::ContinueStmt(span)
+        Stmt::ContinueStmt(ContinueStmt { span })
     }
 
     pub fn return_stmt(return_expr: Option<Expr>, span: Span) -> Stmt {
-        Stmt::ReturnStmt(return_expr, span)
+        let return_stmt = ReturnStmt {
+            argument: return_expr,
+            span,
+        };
+
+        Stmt::ReturnStmt(return_stmt)
     }
 
     pub fn print_stmt(expr: Expr, span: Span) -> Stmt {
@@ -102,136 +101,140 @@ impl AST {
     }
 
     pub fn array(elements: Vec<Expr>, span: Span) -> Expr {
-        Expr::ArrayExpr(elements, span)
+        let array_expr = ArrayExpr { elements, span };
+
+        Expr::ArrayExpr(array_expr)
     }
 
-    pub fn map(values: Vec<Expr>, span: Span) -> Expr {
-        Expr::MapExpr(values, span)
+    pub fn map(properties: Vec<Property>, span: Span) -> Expr {
+        let map_expr = MapExpr { properties, span };
+
+        Expr::MapExpr(map_expr)
     }
 
-    pub fn binary_expr(expr: Box<BinaryExpr>, span: Span) -> Expr {
-        Expr::BinaryExpr(expr, span)
+    pub fn binary_expr(expr: BinaryExpr) -> Expr {
+        Expr::BinaryExpr(expr)
     }
 
-    pub fn paren_expr(expr: Box<Expr>, span: Span) -> Expr {
-        Expr::ParenExpr(expr, span)
-    }
+    pub fn unary_expr(op: UnaryOp, argument: Box<Expr>, span: Span) -> Expr {
+        let unary_expr = UnaryExpr { op, argument, span };
 
-    pub fn unary_expr(op: Op, expr: Box<Expr>, span: Span) -> Expr {
-        Expr::UnaryExpr(op, expr, span)
-    }
-
-    pub fn logical_expr(expr: Box<BinaryExpr>, span: Span) -> Expr {
-        Expr::LogicalExpr(expr, span)
+        Expr::UnaryExpr(unary_expr)
     }
 
     pub fn call_expr(expr: Box<Expr>, args: Vec<Expr>, span: Span) -> Expr {
-        Expr::CallExpr(expr, args, span)
+        let call_expr = CallExpr {
+            callee: expr,
+            args,
+            span,
+        };
+
+        Expr::CallExpr(call_expr)
     }
 
-    pub fn member_expr(obj: Box<Expr>, prop: Box<Expr>, span: Span) -> Expr {
-        Expr::MemberExpr(obj, prop, span)
+    pub fn member_expr(object: Box<Expr>, property: Box<Expr>, computed: bool, span: Span) -> Expr {
+        let member_expr = MemberExpr {
+            object,
+            property,
+            computed,
+            span,
+        };
+
+        Expr::MemberExpr(member_expr)
     }
 
     pub fn this(span: Span) -> Expr {
-        Expr::This(span)
+        Expr::This(ThisExpr { span })
     }
 
-    pub fn identifier(id: Ident) -> Expr {
+    pub fn identifier(id: Identifier) -> Expr {
         Expr::Identifier(id)
     }
 
     pub fn string(str: String, span: Span) -> Expr {
-        Expr::String(str, span)
+        Expr::Literal(Literal::string(str, span))
     }
 
     pub fn number(num: f64, span: Span) -> Expr {
-        Expr::Number(num, span)
+        Expr::Literal(Literal::number(num, span))
     }
 
     pub fn bool(val: bool, span: Span) -> Expr {
-        Expr::Bool(val, span)
+        Expr::Literal(Literal::boolean(val, span))
     }
 
     pub fn nil(span: Span) -> Expr {
-        Expr::Nil(span)
+        Expr::Literal(Literal::nil(span))
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-#[allow(dead_code)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Stmt {
     /// A block statement
     /// ```txt
     /// '{' <expr>... '}'
     /// ```
-    BlockStmt(Vec<Stmt>, Span),
+    BlockStmt(BlockStmt),
     /// An expression statement.
     /// ```txt
     /// <expr>
     /// ```
-    ExpressionStmt(Box<Expr>),
+    ExpressionStmt(ExpressionStmt),
     /// A function defintion.
     /// ```txt
     /// 'fun' <ident> '(' param... ')' '{' stmt... '}'
     /// ```
-    FunDeclaration(FunctionDecl, Span),
+    FunctionDecl(FunctionDecl),
+    /// A class method or constructor declaration.
+    /// ```txt
+    /// ('fun' | 'con') <ident> '(' param... ')' '{' stmt... '}' 
+    /// ```
+    MethodDecl(MethodDecl),
     /// A class declaration.
     /// ```txt
     /// 'class' <ident> '{' stmt... '}'
     /// ```
-    ClassDeclaration(ClassDecl, Span),
-    /// A class constructor declaration.
-    /// ```txt
-    /// 'con' <ident> '(' param... ')' '{' stmt... '}'
-    /// ```
-    ConDeclaration(ConstructorDecl, Span),
+    ClassDecl(ClassDecl),
     /// A variable declaration.
     /// ```txt
     /// ('var'|'fin') <ident> ['=' <expr>]
     /// ```
-    VarDeclaration(VarDeclaration, Span),
-    /// An assignment statement.
-    /// ```txt
-    /// <ident> <op>'=' <expr>
-    /// ```
-    AssignmentStmt(AssignmentStmt, Span),
+    VariableDecl(VariableDecl),
     /// An `if` statement.
     /// ```txt
     /// 'if' <expr> 'then' stmt... ['else' stmt...] 'endif'
     /// ```
-    IfStmt(Expr, Vec<Stmt>, Option<Box<Stmt>>, Span),
+    IfStmt(IfStmt),
     /// A `loop` statement.
     /// ```txt
     /// 'loop' stmt... 'endloop'
     /// ```
-    LoopStmt(Vec<Stmt>, Span),
+    LoopStmt(LoopStmt),
     /// A `while` loop statement.
     /// ```txt
     /// 'while' <expr> 'loop' stmt... 'endloop'
     /// ```
-    WhileStmt(Expr, Vec<Stmt>, Span),
+    WhileStmt(WhileStmt),
     /// A `import` statement
     /// ```txt
     /// 'import' <path> { 'for' ident... }
     /// ```
-    ImportStmt(ImportStatement),
-    //ImportStmt(String, Vec<Ident>, Span),
+    ImportStmt(ImportStmt),
     /// A break statement.
     /// ```txt
     /// break
     /// ```
-    BreakStmt(Span),
+    BreakStmt(BreakStmt),
     /// A continue statement
     /// ```txt
     /// continue
     /// ```
-    ContinueStmt(Span),
+    ContinueStmt(ContinueStmt),
     /// A return statement
     /// ```txt
     /// return [<expr>]
     /// ```
-    ReturnStmt(Option<Expr>, Span),
+    ReturnStmt(ReturnStmt),
     /// A print statement. Note: this is a temporary language
     /// construct and will eventually be replaced by functions in the stdlib.
     /// ```txt
@@ -240,318 +243,58 @@ pub enum Stmt {
     PrintStmt(Expr, Span),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum VarKind {
-    Var,
-    Fin,
-}
-
-impl Stmt {
-    pub fn into_var_decl(self) -> (VarDeclaration, Span) {
-        match self {
-            Stmt::VarDeclaration(decl, span) => (decl, span),
-            _ => panic!("not a variable declaration"),
-        }
-    }
-
-    pub fn into_fun_decl(self) -> (FunctionDecl, Span) {
-        match self {
-            Stmt::FunDeclaration(decl, span) => (decl, span),
-            _ => panic!("not a function declaration"),
-        }
-    }
-}
-
-/// An assignment statement.
-#[derive(Debug, Clone, PartialEq)]
-pub struct AssignmentStmt {
-    pub lhs: Expr,
-    pub op: OpAssignment,
-    pub rhs: Expr,
-}
-
-impl AssignmentStmt {
-    pub fn new(op: OpAssignment, lhs: Expr, rhs: Expr) -> Self {
-        Self { op, lhs, rhs }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct VarDeclaration {
-    pub name: Ident,
-    pub init: Option<Expr>,
-    pub kind: VarKind,
-}
-
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub enum Expr {
     /// An array literal.
-    ArrayExpr(Vec<Expr>, Span),
+    ArrayExpr(ArrayExpr),
     /// A map literal.
-    MapExpr(Vec<Expr>, Span),
+    MapExpr(MapExpr),
+    /// An assignment expression.
+    AssignmentExpr(AssignmentExpr),
     /// A binary expression
     /// ```txt
     /// <expr> <op> <expr>
     /// ```
-    BinaryExpr(Box<BinaryExpr>, Span),
-    /// A grouping expression
-    /// ```txt
-    /// '(' <expr> ')'
-    /// ```
-    ParenExpr(Box<Expr>, Span),
+    BinaryExpr(BinaryExpr),
     /// An unary expression
     /// ```txt
     /// <op> <expr>
     /// ```
-    UnaryExpr(Op, Box<Expr>, Span),
+    UnaryExpr(UnaryExpr),
     /// A logical expression
     /// ```txt
     /// <expr> 'and'|'or' <expr>
     /// ```
-    LogicalExpr(Box<BinaryExpr>, Span),
+    LogicalExpr(LogicalExpr),
     /// A call expression
     /// ```txt
     /// <callee> '(' <args> ')'
     /// ```
-    CallExpr(Box<Expr>, Vec<Expr>, Span),
+    CallExpr(CallExpr),
     /// A member expression
     /// ```txt
     /// <object> '.' <property>
     /// ```
-    MemberExpr(Box<Expr>, Box<Expr>, Span),
-    /// An identifier
-    Identifier(Ident),
-    /// this
-    This(Span),
-    /// A number literal
-    Number(f64, Span),
-    /// A boolean literal
-    /// ```txt
-    /// true | false
-    /// ```
-    Bool(bool, Span),
-    /// A string literal
-    String(String, Span),
-    /// `nil` literal.
-    Nil(Span),
+    MemberExpr(MemberExpr),
+    Identifier(Identifier),
+    This(ThisExpr),
+    Literal(Literal),
 }
 
-impl Expr {
-    pub fn position(&self) -> Span {
+impl Position for Expr {
+    fn position(&self) -> &Span {
         match self {
-            Self::ArrayExpr(_, pos)
-            | Self::MapExpr(_, pos)
-            | Self::BinaryExpr(_, pos)
-            | Self::ParenExpr(_, pos)
-            | Self::UnaryExpr(_, _, pos)
-            | Self::LogicalExpr(_, pos)
-            | Self::CallExpr(_, _, pos)
-            | Self::MemberExpr(_, _, pos)
-            | Self::This(pos)
-            | Self::Number(_, pos)
-            | Self::Bool(_, pos)
-            | Self::String(_, pos)
-            | Self::Nil(pos) => pos.clone(),
-            Self::Identifier(id) => id.pos.clone(),
+            Self::BinaryExpr(expr) => expr.position(),
+            Self::LogicalExpr(expr) => expr.position(),
+            Self::AssignmentExpr(expr) => expr.position(),
+            Self::MemberExpr(expr) => expr.position(),
+            Self::UnaryExpr(expr) => expr.position(),
+            Self::MapExpr(expr) => expr.position(),
+            Self::ArrayExpr(expr) => expr.position(),
+            Self::CallExpr(expr) => expr.position(),
+            Self::Literal(lit) => lit.position(),
+            Self::This(expr) => expr.position(),
+            Self::Identifier(id) => id.position(),
         }
     }
-}
-
-/// A binary expression.
-#[derive(Debug, Clone, PartialEq)]
-pub struct BinaryExpr {
-    /// Left hand side of the expression.
-    pub lhs: Expr,
-    /// Expression's operand.
-    pub op: Op,
-    /// Right hand side of the expression.
-    pub rhs: Expr,
-}
-
-impl BinaryExpr {
-    pub fn new(op: Op, l: Expr, r: Expr) -> BinaryExpr {
-        BinaryExpr { op, lhs: l, rhs: r }
-    }
-}
-
-/// A function declaration.
-#[derive(Debug, Clone, PartialEq)]
-pub struct FunctionDecl {
-    /// The function's name
-    pub id: Ident,
-    /// The function's parameter list.
-    pub params: Vec<Ident>,
-    /// The body of the function.
-    pub body: Vec<Stmt>,
-    /// This function's scope map.
-    pub scope: ScopeMap,
-    pub other_scope: Option<Scope>,
-}
-
-impl FunctionDecl {
-    pub fn new(id: Ident, params: Vec<Ident>, body: Vec<Stmt>) -> FunctionDecl {
-        FunctionDecl {
-            id,
-            params,
-            body,
-            scope: ScopeMap::new(),
-            other_scope: None,
-        }
-    }
-}
-
-/// A class declaration.
-#[derive(Debug, Clone, PartialEq)]
-pub struct ClassDecl {
-    /// the name of the class
-    pub id: Ident,
-    /// this class's constructors
-    pub constructors: Vec<ConstructorDecl>,
-    pub fields: Vec<VarDeclaration>,
-    pub methods: Vec<FunctionDecl>,
-}
-
-impl ClassDecl {
-    pub fn new(
-        id: Ident,
-        constructors: Vec<ConstructorDecl>,
-        fields: Vec<VarDeclaration>,
-        methods: Vec<FunctionDecl>,
-    ) -> ClassDecl {
-        ClassDecl {
-            id,
-            constructors,
-            fields,
-            methods,
-        }
-    }
-}
-
-/// A constructor declaration
-/// ```text
-/// 'con' <id> '(' <params> ')' '{' <body> '}'
-/// ```
-#[derive(Debug, Clone, PartialEq)]
-pub struct ConstructorDecl {
-    /// constructor name
-    pub id: Ident,
-    /// constructor's parameter list
-    pub params: Vec<Ident>,
-    /// body of the constructor
-    pub body: Box<Vec<Stmt>>,
-}
-
-impl ConstructorDecl {
-    pub fn new(id: Ident, params: Vec<Ident>, body: Box<Vec<Stmt>>) -> Self {
-        ConstructorDecl { id, params, body }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct ImportStatement {
-    path: String,
-    items: Vec<Ident>,
-    pos: Span,
-}
-
-impl ImportStatement {
-    pub fn new(path: String, items: Vec<Ident>, pos: Span) -> Self {
-        Self { path, items, pos }
-    }
-
-    pub fn name(&self) -> Option<Ident> {
-        use std::path::Path;
-
-        let path = Path::new(&self.path);
-
-        let file_path = path.file_name();
-
-        file_path.map(|p| p.to_str().unwrap()).map(|name| {
-            let span = self.pos.clone();
-            Ident::new(name.to_string(), span)
-        })
-    }
-
-    pub fn path(&self) -> &str {
-        &self.path
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct Ident {
-    pub name: String,
-    pub pos: Span,
-    pub index: u32,
-    pub scope: VarScope,
-}
-
-impl Ident {
-    pub fn new(name: String, pos: Span) -> Self {
-        Self {
-            name,
-            pos,
-            index: 0,
-            scope: VarScope::default(),
-        }
-    }
-}
-
-impl PartialEq for Ident {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-    }
-}
-
-impl PartialOrd for Ident {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl Ord for Ident {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.name.cmp(&other.name)
-    }
-}
-
-impl Eq for Ident {}
-
-impl std::hash::Hash for Ident {
-    fn hash<H>(&self, state: &mut H)
-    where
-        H: std::hash::Hasher,
-    {
-        self.name.hash(state);
-        state.finish();
-    }
-}
-
-/// A binary or unary operand.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Op {
-    Add,
-    Subtract,
-    Multiply,
-    Divide,
-    Remainder,
-    Bang,
-    LessThan,
-    LessThanEquals,
-    GreaterThan,
-    GreaterThanEquals,
-    EqualsTo,
-    NotEqual,
-    And,
-    Or,
-}
-
-/// An assignment operand.
-#[derive(Debug, Clone, PartialEq)]
-pub enum OpAssignment {
-    Equals,
-    AddAssign,
-    SubAssign,
-    MulAssign,
-    DivAssign,
-    RemAssign,
 }
